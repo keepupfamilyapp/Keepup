@@ -13,1877 +13,842 @@
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
 html,body{height:100%;overflow:hidden;overscroll-behavior:none;}
 body{font-family:Nunito,sans-serif;background:#FAF6F0;color:#3D2314;}
-#root{height:100vh;height:100dvh;}
-#splash{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:#FAF6F0;z-index:999;}
-.spin{width:28px;height:28px;border:3px solid #F5DDD1;border-top-color:#C4714A;border-radius:50%;animation:spin .8s linear infinite;}
-@keyframes spin{to{transform:rotate(360deg)}}
+#app{height:100vh;height:100dvh;max-width:430px;margin:0 auto;display:flex;flex-direction:column;overflow:hidden;position:relative;}
+.scr{overflow-y:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;flex:1;}
+.scr::-webkit-scrollbar{display:none;}
+input,select,textarea,button{font-family:inherit;}
+.overlay{position:fixed;inset:0;background:rgba(61,35,20,.45);z-index:60;display:flex;align-items:flex-end;animation:fadeIn .2s ease;}
+.sheet{width:100%;max-width:430px;margin:0 auto;background:#FFF9F2;border-radius:24px 24px 0 0;padding:18px 18px 36px;animation:slideUp .25s ease;max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch;}
+.handle{width:44px;height:5px;border-radius:5px;background:#C9A882;margin:0 auto 14px;opacity:.35;}
+.bigbtn{width:100%;padding:15px;border-radius:50px;background:#C4714A;border:none;color:white;font-size:17px;font-weight:800;cursor:pointer;box-shadow:0 6px 20px rgba(196,113,74,.35);}
+.bigbtn:disabled{background:#D4B8A8;box-shadow:none;cursor:not-allowed;}
+.nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;background:#FFF9F2;border-top:2px solid #F5DDD1;display:flex;padding:8px 0 18px;z-index:50;}
+.navbtn{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;padding:2px 0;background:none;border:none;}
+.navdot{width:15px;height:3px;border-radius:3px;background:#C4714A;margin-top:1px;}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
-.float{animation:float 2s ease-in-out infinite;}
+@keyframes pop{from{opacity:0;transform:scale(.88)}to{opacity:1;transform:scale(1)}}
 </style>
 </head>
 <body>
-<div id="splash">
-  <div class="float" style="font-size:52px">&#127969;</div>
-  <div style="font-family:Lora,serif;font-size:26px;color:#C4714A;font-weight:600">keep <em>up</em></div>
-  <div class="spin"></div>
-</div>
-<div id="root"></div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js" defer></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js" defer></script>
+<div id="app"></div>
 <script>
-// Register inline service worker
-if('serviceWorker' in navigator){
-  var sw="self.addEventListener('install',function(){self.skipWaiting();});self.addEventListener('activate',function(e){e.waitUntil(self.clients.claim());});self.addEventListener('fetch',function(e){if(e.request.method==='GET')e.respondWith(caches.match(e.request).then(function(c){return c||fetch(e.request);}));});";
-  navigator.serviceWorker.register(URL.createObjectURL(new Blob([sw],{type:'text/javascript'}))).catch(function(){});
-}
-// Load Babel and app after page paints (splash screen shows first)
-window.addEventListener('load', function() {
-  var s = document.createElement('script');
-  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js';
-  s.onload = function() {
-    var app = document.createElement('script');
-    app.type = 'text/babel';
-    app.text = document.getElementById('app-source').textContent;
-    document.body.appendChild(app);
-  };
-  document.body.appendChild(s);
-});
-</script>
-<script id="app-source" type="text/plain">
-const { useState, useRef, useEffect } = React;
-
-// ── THEMES ───────────────────────────────────────────────────────────────────
-const GROUP_THEMES = {
-  imm:     { name:"Immediate",  icon:"❤️", accent:"#C4714A", accentLight:"#E8956D", accentPale:"#F5DDD1", accentDeep:"#6B4226", bg:"#FAF6F0", cardBg:"#FFF9F2", stripBg:"#FFF3E8" },
-  moms:    { name:"Mom's Side", icon:"🌸", accent:"#B5699A", accentLight:"#D48DBB", accentPale:"#F5E0EF", accentDeep:"#6B3355", bg:"#FDF6FB", cardBg:"#FFF9FD", stripBg:"#F9EDF6" },
-  dads:    { name:"Dad's Side", icon:"🌲", accent:"#4A7C59", accentLight:"#6FA882", accentPale:"#D8EDE0", accentDeep:"#2D4F38", bg:"#F4FAF6", cardBg:"#F9FDF9", stripBg:"#E8F5ED" },
-  cousins: { name:"Cousins",    icon:"⭐", accent:"#C4922A", accentLight:"#E0B355", accentPale:"#FBF0D0", accentDeep:"#7A5A14", bg:"#FDFAF2", cardBg:"#FFFCF4", stripBg:"#F8F0D8" },
-};
-const getTheme = id => GROUP_THEMES[id] || { ...GROUP_THEMES.imm, accent:"#7A6FAA", accentLight:"#A89ECC", accentPale:"#ECEAF8", accentDeep:"#3D3566", bg:"#F7F6FD", cardBg:"#FDFCFF", stripBg:"#EEEAF8" };
-
-// ── DATA ──────────────────────────────────────────────────────────────────────
-const INITIAL_GROUPS = [
-  { id:"imm",     label:"Immediate",  icon:"❤️" },
-  { id:"moms",    label:"Mom's Side", icon:"🌸" },
-  { id:"dads",    label:"Dad's Side", icon:"🌲" },
-  { id:"cousins", label:"Cousins",    icon:"⭐" },
-];
-
-const FEED_BY_GROUP = {
-  imm: [
-    { id:1,  type:"photo",   avatar:"👩", name:"Mom",        time:"2h ago",    emoji:"🌻", caption:"Finally got the garden going! The sunflowers are already taller than me 😂 Can't wait to show everyone." },
-    { id:2,  type:"checkin", avatar:"👦", name:"Jake",       time:"4h ago",    status:"Just landed in Portland 🌧️ — first work trip ever! Wish me luck!" },
-    { id:3,  type:"event",   month:"APR", day:19, title:"Easter Brunch 🐣", who:"Added by Mom", going:4, maybe:1 },
-    { id:4,  type:"photo",   avatar:"👧", name:"Lily",       time:"Yesterday", emoji:"🎨", caption:"Finished my art project! Took three weeks but I'm so happy with how it turned out 🎉" },
+// ── STATE ──────────────────────────────────────────────────────
+var S = {
+  boarded: localStorage.getItem('ku_ob')==='1',
+  obStep: 0,
+  name: localStorage.getItem('ku_name')||'',
+  avatar: localStorage.getItem('ku_av')||'👩',
+  grpName: '', grpEmoji: '❤️',
+  tab: 'feed',
+  group: 'imm',
+  screen: 'main',
+  manGroup: 'imm',
+  compose: false,
+  rxns: {}, rxPick: null,
+  rsvp: {},
+  cmts: {
+    1:[{id:101,av:'👴',name:'Grandpa Joe',text:'Those are gorgeous! Save me some seeds',time:'1h ago'},{id:102,av:'👦',name:'Jake',text:'Taller than you isnt saying much Mom lol',time:'45m ago'}],
+    4:[{id:201,av:'👩',name:'Mom',text:'Lily this is STUNNING',time:'3h ago'}],
+  },
+  cmtOpen: null, cmtIn: '',
+  evs: [
+    {id:1,month:'APR',day:19,title:'Easter Brunch',group:"Mom's Side",going:9,maybe:2,time:'10:00 AM',loc:"Grandma's house"},
+    {id:2,month:'APR',day:21,title:"Jake's Birthday",group:'Immediate',going:5,maybe:1,time:'6:00 PM',loc:'TBD'},
+    {id:3,month:'JUL',day:12,title:'Family Cabin Trip',group:"Dad's Side",going:6,maybe:3,time:'All day',loc:'Lake Tahoe'},
   ],
-  moms: [
-    { id:10, type:"photo",   avatar:"👵", name:"Grandma Rose", time:"1h ago",  emoji:"🌷", caption:"The rose bushes are blooming already! Come visit soon before they're gone. Love to all 💕" },
-    { id:11, type:"checkin", avatar:"🧑", name:"Uncle Tom",    time:"3h ago",  status:"Driving up to see Grandma this weekend — anyone else coming?" },
-    { id:12, type:"event",   month:"APR", day:19, title:"Easter Brunch 🐣", who:"Added by Grandma Rose", going:9, maybe:2 },
+  addEv: false, selEv: null,
+  nEv: {title:'',month:'APR',day:'',time:'',loc:'',group:'Immediate'},
+  showEmp: false,
+  newGrpName: '', newGrpEmoji: '❤️',
+  copied: false,
+  upOpen: false, upStep: 1, upType: 'photo',
+  upEmoji: '🌻', upCap: '', upCi: '', upImg: null,
+  openChat: null, newDm: false, dmGrp: 'imm', dmSel: [],
+  chatIn: {},
+  chatMsgs: {'dm-1':[
+    {id:1,av:'👦',name:'Jake',text:'Hey, joining Easter brunch?',time:'Yesterday'},
+    {id:2,av:'👩',name:'You',text:'Yes! Bringing potato salad',time:'Yesterday',you:true},
+    {id:3,av:'👦',name:'Jake',text:"Perfect!! Can't wait",time:'Yesterday'},
+  ]},
+  dms: [{id:'dm-1',members:[{id:3,av:'👦',name:'Jake'}],last:"Can't wait!",lt:'Yesterday'}],
+  groups: [
+    {id:'imm',label:'Immediate',icon:'❤️'},
+    {id:'moms',label:"Mom's Side",icon:'🌸'},
+    {id:'dads',label:"Dad's Side",icon:'🌲'},
+    {id:'cousins',label:'Cousins',icon:'⭐'},
   ],
-  dads: [
-    { id:20, type:"photo",   avatar:"👴", name:"Grandpa Joe",  time:"2h ago",    emoji:"🎣", caption:"Caught the big one finally! 14 inches. Grandma says it's too small to count. I say she's wrong." },
-    { id:21, type:"checkin", avatar:"👨‍🦳", name:"Uncle Bill",  time:"Yesterday", status:"Cabin is booked for July! Who's in? 🏕️" },
-    { id:22, type:"event",   month:"JUL", day:12, title:"Family Cabin Trip 🏕️", who:"Added by Uncle Bill", going:6, maybe:3 },
-  ],
-  cousins: [
-    { id:30, type:"checkin", avatar:"👦", name:"Jake",   time:"30m ago",   status:"Anyone want to do a group video call this weekend? It's been forever 😭" },
-    { id:31, type:"photo",   avatar:"👧", name:"Lily",   time:"5h ago",    emoji:"🎮", caption:"Finally beat this game after 80 hours. I think I need to go outside." },
-    { id:32, type:"checkin", avatar:"🧒", name:"Emma",   time:"Yesterday", status:"I graduated!! Officially done with college 🎓🎉" },
-  ],
-};
-
-const INITIAL_COMMENTS = {
-  1:  [ { id:101, avatar:"👴", name:"Grandpa Joe",   text:"Those are gorgeous! Save me some seeds for next year 🌻", time:"1h ago" }, { id:102, avatar:"👦", name:"Jake", text:"Taller than you isn't saying much Mom 😂 love you", time:"45m ago" }, { id:103, avatar:"👧", name:"Lily", text:"Can we come see them this weekend?? 🌻🌻", time:"20m ago" } ],
-  4:  [ { id:201, avatar:"👩", name:"Mom",            text:"Lily this is STUNNING. You are so talented 😭❤️", time:"3h ago" }, { id:202, avatar:"👨", name:"Dad", text:"So proud of you kiddo. We should frame it!", time:"2h ago" } ],
-  10: [ { id:301, avatar:"🧑", name:"Uncle Tom",      text:"The roses look even better than last year Grandma! 🌷", time:"30m ago" }, { id:302, avatar:"👩", name:"Sarah", text:"We'll be there Saturday! Can't wait to see you 💕", time:"10m ago" } ],
-  20: [ { id:401, avatar:"👩", name:"Grandma",        text:"14 inches is NOT the big one Joe 😂", time:"1h ago" }, { id:402, avatar:"👨‍🦳", name:"Uncle Bill", text:"Hahaha Grandma coming in hot 😂🎣", time:"45m ago" }, { id:403, avatar:"👦", name:"Jake", text:"Grandpa I believe you 🤝", time:"20m ago" } ],
-  31: [ { id:501, avatar:"🧒", name:"Emma",           text:"80 HOURS?? What game is this 😭", time:"4h ago" }, { id:502, avatar:"👦", name:"Jake", text:"Please go outside Lily 😂", time:"3h ago" } ],
-};
-
-const REACTIONS = ["🥰","😂","🙌","😮","💪"];
-const GROUP_EMOJIS = ["❤️","🌸","🌲","⭐","🏠","🎉","🌻","🦋","🌊","🍂","🎶","🌙"];
-const AVATARS = ["👩","👨","👵","👴","👧","👦","🧒","👩‍🦱","👨‍🦳","🧑"];
-
-const PHOTO_EMOJIS = ["🌻","🌷","🌸","🎨","🎣","🎮","🏡","🌅","🍕","🎂","🌿","🐶","🐱","☀️","🌙","❄️","🎸","📚","🏖️","🏔️","🌈","🎉","🦋","🍂"];
-
-const BIRTHDAYS = [
-  { name:"Mom",          date:"Apr 22", avatar:"👩", daysLeft:17 },
-  { name:"Grandma Rose", date:"May 3",  avatar:"👵", daysLeft:28 },
-  { name:"Jake",         date:"Jun 14", avatar:"👦", daysLeft:70 },
-  { name:"Lily",         date:"Aug 9",  avatar:"👧", daysLeft:126 },
-  { name:"Uncle Tom",    date:"Sep 1",  avatar:"🧑", daysLeft:149 },
-];
-
-const EVENTS_DATA = [
-  { id:1, month:"APR", day:19, title:"Easter Brunch 🐣",     group:"Mom's Side", going:9,  maybe:2, time:"10:00 AM", location:"Grandma's house" },
-  { id:2, month:"APR", day:21, title:"Jake's Birthday 🎂",    group:"Immediate",  going:5,  maybe:1, time:"6:00 PM",  location:"TBD" },
-  { id:3, month:"JUL", day:12, title:"Family Cabin Trip 🏕️",  group:"Dad's Side", going:6,  maybe:3, time:"All day",  location:"Lake Tahoe" },
-  { id:4, month:"MAY", day:3,  title:"Grandma's Birthday 🎂", group:"Mom's Side", going:7,  maybe:0, time:"2:00 PM",  location:"Grandma's house", isBirthday:true },
-];
-
-const CAL_DAYS = [
-  {d:30,m:"prev"},{d:31,m:"prev"},
-  {d:1},{d:2},{d:3},{d:4},{d:5},
-  {d:6},{d:7},{d:8},{d:9},{d:10},{d:11},{d:12},
-  {d:13},{d:14},{d:15},{d:16},{d:17},{d:18},{d:19,ev:true},
-  {d:20},{d:21,ev:true,bday:true},{d:22,bday:true},{d:23},{d:24},{d:25},{d:26},
-  {d:27},{d:28},{d:29},{d:30},{d:1,m:"next"},{d:2,m:"next"},{d:3,m:"next"},
-];
-
-const ONBOARDING_STEPS = ["welcome","name","avatar","birthday","first_group","done"];
-
-const GROUP_CHAT_PREVIEWS = {
-  imm:     { who:"Mom",        text:"Don't forget dinner is at 6 not 7 this Sunday!", time:"2h ago" },
-  moms:    { who:"Uncle Tom",  text:"I'll pick up Grandma on the way 🚗",             time:"Yesterday" },
-  dads:    { who:"Uncle Bill", text:"Cabin confirmed! Sending the address now 🏕️",    time:"Mon" },
-  cousins: { who:"Emma",       text:"Who's free for a video call Saturday??",         time:"Sun" },
-};
-
-// Empty state configs per group
-const EMPTY_STATE_CONFIGS = {
-  imm:     { emoji:"🏡", headline:"Your family feed is waiting!", sub:"Be the first to share something with your immediate family. A photo, a check-in, a memory — anything goes.", cta:"Share Something First ❤️", color:"#C4714A" },
-  moms:    { emoji:"🌸", headline:"Say hello to Mom's Side!", sub:"Start the conversation. Share a photo, let everyone know how you're doing, or add an upcoming family event.", cta:"Post Something 🌸", color:"#B5699A" },
-  dads:    { emoji:"🌲", headline:"Dad's Side is quiet right now.", sub:"Be the one to break the silence! A fishing photo? A weekend plan? Even a quick check-in goes a long way.", cta:"Start the Feed 🌲", color:"#4A7C59" },
-  cousins: { emoji:"⭐", headline:"Cousins group — let's go!", sub:"When did you last catch up with your cousins? Post something and get the conversation started.", cta:"Post First ⭐", color:"#C4922A" },
-};
-
-const getEmptyConfig = id => EMPTY_STATE_CONFIGS[id] || { emoji:"✨", headline:"Nothing here yet!", sub:"Be the first to share something with this group.", cta:"Share Something", color:"#7A6FAA" };
-
-// ── STYLES ────────────────────────────────────────────────────────────────────
-const BASE_STYLES = `
-  @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&family=Nunito:wght@400;500;600;700;800&display=swap');
-  *{box-sizing:border-box;margin:0;padding:0;}
-  body{font-family:'Nunito',sans-serif;background:#FAF6F0;color:#3D2314;min-height:100vh;}
-  .app{max-width:420px;margin:0 auto;min-height:100vh;position:relative;display:flex;flex-direction:column;overflow:hidden;}
-  @keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
-  @keyframes fadeIn{from{opacity:0}to{opacity:1}}
-  @keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
-  @keyframes popIn{from{opacity:0;transform:scale(0.85)}to{opacity:1;transform:scale(1)}}
-  @keyframes shimmer{0%{opacity:0.6}50%{opacity:1}100%{opacity:0.6}}
-  @keyframes float{0%{transform:translateY(0px)}50%{transform:translateY(-8px)}100%{transform:translateY(0px)}}
-  @keyframes pulse{0%{transform:scale(1)}50%{transform:scale(1.08)}100%{transform:scale(1)}}
-  @keyframes checkPop{0%{transform:scale(0) rotate(-20deg);opacity:0}60%{transform:scale(1.2) rotate(5deg);opacity:1}100%{transform:scale(1) rotate(0deg);opacity:1}}
-  @keyframes confettiFall{0%{transform:translateY(-20px) rotate(0deg);opacity:1}100%{transform:translateY(80px) rotate(360deg);opacity:0}}
-  @keyframes progressFill{from{width:0%}to{width:100%}}
-  .scrollbar-hide{scrollbar-width:none;}
-  .scrollbar-hide::-webkit-scrollbar{display:none;}
-  input,button,select,textarea{font-family:'Nunito',sans-serif;}
-`;
-
-// ── MAIN COMPONENT ────────────────────────────────────────────────────────────
-function KeepUp() {
-  // Onboarding
-  const [onboarded, setOnboarded]       = useState(false);
-  const [obStep, setObStep]             = useState(0);
-  const [obName, setObName]             = useState("");
-  const [obAvatar, setObAvatar]         = useState("👩");
-  const [obBirthday, setObBirthday]     = useState("");
-  const [obGroupName, setObGroupName]   = useState("");
-  const [obGroupEmoji, setObGroupEmoji] = useState("❤️");
-
-  // App state
-  const [tab, setTab]                   = useState("feed");
-  const [activeGroup, setActiveGroup]   = useState("imm");
-  const [groups, setGroups]             = useState(INITIAL_GROUPS);
-  const [screen, setScreen]             = useState("main");
-  const [managingGroup, setManagingGroup] = useState("imm");
-  const [composeOpen, setComposeOpen]   = useState(false);
-  const [reactions, setReactions]       = useState({});
-  const [reactionPicker, setReactionPicker] = useState(null);
-  const [rsvp, setRsvp]                 = useState({});
-  const [comments, setComments]         = useState(INITIAL_COMMENTS);
-  const [commentOpen, setCommentOpen]   = useState(null);
-  const [commentInput, setCommentInput] = useState("");
-  const [inviteOpen, setInviteOpen]     = useState(false);
-  const [inviteInput, setInviteInput]   = useState("");
-  const [pendingInvites, setPendingInvites] = useState([{ id:99, email:"grandpa.joe@email.com", status:"Invite sent · awaiting" }]);
-  const [copied, setCopied]             = useState(false);
-  const [inviteSent, setInviteSent]     = useState(false);
-  const [groupName, setGroupName]       = useState("");
-  const [groupEmoji, setGroupEmoji]     = useState("❤️");
-  const [members, setMembers]           = useState({
-    imm:  [{id:1,avatar:"👩",name:"You (Sarah)",role:"Admin · pays for this group",you:true},{id:2,avatar:"👨",name:"Mike",role:"Member"},{id:3,avatar:"👦",name:"Jake",role:"Member"},{id:4,avatar:"👧",name:"Lily",role:"Member"}],
-    moms: [{id:5,avatar:"👵",name:"Grandma Rose",role:"Admin · pays for this group"},{id:1,avatar:"👩",name:"You (Sarah)",role:"Member",you:true},{id:6,avatar:"🧑",name:"Uncle Tom",role:"Member"}],
-  });
-  const [events, setEvents]             = useState(EVENTS_DATA);
-  const [addEventOpen, setAddEventOpen] = useState(false);
-  const [selectedEvent, setSelectedEvent] = useState(null);
-  const [newEvent, setNewEvent]         = useState({ title:"", month:"APR", day:"", time:"", location:"", group:"Immediate" });
-  const [textSize, setTextSize]         = useState("normal");
-
-  // Upload flow
-  const [uploadOpen, setUploadOpen]     = useState(false);
-  const [uploadStep, setUploadStep]     = useState(1);
-  const [uploadType, setUploadType]     = useState("photo");
-  const [uploadEmoji, setUploadEmoji]   = useState("🌻");
-  const [uploadCaption, setUploadCaption] = useState("");
-  const [uploadCheckin, setUploadCheckin] = useState("");
-  const [feedPosts, setFeedPosts]       = useState(FEED_BY_GROUP);
-  const [showEmpty, setShowEmpty]       = useState(false);
-
-  // Chat state
-  const [openChat, setOpenChat]         = useState(null); // {type:"group"|"dm", id}
-  const [newDmOpen, setNewDmOpen]       = useState(false);
-  const [dmGroupPick, setDmGroupPick]   = useState("imm"); // which group to pull members from
-  const [dmSelected, setDmSelected]     = useState([]);    // member ids selected
-  const [chatInputs, setChatInputs]     = useState({});    // keyed by chat id
-  const [chatMessages, setChatMessages] = useState({
-    "dm-1": [
-      { id:1, avatar:"👦", name:"Jake", text:"Hey Mom, are you joining Easter brunch?", time:"Yesterday" },
-      { id:2, avatar:"👩", name:"You",  text:"Yes! I'm bringing the potato salad 🥗", time:"Yesterday", you:true },
-      { id:3, avatar:"👦", name:"Jake", text:"Perfect!! Can't wait 🐣", time:"Yesterday" },
+  mems: {
+    imm:[{id:1,av:'👩',name:'You',role:'Admin',you:true},{id:2,av:'👨',name:'Mike',role:'Member'},{id:3,av:'👦',name:'Jake',role:'Member'},{id:4,av:'👧',name:'Lily',role:'Member'}],
+    moms:[{id:5,av:'👵',name:'Grandma Rose',role:'Admin'},{id:1,av:'👩',name:'You',role:'Member',you:true},{id:6,av:'🧑',name:'Uncle Tom',role:'Member'}],
+    dads:[{id:7,av:'👴',name:'Grandpa Joe',role:'Admin'},{id:1,av:'👩',name:'You',role:'Member',you:true},{id:8,av:'👨',name:'Uncle Bill',role:'Member'}],
+    cousins:[{id:1,av:'👩',name:'You',role:'Admin',you:true},{id:3,av:'👦',name:'Jake',role:'Member'},{id:4,av:'👧',name:'Lily',role:'Member'}],
+  },
+  feed: {
+    imm:[
+      {id:1,type:'photo',av:'👩',name:'Mom',time:'2h ago',emoji:'🌻',cap:'Finally got the garden going! The sunflowers are taller than me already'},
+      {id:2,type:'checkin',av:'👦',name:'Jake',time:'4h ago',status:'Just landed in Portland! First work trip ever. Wish me luck!'},
+      {id:3,type:'event',month:'APR',day:19,title:'Easter Brunch',who:'Added by Mom',going:4,maybe:1},
+      {id:4,type:'photo',av:'👧',name:'Lily',time:'Yesterday',emoji:'🎨',cap:'Finished my art project! Three weeks of work and so happy with it'},
     ],
+    moms:[
+      {id:10,type:'photo',av:'👵',name:'Grandma Rose',time:'1h ago',emoji:'🌷',cap:'The rose bushes are blooming! Come visit soon. Love to all'},
+      {id:11,type:'checkin',av:'🧑',name:'Uncle Tom',time:'3h ago',status:'Driving up to see Grandma this weekend. Anyone else coming?'},
+    ],
+    dads:[
+      {id:20,type:'photo',av:'👴',name:'Grandpa Joe',time:'2h ago',emoji:'🎣',cap:'Caught the big one! 14 inches. Grandma says too small. I disagree.'},
+      {id:21,type:'checkin',av:'👨',name:'Uncle Bill',time:'Yesterday',status:"Cabin is booked for July! Who's in?"},
+    ],
+    cousins:[
+      {id:30,type:'checkin',av:'👦',name:'Jake',time:'30m ago',status:'Anyone want to do a group video call this weekend? Been forever!'},
+      {id:31,type:'photo',av:'👧',name:'Lily',time:'5h ago',emoji:'🎮',cap:'Finally beat this game after 80 hours. I need to go outside.'},
+    ],
+  },
+};
+
+// ── THEMES ─────────────────────────────────────────────────────
+var TH={
+  imm:{a:'#C4714A',al:'#E8956D',ap:'#F5DDD1',ad:'#6B4226',bg:'#FAF6F0',cb:'#FFF9F2',sb:'#FFF3E8'},
+  moms:{a:'#B5699A',al:'#D48DBB',ap:'#F5E0EF',ad:'#6B3355',bg:'#FDF6FB',cb:'#FFF9FD',sb:'#F9EDF6'},
+  dads:{a:'#4A7C59',al:'#6FA882',ap:'#D8EDE0',ad:'#2D4F38',bg:'#F4FAF6',cb:'#F9FDF9',sb:'#E8F5ED'},
+  cousins:{a:'#C4922A',al:'#E0B355',ap:'#FBF0D0',ad:'#7A5A14',bg:'#FDFAF2',cb:'#FFFCF4',sb:'#F8F0D8'},
+};
+function gt(id){return TH[id]||{a:'#7A6FAA',al:'#A89ECC',ap:'#ECEAF8',ad:'#3D3566',bg:'#F7F6FD',cb:'#FDFCFF',sb:'#EEEAF8'};}
+var EMPTY={
+  imm:{emoji:'🏡',head:'Your family feed is waiting!',sub:'Be the first to share something.',cta:'Share Something',col:'#C4714A'},
+  moms:{emoji:'🌸',head:"Say hello to Mom's Side!",sub:'Start the conversation.',cta:'Post Something',col:'#B5699A'},
+  dads:{emoji:'🌲',head:"Dad's Side is quiet.",sub:'A fishing photo? A weekend plan?',cta:'Start the Feed',col:'#4A7C59'},
+  cousins:{emoji:'⭐',head:"Cousins group, let's go!",sub:'When did you last catch up?',cta:'Post First',col:'#C4922A'},
+};
+function gEmp(id){return EMPTY[id]||{emoji:'✨',head:'Nothing here yet!',sub:'Be the first.',cta:'Share',col:'#7A6FAA'};}
+var CPREV={
+  imm:{who:'Mom',text:"Don't forget dinner is at 6!",time:'2h ago'},
+  moms:{who:'Uncle Tom',text:"I'll pick Grandma up on the way",time:'Yesterday'},
+  dads:{who:'Uncle Bill',text:'Cabin confirmed! Sending address',time:'Mon'},
+  cousins:{who:'Emma',text:"Who's free for a video call?",time:'Sun'},
+};
+var RXS=['🥰','😂','🙌','😮','💪'];
+var AVTS=['👩','👨','👵','👴','👧','👦','🧒','👩‍🦱','👨‍🦳','🧑'];
+var GEMJ=['❤️','🌸','🌲','⭐','🏠','🎉','🌻','🦋','🌊','🍂','🎶','🌙'];
+var PEMJ=['🌻','🌷','🌸','🎨','🎣','🎮','🏡','🌅','🍕','🎂','🌿','🐶','☀️','🌙','❄️','🎸','📚','🌈','🎉','🦋'];
+var MONTHS=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+
+// ── RENDER ─────────────────────────────────────────────────────
+function h(tag,attrs){
+  var el=document.createElement(tag);
+  if(attrs)Object.keys(attrs).forEach(function(k){
+    if(k==='class')el.className=attrs[k];
+    else if(k==='style'&&typeof attrs[k]==='object')Object.assign(el.style,attrs[k]);
+    else if(k.startsWith('on'))el.addEventListener(k.slice(2).toLowerCase(),attrs[k]);
+    else if(k==='innerHTML')el.innerHTML=attrs[k];
+    else if(k==='value'){el.value=attrs[k];}
+    else if(k==='disabled')attrs[k]&&el.setAttribute('disabled','');
+    else if(k==='placeholder')el.placeholder=attrs[k];
+    else if(k==='type')el.type=attrs[k];
+    else if(k==='rows')el.rows=attrs[k];
+    else if(k==='accept')el.accept=attrs[k];
+    else el.setAttribute(k,attrs[k]);
   });
-  const [directMessages, setDirectMessages] = useState([
-    { id:"dm-1", members:[{id:3,avatar:"👦",name:"Jake"}], lastMessage:"Perfect!! Can't wait 🐣", lastTime:"Yesterday" },
-  ]);
-
-  // Preview image from file
-  const [previewDataUrl, setPreviewDataUrl] = useState(null);
-  const fileInputRef = useRef(null);
-
-  const t = getTheme(activeGroup);
-  const fs = textSize === "xlarge" ? 1.22 : textSize === "large" ? 1.1 : 1;
-  const px = (n) => Math.round(n * fs);
-
-  // ── HELPERS ──────────────────────────────────────────────────────────────────
-  const toggleRsvp     = id => setRsvp(r => ({...r,[id]:!r[id]}));
-  const handleReact    = (id, emoji) => { setReactions(r => ({...r,[id]: r[id]===emoji?null:emoji})); setReactionPicker(null); };
-  const handleCopy     = () => { setCopied(true); setTimeout(()=>setCopied(false),2000); };
-  const getMembers     = gid => members[gid] || [{id:1,avatar:"👩",name:"You (Sarah)",role:"Admin · pays for this group",you:true}];
-  const isAdmin        = gid => !!getMembers(gid).find(x=>x.you&&x.role.includes("Admin"));
-  const removeMember   = (gid,mid) => setMembers(m=>({...m,[gid]:getMembers(gid).filter(x=>x.id!==mid)}));
-  const postComments   = id => comments[id]||[];
-
-  const handleAddComment = (postId) => {
-    if(!commentInput.trim()) return;
-    const c = { id:Date.now(), avatar:obAvatar||"👩", name:obName||"You", text:commentInput.trim(), time:"Just now" };
-    setComments(prev => ({...prev, [postId]:[...postComments(postId), c]}));
-    setCommentInput("");
-  };
-
-  const handleSendInvite = () => {
-    if(!inviteInput.trim()) return;
-    setPendingInvites(p=>[...p,{id:Date.now(),email:inviteInput.trim(),status:"Invite sent · awaiting"}]);
-    setInviteInput(""); setInviteSent(true); setTimeout(()=>setInviteSent(false),3000);
-  };
-
-  const handleAddEvent = () => {
-    if(!newEvent.title.trim()||!newEvent.day) return;
-    setEvents(ev=>[...ev,{...newEvent,id:Date.now(),going:1,maybe:0,day:parseInt(newEvent.day)||1}]);
-    setNewEvent({title:"",month:"APR",day:"",time:"",location:"",group:"Immediate"});
-    setAddEventOpen(false);
-  };
-
-  const openUpload = (type) => {
-    setUploadType(type);
-    setUploadStep(type === "photo" ? 2 : type === "checkin" ? 3 : 2);
-    setUploadCaption("");
-    setUploadCheckin("");
-    setUploadEmoji("🌻");
-    setPreviewDataUrl(null);
-    setComposeOpen(false);
-    setUploadOpen(true);
-  };
-
-  const handleFileChange = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => setPreviewDataUrl(ev.target.result);
-    reader.readAsDataURL(file);
-  };
-
-  const handleSubmitPost = () => {
-    const newPost = uploadType === "checkin"
-      ? { id:Date.now(), type:"checkin", avatar:obAvatar||"👩", name:obName||"You", time:"Just now", status:uploadCheckin }
-      : { id:Date.now(), type:"photo", avatar:obAvatar||"👩", name:obName||"You", time:"Just now",
-          emoji: previewDataUrl ? null : uploadEmoji,
-          imageUrl: previewDataUrl || null,
-          caption:uploadCaption };
-    setFeedPosts(fp => ({ ...fp, [activeGroup]: [newPost, ...(fp[activeGroup]||[])] }));
-    setUploadStep(4); // success step
-    setTimeout(() => { setUploadOpen(false); setUploadStep(1); }, 3000);
-  };
-
-  const handleCreateGroup = () => {
-    if(!groupName.trim()) return;
-    const newId="g"+Date.now();
-    setGroups(g=>[...g,{id:newId,label:groupName.trim(),icon:groupEmoji}]);
-    setMembers(m=>({...m,[newId]:[{id:1,avatar:"👩",name:"You (Sarah)",role:"Admin · pays for this group",you:true}]}));
-    setGroupName(""); setGroupEmoji("❤️"); setActiveGroup(newId); setScreen("main");
-  };
-
-  const completeOnboarding = () => {
-    if(obGroupName.trim()) setGroups([{id:"imm",label:obGroupName,icon:obGroupEmoji}]);
-    setOnboarded(true);
-  };
-
-  // ── SHARED SUBCOMPONENTS ──────────────────────────────────────────────────────
-  const BigBtn = ({onClick,children,disabled,style={}}) => (
-    <button onClick={onClick} disabled={disabled} style={{
-      width:"100%", padding:`${px(16)}px`, borderRadius:50,
-      background:disabled?"#D4B8A8":"#C4714A", border:"none",
-      color:"white", fontSize:px(17), fontWeight:800, cursor:disabled?"not-allowed":"pointer",
-      boxShadow:disabled?"none":"0 6px 24px rgba(196,113,74,0.35)",
-      transition:"opacity 0.15s", ...style
-    }}>{children}</button>
-  );
-
-  const SheetHandle = ({color="#C9A882"}) => (
-    <div style={{width:48,height:5,borderRadius:5,background:color,margin:"0 auto 18px",opacity:0.35}}/>
-  );
-
-  const Overlay = ({onClose,children,maxHeight="90vh"}) => (
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(61,35,20,0.45)",zIndex:60,display:"flex",alignItems:"flex-end",animation:"fadeIn 0.2s ease"}}>
-      <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:420,margin:"0 auto",background:"#FFF9F2",borderRadius:"24px 24px 0 0",padding:`20px 20px ${px(36)}px`,animation:"slideUp 0.25s ease",maxHeight,overflowY:"auto"}}>
-        {children}
-      </div>
-    </div>
-  );
-
-  // ── EMPTY STATE ───────────────────────────────────────────────────────────────
-  const EmptyState = ({ groupId, groupInfo, onShare }) => {
-    const cfg = getEmptyConfig(groupId);
-    const et = getTheme(groupId);
-
-    // Floating example post illustrations
-    const mockPosts = [
-      { avatar:"👵", name:"Grandma", text:"Made your favorite cookies today! 🍪", offset:-8 },
-      { avatar:"👨", name:"Dad", text:"Just booked the lake cabin for summer! 🏕️", offset:12 },
-      { avatar:"👦", name:"Jake", text:"Graduated!! Finally!! 🎓🎉", offset:-4 },
-    ];
-
-    return (
-      <div style={{
-        flex:1, display:"flex", flexDirection:"column", alignItems:"center",
-        justifyContent:"center", padding:"24px 24px 40px",
-        background:`linear-gradient(180deg, ${et.bg} 0%, ${et.cardBg} 100%)`,
-        animation:"fadeUp 0.4s ease both"
-      }}>
-        {/* Floating illustrated cards */}
-        <div style={{position:"relative", width:"100%", height:180, marginBottom:8}}>
-          {mockPosts.map((p, i) => (
-            <div key={i} style={{
-              position:"absolute",
-              left:`${8 + i * 26}%`,
-              top: i === 1 ? 20 : i === 0 ? 50 : 30,
-              width: 180,
-              background:"white",
-              borderRadius:16,
-              padding:"12px 14px",
-              boxShadow:"0 4px 20px rgba(0,0,0,0.08)",
-              border:`1.5px solid ${et.accentPale}`,
-              opacity: 0.55 + i * 0.12,
-              transform:`rotate(${p.offset * 0.4}deg)`,
-              animation:`float ${2.8 + i * 0.5}s ease-in-out infinite`,
-              animationDelay:`${i * 0.4}s`,
-              zIndex: i === 1 ? 3 : 1,
-              pointerEvents:"none"
-            }}>
-              <div style={{display:"flex", alignItems:"center", gap:8, marginBottom:6}}>
-                <span style={{fontSize:18}}>{p.avatar}</span>
-                <span style={{fontSize:12, fontWeight:700, color:et.accentDeep}}>{p.name}</span>
-              </div>
-              <div style={{fontSize:12, color:"#6B4C35", lineHeight:1.4}}>{p.text}</div>
-            </div>
-          ))}
-          {/* Blur overlay to make it look "behind a veil" */}
-          <div style={{
-            position:"absolute", inset:0,
-            background:`linear-gradient(0deg, ${et.bg} 0%, transparent 60%)`,
-            borderRadius:20, zIndex:5
-          }}/>
-        </div>
-
-        {/* Main emoji — floating */}
-        <div style={{
-          fontSize:64, marginBottom:16,
-          animation:"float 3s ease-in-out infinite",
-          filter:"drop-shadow(0 8px 16px rgba(0,0,0,0.12))"
-        }}>
-          {cfg.emoji}
-        </div>
-
-        {/* Headline */}
-        <div style={{
-          fontFamily:"Lora,serif", fontSize:px(22), fontWeight:600,
-          color:et.accentDeep, textAlign:"center", lineHeight:1.3, marginBottom:10
-        }}>
-          {cfg.headline}
-        </div>
-
-        {/* Subtext */}
-        <div style={{
-          fontSize:px(15), color:"#9B7B62", textAlign:"center",
-          lineHeight:1.65, marginBottom:28, maxWidth:300
-        }}>
-          {cfg.sub}
-        </div>
-
-        {/* Ideas strip */}
-        <div style={{
-          width:"100%", background:et.accentPale,
-          borderRadius:16, padding:"14px 16px", marginBottom:24,
-          border:`1.5px solid ${et.accentLight}33`
-        }}>
-          <div style={{fontSize:px(12), fontWeight:800, color:et.accentDeep, letterSpacing:"0.5px", textTransform:"uppercase", marginBottom:10}}>
-            Ideas to get started:
-          </div>
-          {[
-            { icon:"📷", text:"Share a photo — a meal, a view, something that made you smile" },
-            { icon:"📍", text:"Quick check-in — where are you, how are you doing?" },
-            { icon:"📅", text:"Add an event — a birthday, a dinner, a get-together" },
-          ].map((idea, i) => (
-            <div key={i} style={{
-              display:"flex", alignItems:"center", gap:10,
-              padding:"8px 0",
-              borderBottom: i < 2 ? `1px solid ${et.accentPale}` : "none"
-            }}>
-              <span style={{fontSize:18, flexShrink:0}}>{idea.icon}</span>
-              <span style={{fontSize:px(13), color:"#6B4C35", lineHeight:1.5}}>{idea.text}</span>
-            </div>
-          ))}
-        </div>
-
-        {/* CTA */}
-        <button onClick={onShare} style={{
-          width:"100%", padding:"17px", borderRadius:50,
-          background:cfg.color, border:"none", color:"white",
-          fontSize:px(16), fontWeight:800, cursor:"pointer",
-          boxShadow:`0 8px 28px ${cfg.color}44`,
-          animation:"pulse 2.5s ease-in-out infinite",
-          marginBottom:12
-        }}>
-          {cfg.cta}
-        </button>
-
-        <button onClick={() => setInviteOpen(true)} style={{
-          width:"100%", padding:"14px", borderRadius:50,
-          background:"transparent", border:`2px solid ${et.accentPale}`,
-          color:et.accentDeep, fontSize:px(14), fontWeight:700, cursor:"pointer"
-        }}>
-          👥 Invite family members first
-        </button>
-      </div>
-    );
-  };
-
-  // ── UPLOAD FLOW SHEET ─────────────────────────────────────────────────────────
-  const UploadSheet = () => {
-    if (!uploadOpen) return null;
-
-    const canPost = uploadType === "checkin"
-      ? uploadCheckin.trim().length > 0
-      : (uploadCaption.trim().length > 0 || previewDataUrl);
-
-    // Step 1: type selector (used from compose sheet now, but kept as fallback)
-    // Step 2: photo composer
-    // Step 3: check-in composer
-    // Step 4: success
-
-    return (
-      <div
-        onClick={() => { if (uploadStep !== 4) { setUploadOpen(false); } }}
-        style={{
-          position:"fixed", inset:0, background:"rgba(61,35,20,0.5)",
-          zIndex:70, display:"flex", alignItems:"flex-end",
-          animation:"fadeIn 0.2s ease"
-        }}
-      >
-        <div
-          onClick={e => e.stopPropagation()}
-          style={{
-            width:"100%", maxWidth:420, margin:"0 auto",
-            background: uploadStep === 4 ? t.accentDeep : "#FFF9F2",
-            borderRadius:"24px 24px 0 0",
-            animation:"slideUp 0.28s cubic-bezier(0.34,1.56,0.64,1)",
-            maxHeight:"92vh", display:"flex", flexDirection:"column",
-            overflow:"hidden"
-          }}
-        >
-
-          {/* ── SUCCESS STEP ── */}
-          {uploadStep === 4 && (
-            <div style={{
-              flex:1, display:"flex", flexDirection:"column",
-              alignItems:"center", justifyContent:"center",
-              padding:"48px 32px 64px",
-              background:`linear-gradient(160deg, ${t.accentDeep} 0%, ${t.accent} 100%)`
-            }}>
-              {/* Confetti dots */}
-              {["❤️","🌸","⭐","🎉","🌻","✨"].map((e, i) => (
-                <div key={i} style={{
-                  position:"absolute",
-                  top:`${10 + (i * 11)}%`,
-                  left:`${10 + ((i * 17) % 80)}%`,
-                  fontSize: 18 + (i % 3) * 8,
-                  animation:`confettiFall ${1.5 + i * 0.3}s ease-out both`,
-                  animationDelay:`${i * 0.15}s`,
-                  pointerEvents:"none"
-                }}>{e}</div>
-              ))}
-
-              {/* Big checkmark */}
-              <div style={{
-                width:96, height:96, borderRadius:"50%",
-                background:"rgba(255,255,255,0.18)",
-                display:"flex", alignItems:"center", justifyContent:"center",
-                fontSize:52, marginBottom:24,
-                animation:"checkPop 0.5s cubic-bezier(0.34,1.56,0.64,1) both",
-                border:"3px solid rgba(255,255,255,0.4)"
-              }}>
-                ✅
-              </div>
-
-              <div style={{
-                fontFamily:"Lora,serif", fontSize:28, fontWeight:600,
-                color:"white", textAlign:"center", marginBottom:10
-              }}>
-                {uploadType === "checkin" ? "Check-in posted!" : "Photo shared!"}
-              </div>
-              <div style={{
-                fontSize:16, color:"rgba(255,255,255,0.75)",
-                textAlign:"center", lineHeight:1.6
-              }}>
-                Your family can see it now 🧡
-              </div>
-
-              {/* Animated progress bar before auto-close */}
-              <div style={{
-                width:200, height:4, borderRadius:4,
-                background:"rgba(255,255,255,0.2)", marginTop:36, overflow:"hidden"
-              }}>
-                <div style={{
-                  height:"100%", borderRadius:4,
-                  background:"rgba(255,255,255,0.7)",
-                  animation:"progressFill 2.8s linear both"
-                }}/>
-              </div>
-              <div style={{fontSize:13, color:"rgba(255,255,255,0.5)", marginTop:8}}>
-                Closing automatically…
-              </div>
-            </div>
-          )}
-
-          {/* ── PHOTO COMPOSER ── */}
-          {uploadStep === 2 && uploadType === "photo" && (
-            <>
-              {/* Header */}
-              <div style={{
-                padding:"16px 20px 14px", borderBottom:"1px solid #F5DDD1",
-                display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0
-              }}>
-                <button onClick={() => setUploadOpen(false)} style={{
-                  background:"#F5DDD1", border:"none", borderRadius:50,
-                  padding:"8px 16px", fontSize:14, fontWeight:700, color:"#6B4226", cursor:"pointer"
-                }}>Cancel</button>
-                <div style={{fontFamily:"Lora,serif", fontSize:18, fontWeight:600, color:"#C4714A"}}>
-                  Share a Photo
-                </div>
-                <div style={{
-                  fontSize:12, fontWeight:700, color:"#9B7B62",
-                  background:"#F5DDD1", padding:"6px 12px", borderRadius:50
-                }}>
-                  Step 1 of 2
-                </div>
-              </div>
-
-              <div className="scrollbar-hide" style={{flex:1, overflowY:"auto", padding:"20px 20px 0"}}>
-
-                {/* Who you're sharing to */}
-                <div style={{
-                  display:"flex", alignItems:"center", gap:10,
-                  background:t.accentPale, borderRadius:12, padding:"10px 14px", marginBottom:20,
-                  border:`1.5px solid ${t.accentLight}44`
-                }}>
-                  <span style={{fontSize:20}}>{(groups.find(g=>g.id===activeGroup)||groups[0]).icon}</span>
-                  <div>
-                    <span style={{fontSize:12, fontWeight:700, color:"#9B7B62", textTransform:"uppercase", letterSpacing:"0.5px"}}>Sharing with </span>
-                    <span style={{fontSize:14, fontWeight:800, color:t.accentDeep}}>{(groups.find(g=>g.id===activeGroup)||groups[0]).label}</span>
-                  </div>
-                </div>
-
-                {/* Photo area */}
-                <div
-                  onClick={() => fileInputRef.current?.click()}
-                  style={{
-                    width:"100%", aspectRatio:"4/3",
-                    borderRadius:20, border:`2.5px dashed ${t.accentLight}`,
-                    background: previewDataUrl
-                      ? "transparent"
-                      : `linear-gradient(135deg, ${t.accentPale} 0%, ${t.stripBg} 100%)`,
-                    display:"flex", flexDirection:"column",
-                    alignItems:"center", justifyContent:"center",
-                    cursor:"pointer", marginBottom:20, overflow:"hidden",
-                    position:"relative", transition:"all 0.2s"
-                  }}
-                >
-                  {previewDataUrl ? (
-                    <>
-                      <img src={previewDataUrl} alt="preview" style={{
-                        width:"100%", height:"100%", objectFit:"cover"
-                      }}/>
-                      <div style={{
-                        position:"absolute", bottom:10, right:10,
-                        background:"rgba(0,0,0,0.55)", borderRadius:50,
-                        padding:"6px 14px", color:"white", fontSize:13, fontWeight:700
-                      }}>
-                        📷 Change
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div style={{fontSize:48, marginBottom:10, animation:"float 3s ease-in-out infinite"}}>📷</div>
-                      <div style={{fontSize:16, fontWeight:700, color:t.accentDeep, marginBottom:4}}>Tap to add a photo</div>
-                      <div style={{fontSize:13, color:"#9B7B62"}}>from your camera roll</div>
-                    </>
-                  )}
-                </div>
-                <input ref={fileInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={handleFileChange}/>
-
-                {/* OR — pick an emoji instead */}
-                {!previewDataUrl && (
-                  <>
-                    <div style={{
-                      display:"flex", alignItems:"center", gap:12, marginBottom:16
-                    }}>
-                      <div style={{flex:1, height:1, background:"#F5DDD1"}}/>
-                      <span style={{fontSize:13, color:"#9B7B62", fontWeight:700}}>OR use a memory emoji</span>
-                      <div style={{flex:1, height:1, background:"#F5DDD1"}}/>
-                    </div>
-                    <div style={{
-                      display:"flex", flexWrap:"wrap", gap:8, marginBottom:20
-                    }}>
-                      {PHOTO_EMOJIS.map(e => (
-                        <button key={e} onClick={() => setUploadEmoji(e)} style={{
-                          width:46, height:46, borderRadius:12, fontSize:22,
-                          background: uploadEmoji === e ? t.accentPale : "#FFF9F2",
-                          border:`2px solid ${uploadEmoji === e ? t.accent : "rgba(107,66,38,0.12)"}`,
-                          cursor:"pointer", transition:"all 0.1s"
-                        }}>
-                          {e}
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {/* Next button */}
-              <div style={{padding:"16px 20px 32px", flexShrink:0}}>
-                <button onClick={() => setUploadStep(2.5)} style={{
-                  width:"100%", padding:"16px", borderRadius:50,
-                  background: t.accent, border:"none",
-                  color:"white", fontSize:16, fontWeight:800, cursor:"pointer",
-                  boxShadow:`0 6px 24px ${t.accent}44`
-                }}>
-                  Next: Add a Caption →
-                </button>
-              </div>
-            </>
-          )}
-
-          {/* ── CAPTION STEP ── */}
-          {uploadStep === 2.5 && uploadType === "photo" && (
-            <>
-              <div style={{
-                padding:"16px 20px 14px", borderBottom:"1px solid #F5DDD1",
-                display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0
-              }}>
-                <button onClick={() => setUploadStep(2)} style={{
-                  background:"#F5DDD1", border:"none", borderRadius:50,
-                  padding:"8px 16px", fontSize:14, fontWeight:700, color:"#6B4226", cursor:"pointer"
-                }}>← Back</button>
-                <div style={{fontFamily:"Lora,serif", fontSize:18, fontWeight:600, color:"#C4714A"}}>
-                  Add a Caption
-                </div>
-                <div style={{
-                  fontSize:12, fontWeight:700, color:"#9B7B62",
-                  background:"#F5DDD1", padding:"6px 12px", borderRadius:50
-                }}>
-                  Step 2 of 2
-                </div>
-              </div>
-
-              <div className="scrollbar-hide" style={{flex:1, overflowY:"auto", padding:"20px"}}>
-
-                {/* Preview thumbnail */}
-                <div style={{
-                  width:"100%", height:160, borderRadius:16,
-                  background:`linear-gradient(135deg,${t.accentPale} 0%,${t.stripBg} 100%)`,
-                  display:"flex", alignItems:"center", justifyContent:"center",
-                  marginBottom:20, overflow:"hidden", border:`1.5px solid ${t.accentPale}`
-                }}>
-                  {previewDataUrl ? (
-                    <img src={previewDataUrl} alt="preview" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
-                  ) : (
-                    <span style={{fontSize:72}}>{uploadEmoji}</span>
-                  )}
-                </div>
-
-                {/* Caption input */}
-                <label style={{
-                  fontSize:13, fontWeight:700, color:"#9B7B62",
-                  letterSpacing:"0.5px", textTransform:"uppercase",
-                  marginBottom:8, display:"block"
-                }}>What would you like to say?</label>
-                <textarea
-                  autoFocus
-                  value={uploadCaption}
-                  onChange={e => setUploadCaption(e.target.value)}
-                  placeholder="Tell your family what's going on... 🧡"
-                  rows={4}
-                  style={{
-                    width:"100%", padding:"16px", borderRadius:16,
-                    border:`2px solid ${uploadCaption.trim() ? t.accent : "#F5DDD1"}`,
-                    background:"#FAF6F0", fontSize:16, color:"#3D2314",
-                    outline:"none", resize:"none", lineHeight:1.6,
-                    transition:"border-color 0.2s", marginBottom:12
-                  }}
-                />
-
-                {/* Character counter */}
-                <div style={{
-                  fontSize:12, color: uploadCaption.length > 280 ? "#C44A4A" : "#9B7B62",
-                  textAlign:"right", marginBottom:6
-                }}>
-                  {uploadCaption.length}/280
-                </div>
-
-                {/* Quick caption suggestions */}
-                <div style={{marginBottom:20}}>
-                  <div style={{fontSize:12, fontWeight:700, color:"#9B7B62", letterSpacing:"0.4px", textTransform:"uppercase", marginBottom:8}}>
-                    Quick captions (tap to use):
-                  </div>
-                  <div style={{display:"flex", flexWrap:"wrap", gap:8}}>
-                    {[
-                      "Thinking of you all! 💕",
-                      "Beautiful day here ☀️",
-                      "Missing you guys 🥰",
-                      "Just had to share this!",
-                      "Can you believe it? 😂",
-                    ].map(suggestion => (
-                      <button key={suggestion} onClick={() => setUploadCaption(suggestion)} style={{
-                        padding:"8px 14px", borderRadius:50, fontSize:13, fontWeight:600,
-                        background: uploadCaption === suggestion ? t.accentPale : "#FFF9F2",
-                        border:`1.5px solid ${uploadCaption === suggestion ? t.accent : "#F5DDD1"}`,
-                        color: uploadCaption === suggestion ? t.accentDeep : "#6B4C35",
-                        cursor:"pointer"
-                      }}>
-                        {suggestion}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div style={{padding:"16px 20px 32px", flexShrink:0}}>
-                <button onClick={handleSubmitPost} disabled={!canPost} style={{
-                  width:"100%", padding:"17px", borderRadius:50,
-                  background: canPost ? t.accent : "#D4B8A8",
-                  border:"none", color:"white",
-                  fontSize:17, fontWeight:800,
-                  cursor: canPost ? "pointer" : "not-allowed",
-                  boxShadow: canPost ? `0 6px 28px ${t.accent}44` : "none",
-                  transition:"all 0.2s"
-                }}>
-                  📸 Share with {(groups.find(g=>g.id===activeGroup)||groups[0]).label}
-                </button>
-                {!canPost && (
-                  <div style={{fontSize:13, color:"#9B7B62", textAlign:"center", marginTop:10}}>
-                    Write a caption to continue — your family will love to know what's happening 🧡
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-
-          {/* ── CHECK-IN COMPOSER ── */}
-          {uploadStep === 3 && uploadType === "checkin" && (
-            <>
-              <div style={{
-                padding:"16px 20px 14px", borderBottom:"1px solid #F5DDD1",
-                display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0
-              }}>
-                <button onClick={() => setUploadOpen(false)} style={{
-                  background:"#F5DDD1", border:"none", borderRadius:50,
-                  padding:"8px 16px", fontSize:14, fontWeight:700, color:"#6B4226", cursor:"pointer"
-                }}>Cancel</button>
-                <div style={{fontFamily:"Lora,serif", fontSize:18, fontWeight:600, color:"#C4714A"}}>
-                  Quick Check-in
-                </div>
-                <div style={{width:70}}/>
-              </div>
-
-              <div className="scrollbar-hide" style={{flex:1, overflowY:"auto", padding:"20px"}}>
-
-                {/* Who */}
-                <div style={{
-                  display:"flex", alignItems:"center", gap:12,
-                  background:t.accentPale, borderRadius:16, padding:"14px 16px", marginBottom:22,
-                  border:`1.5px solid ${t.accentLight}44`
-                }}>
-                  <div style={{
-                    width:46, height:46, borderRadius:"50%",
-                    background:t.accentLight, display:"flex", alignItems:"center",
-                    justifyContent:"center", fontSize:22, flexShrink:0
-                  }}>
-                    {obAvatar || "👩"}
-                  </div>
-                  <div>
-                    <div style={{fontSize:15, fontWeight:700, color:t.accentDeep}}>{obName || "You"}</div>
-                    <div style={{fontSize:12, color:t.accent, marginTop:2}}>
-                      → {(groups.find(g=>g.id===activeGroup)||groups[0]).icon} {(groups.find(g=>g.id===activeGroup)||groups[0]).label}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Message area */}
-                <label style={{
-                  fontSize:13, fontWeight:700, color:"#9B7B62",
-                  letterSpacing:"0.5px", textTransform:"uppercase",
-                  marginBottom:8, display:"block"
-                }}>What's on your mind?</label>
-                <textarea
-                  autoFocus
-                  value={uploadCheckin}
-                  onChange={e => setUploadCheckin(e.target.value)}
-                  placeholder="Let your family know how you're doing, where you are, or what you're up to... 💬"
-                  rows={5}
-                  style={{
-                    width:"100%", padding:"16px", borderRadius:16,
-                    border:`2px solid ${uploadCheckin.trim() ? t.accent : "#F5DDD1"}`,
-                    background:"#FAF6F0", fontSize:16, color:"#3D2314",
-                    outline:"none", resize:"none", lineHeight:1.6,
-                    transition:"border-color 0.2s", marginBottom:16
-                  }}
-                />
-
-                {/* Starter prompts */}
-                <div style={{marginBottom:12}}>
-                  <div style={{fontSize:12, fontWeight:700, color:"#9B7B62", letterSpacing:"0.4px", textTransform:"uppercase", marginBottom:10}}>
-                    Quick starters:
-                  </div>
-                  <div style={{display:"flex", flexDirection:"column", gap:8}}>
-                    {[
-                      { icon:"☀️", text:"Good morning from [city]! Starting the day with..." },
-                      { icon:"🍕", text:"Just had the most amazing [food]! Wish you were here." },
-                      { icon:"💭", text:"Been thinking about everyone lately. Miss you all!" },
-                      { icon:"🎉", text:"Good news — " },
-                      { icon:"🌧️", text:"Having a quiet day in. Anyone want to video call?" },
-                    ].map((p, i) => (
-                      <button key={i} onClick={() => setUploadCheckin(p.text)} style={{
-                        display:"flex", alignItems:"center", gap:10,
-                        padding:"12px 14px", borderRadius:14, textAlign:"left",
-                        background: uploadCheckin === p.text ? t.accentPale : "#FFF9F2",
-                        border:`1.5px solid ${uploadCheckin === p.text ? t.accent : "#F5DDD1"}`,
-                        cursor:"pointer", transition:"all 0.15s"
-                      }}>
-                        <span style={{fontSize:18, flexShrink:0}}>{p.icon}</span>
-                        <span style={{fontSize:13, color:"#6B4C35", fontWeight:600, lineHeight:1.4}}>{p.text}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div style={{padding:"16px 20px 32px", flexShrink:0}}>
-                <button onClick={handleSubmitPost} disabled={!canPost} style={{
-                  width:"100%", padding:"17px", borderRadius:50,
-                  background: canPost ? t.accent : "#D4B8A8",
-                  border:"none", color:"white",
-                  fontSize:17, fontWeight:800,
-                  cursor: canPost ? "pointer" : "not-allowed",
-                  boxShadow: canPost ? `0 6px 28px ${t.accent}44` : "none",
-                  transition:"all 0.2s"
-                }}>
-                  📍 Post Check-in
-                </button>
-                {!canPost && (
-                  <div style={{fontSize:13, color:"#9B7B62", textAlign:"center", marginTop:10}}>
-                    Write something to share — even a short hello means a lot 🧡
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    );
-  };
-
-  // ── ONBOARDING ─────────────────────────────────────────────────────────────────
-  if(!onboarded) {
-    const stepId = ONBOARDING_STEPS[obStep];
-    const canNext = () => {
-      if(stepId==="name") return obName.trim().length>0;
-      if(stepId==="first_group") return obGroupName.trim().length>0;
-      return true;
-    };
-
-    return (
-      <>
-        <style>{BASE_STYLES}</style>
-        <div className="app" style={{background:"#FAF6F0",justifyContent:"flex-end"}}>
-          {obStep>0&&obStep<5&&(
-            <div style={{position:"absolute",top:24,left:0,right:0,display:"flex",justifyContent:"center",gap:6,zIndex:10}}>
-              {[1,2,3,4].map(i=>(
-                <div key={i} style={{width:i<=obStep?28:8,height:8,borderRadius:8,background:i<=obStep?"#C4714A":"#E8C4A8",transition:"all 0.3s"}}/>
-              ))}
-            </div>
-          )}
-          {obStep>0&&obStep<5&&(
-            <button onClick={()=>setObStep(s=>s-1)} style={{position:"absolute",top:18,left:18,background:"#F5DDD1",border:"none",borderRadius:50,fontSize:15,cursor:"pointer",color:"#6B4226",zIndex:20,padding:"8px 16px",fontWeight:700}}>← Back</button>
-          )}
-
-          {stepId==="welcome"&&(
-            <div style={{flex:1,display:"flex",flexDirection:"column",animation:"fadeUp 0.5s ease both",overflow:"hidden"}}>
-              <div style={{flex:"0 0 54%",background:"linear-gradient(170deg,#F5DDD1 0%,#FAF0E6 60%,#E8F2E9 100%)",position:"relative",overflow:"hidden"}}>
-                <div style={{position:"absolute",bottom:0,left:0,right:0,height:"38%",background:"linear-gradient(0deg,#D8EDE0 0%,transparent 100%)",borderRadius:"60% 60% 0 0"}}/>
-                <div style={{position:"absolute",top:28,right:40,width:52,height:52,borderRadius:"50%",background:"#F5C86A",boxShadow:"0 0 0 12px rgba(245,200,106,0.18)"}}/>
-                <svg style={{position:"absolute",bottom:"32%",left:"50%",transform:"translateX(-50%)",width:110}} viewBox="0 0 110 80">
-                  <polygon points="55,4 100,36 10,36" fill="#C4714A" opacity="0.9"/>
-                  <rect x="18" y="36" width="74" height="44" fill="#E8956D" rx="2"/>
-                  <rect x="42" y="52" width="26" height="28" fill="#6B4226" rx="3"/>
-                  <rect x="22" y="42" width="16" height="14" fill="#FBF0D9" rx="2"/>
-                  <rect x="72" y="42" width="16" height="14" fill="#FBF0D9" rx="2"/>
-                </svg>
-              </div>
-              <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"24px 32px 36px"}}>
-                <div style={{fontFamily:"Lora,serif",fontSize:30,fontWeight:600,color:"#C4714A",marginBottom:6,textAlign:"center",lineHeight:1.2}}>keep <span style={{fontStyle:"italic",color:"#C9A882"}}>up</span></div>
-                <div style={{fontSize:16,color:"#6B4C35",textAlign:"center",lineHeight:1.6,marginBottom:6}}>Stay close to the people who matter most.</div>
-                <div style={{fontSize:13,color:"#9B7B62",textAlign:"center",lineHeight:1.6,marginBottom:28}}>No ads. No algorithms. No doomscrolling. Just your family.</div>
-                <BigBtn onClick={()=>setObStep(1)}>Get Started →</BigBtn>
-                <div style={{marginTop:14,fontSize:14,color:"#9B7B62"}}>Already have an account? <span style={{color:"#C4714A",fontWeight:700,cursor:"pointer"}}>Sign in</span></div>
-              </div>
-            </div>
-          )}
-
-          {stepId==="name"&&(
-            <div style={{flex:1,display:"flex",flexDirection:"column",padding:"80px 28px 40px",animation:"fadeUp 0.4s ease both"}}>
-              <div style={{fontFamily:"Lora,serif",fontSize:26,fontWeight:600,color:"#3D2314",marginBottom:8}}>What's your name?</div>
-              <div style={{fontSize:15,color:"#9B7B62",marginBottom:32,lineHeight:1.6}}>This is what your family will see. Use whatever they call you — <strong style={{color:"#C4714A"}}>"Mom"</strong>, <strong style={{color:"#C4714A"}}>"Grandpa Joe"</strong>, <strong style={{color:"#C4714A"}}>"Jake"</strong> — all work!</div>
-              <input autoFocus value={obName} onChange={e=>setObName(e.target.value)} placeholder="Your name or nickname..."
-                style={{padding:"18px 20px",borderRadius:16,border:"2px solid #E8956D",background:"#FFF9F2",fontSize:18,color:"#3D2314",outline:"none",marginBottom:12}}/>
-              <div style={{fontSize:13,color:"#9B7B62",lineHeight:1.5}}>💡 A nickname feels more personal and warm to your family.</div>
-              <div style={{flex:1}}/>
-              <BigBtn onClick={()=>setObStep(2)} disabled={!canNext()}>Continue →</BigBtn>
-            </div>
-          )}
-
-          {stepId==="avatar"&&(
-            <div style={{flex:1,display:"flex",flexDirection:"column",padding:"80px 28px 40px",animation:"fadeUp 0.4s ease both"}}>
-              <div style={{fontFamily:"Lora,serif",fontSize:26,fontWeight:600,color:"#3D2314",marginBottom:8}}>Pick your picture, {obName||"friend"} 👋</div>
-              <div style={{fontSize:15,color:"#9B7B62",marginBottom:24,lineHeight:1.6}}>This little picture shows up next to everything you share with family.</div>
-              <div style={{display:"flex",alignItems:"center",gap:14,background:"#FFF9F2",borderRadius:16,padding:"16px",marginBottom:28,border:"1.5px solid #F5DDD1"}}>
-                <div style={{width:56,height:56,borderRadius:"50%",background:"#F5DDD1",border:"2px solid #E8956D",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28}}>{obAvatar}</div>
-                <div>
-                  <div style={{fontSize:17,fontWeight:700,color:"#3D2314"}}>{obName||"Your Name"}</div>
-                  <div style={{fontSize:13,color:"#9B7B62",marginTop:2}}>Just joined Keep Up 🎉</div>
-                </div>
-              </div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:10,marginBottom:24}}>
-                {AVATARS.map(av=>(
-                  <button key={av} onClick={()=>setObAvatar(av)} style={{aspectRatio:1,borderRadius:16,background:obAvatar===av?"#F5DDD1":"#FFF9F2",border:`2.5px solid ${obAvatar===av?"#C4714A":"rgba(107,66,38,0.12)"}`,fontSize:30,cursor:"pointer",transition:"all 0.12s"}}>{av}</button>
-                ))}
-              </div>
-              <div style={{flex:1}}/>
-              <BigBtn onClick={()=>setObStep(3)}>That's me! →</BigBtn>
-            </div>
-          )}
-
-          {stepId==="birthday"&&(
-            <div style={{flex:1,display:"flex",flexDirection:"column",padding:"80px 28px 40px",animation:"fadeUp 0.4s ease both"}}>
-              <div style={{fontFamily:"Lora,serif",fontSize:26,fontWeight:600,color:"#3D2314",marginBottom:8}}>When's your birthday? 🎂</div>
-              <div style={{fontSize:15,color:"#9B7B62",marginBottom:14,lineHeight:1.6}}>Your family will get a gentle reminder so they never miss it.</div>
-              <div style={{background:"#E8F2E9",border:"1.5px solid #B8D4BB",borderRadius:12,padding:"12px 16px",marginBottom:28,display:"flex",gap:10,alignItems:"center"}}>
-                <span style={{fontSize:18}}>🔒</span>
-                <span style={{fontSize:13,color:"#4A7C59",lineHeight:1.5}}>Only your family sees this — never public or shared outside Keep Up.</span>
-              </div>
-              <input type="date" value={obBirthday} onChange={e=>setObBirthday(e.target.value)}
-                style={{padding:"18px 20px",borderRadius:16,border:"2px solid #E8956D",background:"#FFF9F2",fontSize:17,color:"#3D2314",outline:"none",marginBottom:12}}/>
-              <div style={{flex:1}}/>
-              <BigBtn onClick={()=>setObStep(4)} style={{marginBottom:12}}>Continue →</BigBtn>
-              <button onClick={()=>setObStep(4)} style={{width:"100%",padding:14,borderRadius:50,background:"transparent",border:"none",color:"#9B7B62",fontSize:15,fontWeight:600,cursor:"pointer"}}>Skip for now</button>
-            </div>
-          )}
-
-          {stepId==="first_group"&&(
-            <div style={{flex:1,display:"flex",flexDirection:"column",padding:"80px 28px 40px",animation:"fadeUp 0.4s ease both"}}>
-              <div style={{fontFamily:"Lora,serif",fontSize:26,fontWeight:600,color:"#3D2314",marginBottom:8}}>Create your first family group</div>
-              <div style={{fontSize:15,color:"#9B7B62",marginBottom:28,lineHeight:1.6}}>Give it a name your family will recognize. You can add more groups later.</div>
-              <label style={{fontSize:13,fontWeight:700,color:"#9B7B62",letterSpacing:"0.5px",textTransform:"uppercase",marginBottom:8,display:"block"}}>Group Name</label>
-              <input value={obGroupName} onChange={e=>setObGroupName(e.target.value)} placeholder="e.g. The Johnsons, Immediate Family..."
-                style={{padding:"18px 20px",borderRadius:16,border:"2px solid #E8956D",background:"#FFF9F2",fontSize:17,color:"#3D2314",outline:"none",marginBottom:20}}/>
-              <label style={{fontSize:13,fontWeight:700,color:"#9B7B62",letterSpacing:"0.5px",textTransform:"uppercase",marginBottom:10,display:"block"}}>Group Icon</label>
-              <div style={{display:"flex",flexWrap:"wrap",gap:10,marginBottom:24}}>
-                {GROUP_EMOJIS.map(e=>(
-                  <button key={e} onClick={()=>setObGroupEmoji(e)} style={{width:48,height:48,borderRadius:12,background:obGroupEmoji===e?"#F5DDD1":"#FFF9F2",border:`2px solid ${obGroupEmoji===e?"#C4714A":"rgba(107,66,38,0.12)"}`,fontSize:22,cursor:"pointer"}}>{e}</button>
-                ))}
-              </div>
-              <div style={{background:"#E8F2E9",border:"1.5px solid #B8D4BB",borderRadius:12,padding:"14px 16px",marginBottom:24,display:"flex",gap:10}}>
-                <span style={{fontSize:20,flexShrink:0}}>🔒</span>
-                <span style={{fontSize:14,color:"#4A7C59",lineHeight:1.5}}><strong>Completely private.</strong> Only people you personally invite can join.</span>
-              </div>
-              <div style={{flex:1}}/>
-              <BigBtn onClick={()=>setObStep(5)} disabled={!canNext()}>Create Group →</BigBtn>
-            </div>
-          )}
-
-          {stepId==="done"&&(
-            <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"40px 32px",animation:"fadeUp 0.5s ease both"}}>
-              <div style={{fontSize:72,marginBottom:20}}>🎉</div>
-              <div style={{fontFamily:"Lora,serif",fontSize:28,fontWeight:600,color:"#3D2314",marginBottom:8,textAlign:"center"}}>You're all set, {obName||"friend"}!</div>
-              <div style={{fontSize:15,color:"#6B4C35",textAlign:"center",lineHeight:1.7,marginBottom:32}}>
-                Your group <strong style={{color:"#C4714A"}}>{obGroupEmoji} {obGroupName||"Immediate Family"}</strong> is ready. Now invite your family!
-              </div>
-              <BigBtn onClick={completeOnboarding}>Take me to Keep Up 🏡</BigBtn>
-            </div>
-          )}
-        </div>
-      </>
-    );
-  }
-
-  // ── MANAGE GROUP SCREEN ───────────────────────────────────────────────────────
-  if(screen==="manageGroup") {
-    const mt=getTheme(managingGroup);
-    const gInfo=groups.find(g=>g.id===managingGroup)||groups[0];
-    const gMembers=getMembers(managingGroup);
-    const amAdmin=isAdmin(managingGroup);
-    return (
-      <>
-        <style>{BASE_STYLES}</style>
-        <div className="app" style={{background:mt.bg}}>
-          <div style={{background:mt.cardBg,padding:"18px 20px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:`1px solid ${mt.accentPale}`,position:"sticky",top:0,zIndex:50}}>
-            <button onClick={()=>setScreen("main")} style={{background:mt.accentPale,border:"none",borderRadius:50,padding:"8px 16px",fontSize:15,cursor:"pointer",color:mt.accentDeep,fontWeight:700}}>← Back</button>
-            <div style={{fontFamily:"Lora,serif",fontSize:20,fontWeight:600,color:mt.accent}}>keep <span style={{color:mt.accentLight,fontStyle:"italic"}}>up</span></div>
-            <div style={{width:70}}/>
-          </div>
-          <div className="scrollbar-hide" style={{flex:1,overflowY:"auto",padding:"16px 16px 100px"}}>
-            <div style={{background:mt.accentPale,borderRadius:20,padding:20,marginBottom:16,textAlign:"center"}}>
-              <div style={{fontSize:48,marginBottom:8}}>{gInfo.icon}</div>
-              <div style={{fontFamily:"Lora,serif",fontSize:22,fontWeight:600,color:mt.accentDeep}}>{gInfo.label}</div>
-              <div style={{fontSize:14,color:mt.accent,marginTop:4}}>{gMembers.length} members</div>
-              {amAdmin&&<div style={{display:"inline-block",background:mt.accent,color:"white",fontSize:12,fontWeight:700,borderRadius:50,padding:"4px 12px",marginTop:10}}>👑 You're the Admin</div>}
-            </div>
-
-            {amAdmin&&(
-              <div style={{background:mt.cardBg,borderRadius:20,overflow:"hidden",boxShadow:"0 2px 12px rgba(0,0,0,0.06)",marginBottom:14}}>
-                <div style={{padding:"14px 16px 10px",borderBottom:`1px solid ${mt.accentPale}`}}>
-                  <div style={{fontSize:14,fontWeight:800,color:mt.accentDeep}}>Invite Family Members</div>
-                  <div style={{fontSize:13,color:"#9B7B62",marginTop:2}}>Only you can invite people to this group</div>
-                </div>
-                <div style={{margin:"12px 16px",background:mt.bg,borderRadius:12,border:`1.5px dashed ${mt.accentLight}`,padding:"12px 14px",display:"flex",alignItems:"center",gap:10}}>
-                  <span style={{flex:1,fontSize:13,color:"#6B4C35",fontFamily:"monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>keepup.app/join/imm-a7x92k</span>
-                  <button onClick={handleCopy} style={{background:copied?"#7A9E7E":mt.accent,color:"white",border:"none",borderRadius:10,padding:"8px 14px",fontSize:13,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>{copied?"✓ Copied!":"Copy Link"}</button>
-                </div>
-                <div style={{display:"flex",gap:8,padding:"0 16px 16px"}}>
-                  {[["✉️","Email"],["📱","Text"],["🔗","Copy"]].map(([icon,label])=>(
-                    <button key={label} onClick={()=>setInviteOpen(true)} style={{flex:1,padding:"10px 6px",borderRadius:12,border:`1.5px solid ${mt.accentPale}`,background:mt.bg,fontSize:12,fontWeight:700,color:mt.accentDeep,cursor:"pointer"}}>{icon} {label}</button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div style={{background:mt.cardBg,borderRadius:20,overflow:"hidden",boxShadow:"0 2px 12px rgba(0,0,0,0.06)",marginBottom:14}}>
-              <div style={{padding:"14px 16px 10px",borderBottom:`1px solid ${mt.accentPale}`}}>
-                <div style={{fontSize:14,fontWeight:800,color:mt.accentDeep}}>Family Members ({gMembers.length})</div>
-              </div>
-              {gMembers.map(mem=>(
-                <div key={mem.id} style={{display:"flex",alignItems:"center",gap:12,padding:"14px 16px",borderBottom:`1px solid ${mt.accentPale}`}}>
-                  <div style={{width:44,height:44,borderRadius:"50%",background:mt.accentPale,border:`2px solid ${mt.accentLight}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22}}>{mem.avatar}</div>
-                  <div style={{flex:1}}>
-                    <div style={{fontSize:15,fontWeight:700,color:"#3D2314"}}>{mem.name}{mem.you&&<span style={{fontSize:11,fontWeight:700,color:mt.accent,background:mt.accentPale,borderRadius:50,padding:"2px 9px",marginLeft:8}}>You</span>}</div>
-                    <div style={{fontSize:13,color:"#9B7B62",marginTop:2}}>{mem.role}</div>
-                  </div>
-                  {amAdmin&&!mem.you&&<button onClick={()=>removeMember(managingGroup,mem.id)} style={{background:"#F5D1D1",border:"none",borderRadius:50,padding:"8px 14px",fontSize:13,fontWeight:700,color:"#C44A4A",cursor:"pointer"}}>Remove</button>}
-                </div>
-              ))}
-            </div>
-
-            <div style={{background:mt.cardBg,borderRadius:20,overflow:"hidden",boxShadow:"0 2px 12px rgba(0,0,0,0.06)",border:"1.5px solid #F5D1D1",marginBottom:14}}>
-              {amAdmin?(
-                <>
-                  <button style={{width:"100%",padding:"16px",background:"none",border:"none",borderBottom:"1px solid #F5D1D1",textAlign:"left",fontSize:15,fontWeight:700,color:"#C44A4A",cursor:"pointer"}}>⏸️ Pause this group</button>
-                  <button style={{width:"100%",padding:"16px",background:"none",border:"none",textAlign:"left",fontSize:15,fontWeight:700,color:"#C44A4A",cursor:"pointer"}}>🗑️ Delete this group</button>
-                </>
-              ):(
-                <>
-                  <button style={{width:"100%",padding:"16px",background:"none",border:"none",borderBottom:"1px solid #F5D1D1",textAlign:"left",fontSize:15,fontWeight:700,color:"#C44A4A",cursor:"pointer"}}>🚩 Report a problem</button>
-                  <button style={{width:"100%",padding:"16px",background:"none",border:"none",textAlign:"left",fontSize:15,fontWeight:700,color:"#C44A4A",cursor:"pointer"}}>🚪 Leave this group</button>
-                </>
-              )}
-            </div>
-          </div>
-
-          {inviteOpen&&(
-            <Overlay onClose={()=>setInviteOpen(false)}>
-              <SheetHandle/>
-              <div style={{fontFamily:"Lora,serif",fontSize:20,fontWeight:600,color:"#3D2314",marginBottom:6}}>Invite someone to {gInfo.label}</div>
-              <div style={{fontSize:14,color:"#9B7B62",marginBottom:16,lineHeight:1.6}}>Type their email or phone. They'll receive a private invite link.</div>
-              {inviteSent&&<div style={{background:"#E8F2E9",border:"1.5px solid #B8D4BB",borderRadius:12,padding:"14px 16px",marginBottom:14,fontSize:15,color:"#4A7C59",fontWeight:700}}>✅ Invite sent!</div>}
-              <div style={{display:"flex",gap:10,marginBottom:14}}>
-                <input value={inviteInput} onChange={e=>setInviteInput(e.target.value)} placeholder="Email or phone number"
-                  style={{flex:1,padding:"14px 16px",borderRadius:14,border:"1.5px solid #F5DDD1",background:"#FAF6F0",fontSize:15,color:"#3D2314",outline:"none"}}/>
-                <button onClick={handleSendInvite} disabled={!inviteInput.trim()} style={{padding:"14px 20px",borderRadius:14,background:inviteInput.trim()?"#C4714A":"#D4B8A8",border:"none",color:"white",fontSize:15,fontWeight:700,cursor:"pointer"}}>Send</button>
-              </div>
-            </Overlay>
-          )}
-        </div>
-      </>
-    );
-  }
-
-  // ── CREATE GROUP SCREEN ───────────────────────────────────────────────────────
-  if(screen==="createGroup") {
-    return (
-      <>
-        <style>{BASE_STYLES}</style>
-        <div className="app" style={{background:"#FAF6F0"}}>
-          <div style={{background:"#FFF9F2",padding:"18px 20px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:"1px solid #F5DDD1",position:"sticky",top:0,zIndex:50}}>
-            <button onClick={()=>setScreen("main")} style={{background:"#F5DDD1",border:"none",borderRadius:50,padding:"8px 16px",fontSize:15,cursor:"pointer",color:"#6B4226",fontWeight:700}}>← Back</button>
-            <div style={{fontFamily:"Lora,serif",fontSize:20,fontWeight:600,color:"#C4714A"}}>keep <span style={{color:"#C9A882",fontStyle:"italic"}}>up</span></div>
-            <div style={{width:70}}/>
-          </div>
-          <div className="scrollbar-hide" style={{flex:1,overflowY:"auto",padding:"20px 20px 100px"}}>
-            <div style={{textAlign:"center",marginBottom:28}}>
-              <div style={{fontSize:52,marginBottom:10}}>{groupEmoji}</div>
-              <div style={{fontFamily:"Lora,serif",fontSize:24,fontWeight:600,color:"#3D2314",marginBottom:6}}>Create a Family Group</div>
-              <div style={{fontSize:15,color:"#9B7B62",lineHeight:1.6}}>You'll be the admin and the only one who can invite people.</div>
-            </div>
-            <label style={{fontSize:13,fontWeight:700,color:"#9B7B62",letterSpacing:"0.5px",textTransform:"uppercase",marginBottom:8,display:"block"}}>Group Name</label>
-            <input value={groupName} onChange={e=>setGroupName(e.target.value)} placeholder="e.g. Mom's Side, Cousins..."
-              style={{width:"100%",padding:"16px",borderRadius:14,border:"1.5px solid rgba(107,66,38,0.15)",background:"#FFF9F2",fontSize:16,color:"#3D2314",outline:"none",marginBottom:20}}/>
-            <label style={{fontSize:13,fontWeight:700,color:"#9B7B62",letterSpacing:"0.5px",textTransform:"uppercase",marginBottom:10,display:"block"}}>Group Icon</label>
-            <div style={{display:"flex",flexWrap:"wrap",gap:10,marginBottom:22}}>
-              {GROUP_EMOJIS.map(e=>(
-                <button key={e} onClick={()=>setGroupEmoji(e)} style={{width:48,height:48,borderRadius:12,background:groupEmoji===e?"#F5DDD1":"#FFF9F2",border:`2px solid ${groupEmoji===e?"#C4714A":"rgba(107,66,38,0.12)"}`,fontSize:22,cursor:"pointer"}}>{e}</button>
-              ))}
-            </div>
-            <div style={{background:"#E8F2E9",border:"1.5px solid #B8D4BB",borderRadius:14,padding:"14px 16px",marginBottom:24,display:"flex",gap:10}}>
-              <div style={{fontSize:22,flexShrink:0}}>🔒</div>
-              <div style={{fontSize:14,color:"#4A7C59",lineHeight:1.6}}><strong>Completely private.</strong> Only people you personally invite can join.</div>
-            </div>
-            <BigBtn onClick={handleCreateGroup} disabled={!groupName.trim()}>Create Group</BigBtn>
-          </div>
-        </div>
-      </>
-    );
-  }
-
-  // ── MAIN APP ──────────────────────────────────────────────────────────────────
-  const currentFeed = showEmpty ? [] : (feedPosts[activeGroup]||[]);
-  const activeGroupInfo = groups.find(g=>g.id===activeGroup)||groups[0];
-
-  return (
-    <>
-      <style>{BASE_STYLES}</style>
-      <div className="app" style={{background:t.bg,transition:"background 0.3s"}}>
-
-        {/* ── TOPBAR ── */}
-        <div style={{background:t.cardBg,padding:"16px 20px 12px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:`1px solid ${t.accentPale}`,position:"sticky",top:0,zIndex:50,transition:"background 0.3s"}}>
-          <div style={{fontFamily:"Lora,serif",fontSize:22,fontWeight:600,color:t.accent,transition:"color 0.3s"}}>keep <span style={{color:t.accentLight,fontStyle:"italic"}}>up</span></div>
-          <div style={{display:"flex",gap:8,alignItems:"center"}}>
-            <button onClick={()=>setTextSize(s=>s==="normal"?"large":s==="large"?"xlarge":"normal")}
-              title="Change text size"
-              style={{background:t.accentPale,border:"none",borderRadius:50,padding:"6px 10px",fontSize:13,fontWeight:700,color:t.accentDeep,cursor:"pointer"}}>
-              {textSize==="xlarge"?"A➕➕":textSize==="large"?"A➕":"A"}
-            </button>
-            {/* Dev toggle: show/hide empty state */}
-            <button onClick={()=>setShowEmpty(s=>!s)}
-              title={showEmpty?"Show posts":"Show empty state"}
-              style={{background:t.accentPale,border:"none",borderRadius:50,padding:"6px 10px",fontSize:13,fontWeight:700,color:t.accentDeep,cursor:"pointer"}}>
-              {showEmpty?"📋":"🕳️"}
-            </button>
-            <button style={{width:40,height:40,borderRadius:"50%",background:"transparent",border:"none",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,cursor:"pointer",position:"relative"}}>
-              🔔<span style={{position:"absolute",top:6,right:6,width:8,height:8,borderRadius:"50%",background:t.accent,border:`2px solid ${t.cardBg}`}}/>
-            </button>
-            {tab==="feed"&&(
-              <button onClick={()=>{setManagingGroup(activeGroup);setScreen("manageGroup");}}
-                style={{background:t.accentPale,border:"none",borderRadius:50,padding:"7px 13px",fontSize:13,fontWeight:700,color:t.accentDeep,cursor:"pointer"}}>
-                👥
-              </button>
-            )}
-            <button style={{width:40,height:40,borderRadius:"50%",background:t.accentPale,border:`2px solid ${t.accentLight}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,cursor:"pointer"}}>
-              {obAvatar||"👤"}
-            </button>
-          </div>
-        </div>
-
-        {/* ── GROUP SELECTOR — feed only ── */}
-        {tab==="feed"&&(
-          <div style={{background:t.stripBg,borderBottom:`1px solid ${t.accentPale}`,transition:"background 0.3s"}}>
-            <div style={{padding:"6px 16px 12px",display:"flex",gap:8,overflowX:"auto",scrollbarWidth:"none"}}>
-              {groups.map(g=>{
-                const gt=getTheme(g.id); const isActive=activeGroup===g.id;
-                return (
-                  <button key={g.id} onClick={()=>setActiveGroup(g.id)}
-                    style={{flexShrink:0,display:"flex",alignItems:"center",gap:8,padding:"10px 18px 10px 12px",borderRadius:50,background:isActive?gt.accentPale:t.bg,border:`2px solid ${isActive?gt.accent:"rgba(107,66,38,0.12)"}`,cursor:"pointer",fontSize:px(14),fontWeight:700,color:isActive?gt.accentDeep:"#6B4C35",transition:"all 0.2s"}}>
-                    <span style={{width:28,height:28,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,background:isActive?gt.accentLight:"white"}}>{g.icon}</span>
-                    {g.label}
-                  </button>
-                );
-              })}
-              <button onClick={()=>setScreen("createGroup")}
-                style={{flexShrink:0,display:"flex",alignItems:"center",gap:6,padding:"10px 16px",borderRadius:50,background:t.bg,border:`2px dashed ${t.accentLight}`,cursor:"pointer",fontSize:px(13),fontWeight:700,color:t.accentDeep}}>
-                ＋ New Group
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ── FEED ── */}
-        {tab==="feed"&&(
-          <>
-            {/* ── EMPTY STATE — full screen, no scroll needed ── */}
-            {currentFeed.length === 0 ? (
-              <EmptyState
-                groupId={activeGroup}
-                groupInfo={activeGroupInfo}
-                onShare={() => setComposeOpen(true)}
-              />
-            ) : (
-              <>
-                {/* Share prompt */}
-                <div style={{padding:"12px 16px 0",background:t.bg}}>
-                  <button onClick={()=>setComposeOpen(true)}
-                    style={{width:"100%",padding:"14px 18px",borderRadius:16,background:t.cardBg,border:`2px dashed ${t.accentLight}`,display:"flex",alignItems:"center",gap:12,cursor:"pointer",textAlign:"left"}}>
-                    <div style={{width:38,height:38,borderRadius:"50%",background:t.accentPale,border:`2px solid ${t.accentLight}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>{obAvatar||"👩"}</div>
-                    <span style={{fontSize:px(14),color:"#9B7B62",fontWeight:600}}>Share something with your family... 📸</span>
-                  </button>
-                </div>
-
-                <div className="scrollbar-hide" style={{flex:1,overflowY:"auto",padding:"14px 16px 100px",display:"flex",flexDirection:"column",gap:14}}>
-                  {currentFeed.map((item,i)=>{
-                    const postCmts = postComments(item.id);
-
-                    if(item.type==="photo") return (
-                      <div key={item.id} style={{background:t.cardBg,borderRadius:20,overflow:"hidden",boxShadow:"0 2px 14px rgba(0,0,0,0.07)",border:`1px solid ${t.accentPale}`,animation:"fadeUp 0.3s ease both",animationDelay:`${i*0.06}s`}}>
-                        <div style={{display:"flex",alignItems:"center",gap:12,padding:"14px 16px 10px"}}>
-                          <div style={{width:46,height:46,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,border:`2px solid ${t.accentPale}`,flexShrink:0,background:t.accentPale}}>{item.avatar}</div>
-                          <div style={{flex:1}}>
-                            <div style={{fontSize:px(15),fontWeight:700,color:"#3D2314"}}>{item.name}</div>
-                            <div style={{fontSize:px(12),color:"#9B7B62",marginTop:2}}>{item.time}</div>
-                          </div>
-                          <button style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#9B7B62",padding:"4px 8px"}}>•••</button>
-                        </div>
-                        {/* Image or emoji display */}
-                        {item.imageUrl ? (
-                          <img src={item.imageUrl} alt="post" style={{width:"100%",aspectRatio:"4/3",objectFit:"cover",display:"block"}}/>
-                        ) : (
-                          <div style={{width:"100%",aspectRatio:"4/3",background:`linear-gradient(135deg,${t.accentPale} 0%,${t.stripBg} 100%)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:64}}>{item.emoji}</div>
-                        )}
-                        <div style={{padding:"14px 16px"}}>
-                          <div style={{fontSize:px(15),lineHeight:1.6,color:"#3D2314"}}>{item.caption}</div>
-                          <div style={{display:"flex",alignItems:"center",gap:8,marginTop:14,flexWrap:"wrap"}}>
-                            {reactions[item.id]&&(
-                              <div style={{display:"flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius:50,background:t.accentPale,border:`1.5px solid ${t.accentLight}`,fontSize:px(14),fontWeight:600,color:t.accentDeep}}>
-                                {reactions[item.id]} <span style={{fontSize:px(12)}}>You reacted</span>
-                              </div>
-                            )}
-                            <button onClick={()=>setReactionPicker(reactionPicker===item.id?null:item.id)}
-                              style={{display:"flex",alignItems:"center",gap:6,padding:"8px 16px",borderRadius:50,background:t.bg,border:`2px solid ${t.accentPale}`,fontSize:px(14),fontWeight:700,color:"#6B4C35",cursor:"pointer"}}>
-                              😊 {reactions[item.id]?"Change":"React"}
-                            </button>
-                            <button onClick={()=>{setCommentOpen(item.id);setCommentInput("");}}
-                              style={{display:"flex",alignItems:"center",gap:6,padding:"8px 16px",borderRadius:50,background:t.bg,border:`2px solid ${t.accentPale}`,fontSize:px(14),fontWeight:700,color:"#6B4C35",cursor:"pointer",marginLeft:"auto"}}>
-                              💬 {postCmts.length>0?`${postCmts.length} Comment${postCmts.length!==1?"s":""}` : "Comment"}
-                            </button>
-                            {reactionPicker===item.id&&(
-                              <div style={{width:"100%",display:"flex",gap:8,padding:"8px 0 2px",animation:"popIn 0.18s ease"}}>
-                                {REACTIONS.map(emoji=>(
-                                  <button key={emoji} onClick={()=>handleReact(item.id,emoji)}
-                                    style={{flex:1,fontSize:26,padding:"10px 0",borderRadius:14,background:reactions[item.id]===emoji?t.accentPale:t.bg,border:`2px solid ${reactions[item.id]===emoji?t.accentLight:t.accentPale}`,cursor:"pointer"}}>
-                                    {emoji}
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                          {postCmts.length>0&&(
-                            <button onClick={()=>{setCommentOpen(item.id);setCommentInput("");}}
-                              style={{width:"100%",marginTop:12,background:t.bg,border:`1px solid ${t.accentPale}`,borderRadius:14,padding:"10px 14px",textAlign:"left",cursor:"pointer",display:"flex",gap:8,alignItems:"center"}}>
-                              <span style={{fontSize:18}}>{postCmts[postCmts.length-1].avatar}</span>
-                              <div style={{flex:1,minWidth:0}}>
-                                <span style={{fontSize:px(12),fontWeight:700,color:t.accentDeep}}>{postCmts[postCmts.length-1].name}: </span>
-                                <span style={{fontSize:px(12),color:"#6B4C35"}}>{postCmts[postCmts.length-1].text}</span>
-                              </div>
-                              {postCmts.length>1&&<span style={{fontSize:px(12),color:"#9B7B62",flexShrink:0}}>+{postCmts.length-1} more</span>}
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    );
-
-                    if(item.type==="checkin") return (
-                      <div key={item.id} style={{background:t.accentPale,border:`2px solid ${t.accentLight}`,borderRadius:20,padding:18,display:"flex",alignItems:"flex-start",gap:14,animation:"fadeUp 0.3s ease both",animationDelay:`${i*0.06}s`}}>
-                        <div style={{width:50,height:50,borderRadius:"50%",background:t.accentLight,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,flexShrink:0}}>{item.avatar}</div>
-                        <div style={{flex:1}}>
-                          <div style={{fontSize:px(15),fontWeight:700,color:t.accentDeep}}>{item.name} checked in</div>
-                          <div style={{fontSize:px(15),color:"#3D2314",marginTop:4,lineHeight:1.5}}>{item.status}</div>
-                          <div style={{fontSize:px(12),color:"#9B7B62",marginTop:6}}>{item.time}</div>
-                          <button onClick={()=>setReactionPicker(reactionPicker===item.id?null:item.id)}
-                            style={{marginTop:10,display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:50,background:"white",border:`1.5px solid ${t.accentLight}`,fontSize:px(13),fontWeight:700,color:t.accentDeep,cursor:"pointer"}}>
-                            {reactions[item.id]||"😊"} {reactions[item.id]?"Change Reaction":"React"}
-                          </button>
-                          {reactionPicker===item.id&&(
-                            <div style={{display:"flex",gap:8,padding:"10px 0 4px",animation:"popIn 0.18s ease"}}>
-                              {REACTIONS.map(emoji=>(
-                                <button key={emoji} onClick={()=>handleReact(item.id,emoji)}
-                                  style={{flex:1,fontSize:24,padding:"8px 0",borderRadius:12,background:reactions[item.id]===emoji?"white":t.accentPale,border:`2px solid ${reactions[item.id]===emoji?t.accentLight:"transparent"}`,cursor:"pointer"}}>
-                                  {emoji}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-
-                    if(item.type==="event") return (
-                      <div key={item.id} style={{background:"#FBF0D9",border:"2px solid #E8C878",borderRadius:20,padding:18,animation:"fadeUp 0.3s ease both",animationDelay:`${i*0.06}s`}}>
-                        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
-                          <div style={{width:54,height:54,borderRadius:14,background:"#D4922A",color:"white",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                            <span style={{fontSize:9,fontWeight:700,letterSpacing:1,textTransform:"uppercase"}}>{item.month}</span>
-                            <span style={{fontSize:22,fontWeight:700,lineHeight:1}}>{item.day}</span>
-                          </div>
-                          <div>
-                            <div style={{fontSize:px(16),fontWeight:700,color:"#3D2314"}}>{item.title}</div>
-                            <div style={{fontSize:px(13),color:"#9B7B62",marginTop:2}}>{item.who}</div>
-                          </div>
-                        </div>
-                        <div style={{fontSize:px(14),color:"#6B4C35",marginBottom:12}}>✅ {item.going} going · 🤔 {item.maybe} maybe</div>
-                        <div style={{display:"flex",gap:10}}>
-                          <button onClick={()=>toggleRsvp(item.id)} style={{flex:1,padding:"12px",borderRadius:50,border:"2px solid #D4922A",background:rsvp[item.id]?"#D4922A":"transparent",fontSize:px(14),fontWeight:700,color:rsvp[item.id]?"white":"#D4922A",cursor:"pointer"}}>
-                            {rsvp[item.id]?"✅ I'm Going!":"Yes, I'll Be There"}
-                          </button>
-                          <button style={{flex:1,padding:"12px",borderRadius:50,border:"2px solid #D4922A",background:"transparent",fontSize:px(14),fontWeight:700,color:"#D4922A",cursor:"pointer"}}>Maybe</button>
-                        </div>
-                      </div>
-                    );
-
-                    return null;
-                  })}
-                </div>
-              </>
-            )}
-          </>
-        )}
-
-        {/* ── CHAT INBOX ── */}
-        {tab==="chat"&&!openChat&&(
-          <div className="scrollbar-hide" style={{flex:1,overflowY:"auto",padding:"12px 16px 100px"}}>
-
-            {/* New DM button */}
-            <button onClick={()=>setNewDmOpen(true)} style={{
-              width:"100%",marginBottom:18,padding:"13px 18px",borderRadius:16,
-              background:t.cardBg,border:`2px dashed ${t.accentLight}`,
-              display:"flex",alignItems:"center",gap:12,cursor:"pointer",textAlign:"left"
-            }}>
-              <div style={{width:38,height:38,borderRadius:"50%",background:t.accentPale,border:`2px solid ${t.accentLight}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>✏️</div>
-              <span style={{fontSize:px(14),color:t.accentDeep,fontWeight:700}}>New direct message…</span>
-            </button>
-
-            {/* Group chats */}
-            <div style={{fontSize:px(11),fontWeight:800,color:"#9B7B62",letterSpacing:"0.6px",textTransform:"uppercase",marginBottom:8}}>Group Chats</div>
-            {groups.map(g=>{
-              const ct=getTheme(g.id);
-              const preview=GROUP_CHAT_PREVIEWS[g.id];
-              return (
-                <div key={g.id} onClick={()=>setOpenChat({type:"group",id:g.id})}
-                  style={{display:"flex",alignItems:"center",gap:12,padding:"13px 14px",borderRadius:18,background:ct.cardBg,border:`1.5px solid ${ct.accentPale}`,cursor:"pointer",marginBottom:8}}>
-                  <div style={{width:48,height:48,borderRadius:"50%",background:ct.accentPale,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0,border:`2px solid ${ct.accentLight}`}}>{g.icon}</div>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:6}}>
-                      <div style={{fontSize:px(15),fontWeight:700,color:"#3D2314"}}>{g.label}</div>
-                      {preview&&<div style={{fontSize:px(11),color:"#9B7B62",flexShrink:0}}>{preview.time}</div>}
-                    </div>
-                    {preview
-                      ? <div style={{fontSize:px(13),color:"#9B7B62",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}><span style={{fontWeight:700,color:"#6B4C35"}}>{preview.who}:</span> {preview.text}</div>
-                      : <div style={{fontSize:px(13),color:"#9B7B62",marginTop:2}}>No messages yet — say hello!</div>
-                    }
-                  </div>
-                  <div style={{fontSize:20,color:ct.accentLight,flexShrink:0}}>›</div>
-                </div>
-              );
-            })}
-
-            {/* Direct messages */}
-            <div style={{fontSize:px(11),fontWeight:800,color:"#9B7B62",letterSpacing:"0.6px",textTransform:"uppercase",margin:"16px 0 8px"}}>Direct Messages</div>
-            {directMessages.length===0 ? (
-              <div style={{textAlign:"center",padding:"28px 16px",background:"#FFF9F2",borderRadius:18,border:"1.5px solid #F5DDD1"}}>
-                <div style={{fontSize:36,marginBottom:8}}>💬</div>
-                <div style={{fontSize:px(14),fontWeight:700,color:"#6B4C35",marginBottom:4}}>No direct messages yet</div>
-                <div style={{fontSize:px(13),color:"#9B7B62",lineHeight:1.5}}>Tap "New direct message" above to chat privately with someone in your family.</div>
-              </div>
-            ) : directMessages.map(dm=>(
-              <div key={dm.id} onClick={()=>setOpenChat({type:"dm",id:dm.id})}
-                style={{display:"flex",alignItems:"center",gap:12,padding:"13px 14px",borderRadius:18,background:"#FFF9F2",border:"1.5px solid #F5DDD1",cursor:"pointer",marginBottom:8}}>
-                {/* Avatar stack */}
-                <div style={{position:"relative",width:48,height:48,flexShrink:0}}>
-                  {dm.members.length===1 ? (
-                    <div style={{width:48,height:48,borderRadius:"50%",background:"#F5DDD1",border:"2px solid #E8956D",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22}}>{dm.members[0].avatar}</div>
-                  ) : (
-                    <>
-                      <div style={{position:"absolute",top:0,left:0,width:34,height:34,borderRadius:"50%",background:"#F5DDD1",border:"2px solid white",display:"flex",alignItems:"center",justifyContent:"center",fontSize:17}}>{dm.members[0].avatar}</div>
-                      <div style={{position:"absolute",bottom:0,right:0,width:28,height:28,borderRadius:"50%",background:"#E8956D",border:"2px solid white",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14}}>{dm.members[1].avatar}</div>
-                    </>
-                  )}
-                </div>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:6}}>
-                    <div style={{fontSize:px(15),fontWeight:700,color:"#3D2314",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{dm.members.map(m=>m.name).join(", ")}</div>
-                    <div style={{fontSize:px(11),color:"#9B7B62",flexShrink:0}}>{dm.lastTime}</div>
-                  </div>
-                  <div style={{fontSize:px(13),color:"#9B7B62",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{dm.lastMessage}</div>
-                </div>
-                <div style={{fontSize:20,color:"#E8956D",flexShrink:0}}>›</div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* ── CHAT VIEW (group or DM) ── */}
-        {tab==="chat"&&openChat&&(()=>{
-          const isDm = openChat.type==="dm";
-          const chatId = openChat.id;
-          const dm = isDm ? directMessages.find(d=>d.id===chatId) : null;
-          const g = !isDm ? groups.find(g=>g.id===chatId) : null;
-          const ct = !isDm ? getTheme(chatId) : {accent:"#C4714A",accentLight:"#E8956D",accentPale:"#F5DDD1",accentDeep:"#6B4226",bg:"#FAF6F0",cardBg:"#FFF9F2"};
-          const title = isDm ? dm?.members.map(m=>m.name).join(", ") : g?.label;
-          const icon = isDm ? (dm?.members.length===1 ? dm.members[0].avatar : "👥") : g?.icon;
-          const msgs = chatMessages[chatId]||[];
-          const inputVal = chatInputs[chatId]||"";
-
-          const sendMsg = () => {
-            if(!inputVal.trim()) return;
-            const msg = {id:Date.now(),avatar:obAvatar||"👩",name:obName||"You",text:inputVal.trim(),time:"Just now",you:true};
-            setChatMessages(prev=>({...prev,[chatId]:[...(prev[chatId]||[]),msg]}));
-            setChatInputs(prev=>({...prev,[chatId]:""}));
-            if(isDm) setDirectMessages(prev=>prev.map(d=>d.id===chatId?{...d,lastMessage:inputVal.trim(),lastTime:"Just now"}:d));
-          };
-
-          return (
-            <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-              {/* Chat header */}
-              <div style={{background:ct.cardBg,padding:"12px 16px",display:"flex",alignItems:"center",gap:12,borderBottom:`1px solid ${ct.accentPale}`,flexShrink:0}}>
-                <button onClick={()=>setOpenChat(null)} style={{background:ct.accentPale,border:"none",borderRadius:50,padding:"7px 14px",fontSize:13,fontWeight:700,color:ct.accentDeep,cursor:"pointer",flexShrink:0}}>← Back</button>
-                <div style={{width:38,height:38,borderRadius:"50%",background:ct.accentPale,border:`2px solid ${ct.accentLight}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>{icon}</div>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:px(15),fontWeight:700,color:"#3D2314",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{title}</div>
-                  {!isDm&&<div style={{fontSize:px(11),color:ct.accentLight,marginTop:1}}>{getMembers(chatId).length} members</div>}
-                  {isDm&&<div style={{fontSize:px(11),color:"#9B7B62",marginTop:1}}>Private message</div>}
-                </div>
-              </div>
-
-              {/* Messages */}
-              <div className="scrollbar-hide" style={{flex:1,overflowY:"auto",padding:"16px 16px 8px",display:"flex",flexDirection:"column",gap:12,background:ct.bg}}>
-                {msgs.length===0&&(
-                  <div style={{textAlign:"center",padding:"48px 24px",color:"#9B7B62"}}>
-                    <div style={{fontSize:44,marginBottom:10}}>{icon}</div>
-                    <div style={{fontSize:px(15),fontWeight:700,color:"#6B4C35",marginBottom:6}}>Start the conversation!</div>
-                    <div style={{fontSize:px(13),lineHeight:1.5}}>{isDm?`This is just between you and ${title}.`:`Say hello to ${title}!`}</div>
-                  </div>
-                )}
-                {msgs.map((msg,i)=>{
-                  const isYou = msg.you;
-                  return (
-                    <div key={msg.id} style={{display:"flex",flexDirection:isYou?"row-reverse":"row",alignItems:"flex-end",gap:8,animation:"fadeUp 0.2s ease both",animationDelay:`${Math.min(i,6)*0.04}s`}}>
-                      {!isYou&&<div style={{width:32,height:32,borderRadius:"50%",background:ct.accentPale,border:`1.5px solid ${ct.accentLight}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>{msg.avatar}</div>}
-                      <div style={{maxWidth:"72%"}}>
-                        {!isYou&&<div style={{fontSize:px(11),fontWeight:700,color:ct.accentDeep,marginBottom:4,paddingLeft:2}}>{msg.name}</div>}
-                        <div style={{
-                          padding:"11px 15px",
-                          borderRadius:isYou?"18px 18px 4px 18px":"18px 18px 18px 4px",
-                          background:isYou?ct.accent:"white",
-                          color:isYou?"white":"#3D2314",
-                          fontSize:px(14),lineHeight:1.55,
-                          boxShadow:"0 1px 6px rgba(0,0,0,0.07)",
-                          border:isYou?"none":`1px solid ${ct.accentPale}`
-                        }}>{msg.text}</div>
-                        <div style={{fontSize:px(10),color:"#9B7B62",marginTop:4,textAlign:isYou?"right":"left",paddingLeft:isYou?0:2}}>{msg.time}</div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Input */}
-              <div style={{padding:"10px 14px 32px",borderTop:`1px solid ${ct.accentPale}`,background:ct.cardBg,flexShrink:0,display:"flex",gap:10,alignItems:"flex-end"}}>
-                <div style={{flex:1,background:ct.bg,borderRadius:22,border:`1.5px solid ${ct.accentPale}`,display:"flex",alignItems:"center",padding:"10px 16px",gap:8}}>
-                  <input
-                    value={inputVal}
-                    onChange={e=>setChatInputs(prev=>({...prev,[chatId]:e.target.value}))}
-                    onKeyDown={e=>{if(e.key==="Enter"&&inputVal.trim()) sendMsg();}}
-                    placeholder="Message…"
-                    style={{flex:1,background:"none",border:"none",outline:"none",fontSize:px(15),color:"#3D2314"}}
-                  />
-                </div>
-                <button onClick={sendMsg} disabled={!inputVal.trim()} style={{
-                  width:44,height:44,borderRadius:"50%",flexShrink:0,
-                  background:inputVal.trim()?ct.accent:"#D4B8A8",
-                  border:"none",color:"white",fontSize:20,
-                  cursor:inputVal.trim()?"pointer":"not-allowed",
-                  display:"flex",alignItems:"center",justifyContent:"center",
-                  transition:"background 0.15s",
-                  boxShadow:inputVal.trim()?`0 4px 14px ${ct.accent}55`:"none"
-                }}>↑</button>
-              </div>
-            </div>
-          );
-        })()}
-
-        {/* ── NEW DM PICKER ── */}
-        {newDmOpen&&(
-          <div onClick={()=>{setNewDmOpen(false);setDmSelected([]);}} style={{position:"fixed",inset:0,background:"rgba(61,35,20,0.45)",zIndex:60,display:"flex",alignItems:"flex-end",animation:"fadeIn 0.2s ease"}}>
-            <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:420,margin:"0 auto",background:"#FFF9F2",borderRadius:"24px 24px 0 0",padding:"20px 20px 36px",animation:"slideUp 0.25s ease",maxHeight:"80vh",display:"flex",flexDirection:"column"}}>
-              <div style={{width:48,height:5,borderRadius:5,background:"#C9A882",margin:"0 auto 18px",opacity:0.35}}/>
-              <div style={{fontFamily:"Lora,serif",fontSize:px(20),fontWeight:600,color:"#3D2314",marginBottom:4}}>New Direct Message</div>
-              <div style={{fontSize:px(13),color:"#9B7B62",marginBottom:14}}>Choose family members to message privately.</div>
-
-              {/* Group picker */}
-              <div style={{fontSize:px(12),fontWeight:700,color:"#9B7B62",letterSpacing:"0.4px",textTransform:"uppercase",marginBottom:8}}>Pick from group:</div>
-              <div style={{display:"flex",gap:8,marginBottom:16,overflowX:"auto",scrollbarWidth:"none",paddingBottom:2}}>
-                {groups.map(g=>{
-                  const gt=getTheme(g.id);
-                  return (
-                    <button key={g.id} onClick={()=>{setDmGroupPick(g.id);setDmSelected([]);}}
-                      style={{flexShrink:0,display:"flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius:50,
-                        background:dmGroupPick===g.id?gt.accentPale:"#FAF6F0",
-                        border:`2px solid ${dmGroupPick===g.id?gt.accent:"rgba(107,66,38,0.12)"}`,
-                        fontSize:px(13),fontWeight:700,color:dmGroupPick===g.id?gt.accentDeep:"#6B4C35",cursor:"pointer"}}>
-                      {g.icon} {g.label}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Member list */}
-              <div style={{fontSize:px(12),fontWeight:700,color:"#9B7B62",letterSpacing:"0.4px",textTransform:"uppercase",marginBottom:8}}>Select people:</div>
-              <div className="scrollbar-hide" style={{flex:1,overflowY:"auto",display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
-                {getMembers(dmGroupPick).filter(m=>!m.you).map(mem=>{
-                  const sel=dmSelected.includes(mem.id);
-                  const gt=getTheme(dmGroupPick);
-                  return (
-                    <div key={mem.id} onClick={()=>setDmSelected(s=>sel?s.filter(x=>x!==mem.id):[...s,mem.id])}
-                      style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",borderRadius:16,
-                        background:sel?gt.accentPale:"#FAF6F0",
-                        border:`2px solid ${sel?gt.accent:"rgba(107,66,38,0.1)"}`,
-                        cursor:"pointer",transition:"all 0.15s"}}>
-                      <div style={{width:42,height:42,borderRadius:"50%",background:sel?gt.accentLight:gt.accentPale,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0,border:`2px solid ${sel?gt.accent:gt.accentPale}`}}>{mem.avatar}</div>
-                      <div style={{flex:1}}>
-                        <div style={{fontSize:px(15),fontWeight:700,color:"#3D2314"}}>{mem.name}</div>
-                        <div style={{fontSize:px(12),color:"#9B7B62",marginTop:1}}>{mem.role}</div>
-                      </div>
-                      <div style={{width:26,height:26,borderRadius:"50%",background:sel?getTheme(dmGroupPick).accent:"white",border:`2px solid ${sel?getTheme(dmGroupPick).accent:"rgba(107,66,38,0.18)"}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:14,color:"white",fontWeight:700,transition:"all 0.15s"}}>
-                        {sel?"✓":""}
-                      </div>
-                    </div>
-                  );
-                })}
-                {getMembers(dmGroupPick).filter(m=>!m.you).length===0&&(
-                  <div style={{textAlign:"center",padding:"20px",color:"#9B7B62",fontSize:px(14)}}>No other members in this group yet.</div>
-                )}
-              </div>
-
-              {/* Start button */}
-              <button
-                disabled={dmSelected.length===0}
-                onClick={()=>{
-                  const selMembers = getMembers(dmGroupPick).filter(m=>dmSelected.includes(m.id));
-                  const newId = "dm-"+Date.now();
-                  setDirectMessages(prev=>[...prev,{id:newId,members:selMembers,lastMessage:"",lastTime:"Now"}]);
-                  setChatMessages(prev=>({...prev,[newId]:[]}));
-                  setDmSelected([]); setNewDmOpen(false);
-                  setOpenChat({type:"dm",id:newId});
-                }}
-                style={{
-                  width:"100%",padding:"16px",borderRadius:50,
-                  background:dmSelected.length>0?"#C4714A":"#D4B8A8",
-                  border:"none",color:"white",fontSize:px(16),fontWeight:800,
-                  cursor:dmSelected.length>0?"pointer":"not-allowed",
-                  boxShadow:dmSelected.length>0?"0 6px 24px rgba(196,113,74,0.35)":"none",
-                  transition:"all 0.2s"
-                }}>
-                {dmSelected.length===0?"Select someone to message":"Start Chat →"}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ── CALENDAR ── */}
-        {tab==="calendar"&&(
-          <div className="scrollbar-hide" style={{flex:1,overflowY:"auto",padding:"16px 16px 100px"}}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-              <button style={{width:40,height:40,borderRadius:"50%",background:t.accentPale,border:"none",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,cursor:"pointer",color:t.accentDeep,fontWeight:700}}>‹</button>
-              <div style={{fontFamily:"Lora,serif",fontSize:px(18),fontWeight:600,color:"#3D2314"}}>April 2026</div>
-              <button style={{width:40,height:40,borderRadius:"50%",background:t.accentPale,border:"none",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,cursor:"pointer",color:t.accentDeep,fontWeight:700}}>›</button>
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:8}}>
-              {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(d=><div key={d} style={{textAlign:"center",fontSize:px(11),fontWeight:700,color:"#9B7B62",padding:"6px 0"}}>{d}</div>)}
-              {CAL_DAYS.map((d,i)=>(
-                <div key={i} style={{aspectRatio:1,borderRadius:"50%",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",fontSize:px(13),fontWeight:600,color:d.d===8&&!d.m?"white":d.m?"rgba(107,66,38,0.2)":"#6B4C35",background:d.d===8&&!d.m?t.accent:"transparent",cursor:"pointer",position:"relative"}}>
-                  {d.d}
-                  {(d.ev||d.bday)&&(
-                    <div style={{position:"absolute",bottom:2,display:"flex",gap:2}}>
-                      {d.ev&&<span style={{width:4,height:4,borderRadius:"50%",background:d.d===8&&!d.m?"white":t.accentLight}}/>}
-                      {d.bday&&<span style={{width:4,height:4,borderRadius:"50%",background:"#D4922A"}}/>}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-            <button onClick={()=>setAddEventOpen(true)} style={{width:"100%",padding:"15px",borderRadius:16,background:t.accentPale,border:`2px dashed ${t.accentLight}`,fontSize:px(15),fontWeight:700,color:t.accentDeep,cursor:"pointer",marginBottom:20,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-              📅 Add a New Event
-            </button>
-            <div style={{fontFamily:"Lora,serif",fontSize:px(16),fontWeight:600,color:"#3D2314",marginBottom:12}}>🎂 Upcoming Birthdays</div>
-            <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:22}}>
-              {BIRTHDAYS.map(b=>(
-                <div key={b.name} style={{background:"#FBF0D9",border:"1.5px solid #E8C878",borderRadius:16,padding:"14px 16px",display:"flex",alignItems:"center",gap:12}}>
-                  <div style={{width:44,height:44,borderRadius:"50%",background:"#F8E4B0",border:"2px solid #E8C878",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22}}>{b.avatar}</div>
-                  <div style={{flex:1}}>
-                    <div style={{fontSize:px(15),fontWeight:700,color:"#3D2314"}}>{b.name}'s Birthday</div>
-                    <div style={{fontSize:px(13),color:"#9B7B62",marginTop:2}}>🎂 {b.date}</div>
-                  </div>
-                  <div style={{textAlign:"right"}}>
-                    <div style={{fontSize:px(12),fontWeight:700,color:"#D4922A",background:"#F8E4B0",borderRadius:50,padding:"4px 10px"}}>{b.daysLeft===0?"Today! 🎉":b.daysLeft===1?"Tomorrow!":b.daysLeft<7?`${b.daysLeft} days`:`${b.daysLeft}d`}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div style={{fontFamily:"Lora,serif",fontSize:px(16),fontWeight:600,color:"#3D2314",marginBottom:12}}>📅 Upcoming Events</div>
-            <div style={{display:"flex",flexDirection:"column",gap:12}}>
-              {events.map(ev=>(
-                <div key={ev.id} onClick={()=>setSelectedEvent(ev)} style={{background:"#FBF0D9",border:"1.5px solid #E8C878",borderRadius:20,padding:16,cursor:"pointer"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:ev.isBirthday?0:10}}>
-                    <div style={{width:52,height:52,borderRadius:14,background:ev.isBirthday?"#E8C878":"#D4922A",color:"white",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                      <span style={{fontSize:9,fontWeight:700,letterSpacing:1,textTransform:"uppercase"}}>{ev.month}</span>
-                      <span style={{fontSize:22,fontWeight:700,lineHeight:1}}>{ev.day}</span>
-                    </div>
-                    <div style={{flex:1}}>
-                      <div style={{fontSize:px(15),fontWeight:700,color:"#3D2314"}}>{ev.title}</div>
-                      <div style={{fontSize:px(12),color:"#9B7B62",marginTop:2}}>{ev.group}{ev.time?` · ${ev.time}`:""}</div>
-                      {ev.location&&<div style={{fontSize:px(12),color:"#9B7B62"}}>📍 {ev.location}</div>}
-                    </div>
-                    <span style={{fontSize:20,color:"#D4922A"}}>›</span>
-                  </div>
-                  {!ev.isBirthday&&(
-                    <>
-                      <div style={{fontSize:px(13),color:"#6B4C35",marginBottom:10}}>✅ {ev.going+(rsvp[ev.id]?1:0)} going · 🤔 {ev.maybe} maybe</div>
-                      <div style={{display:"flex",gap:8}}>
-                        <button onClick={e=>{e.stopPropagation();toggleRsvp(ev.id);}} style={{flex:1,padding:"11px",borderRadius:50,border:"2px solid #D4922A",background:rsvp[ev.id]?"#D4922A":"transparent",fontSize:px(13),fontWeight:700,color:rsvp[ev.id]?"white":"#D4922A",cursor:"pointer"}}>{rsvp[ev.id]?"✅ Going!":"Yes, I'll Be There"}</button>
-                        <button onClick={e=>e.stopPropagation()} style={{flex:1,padding:"11px",borderRadius:50,border:"2px solid #D4922A",background:"transparent",fontSize:px(13),fontWeight:700,color:"#D4922A",cursor:"pointer"}}>Maybe</button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* ── FAB ── */}
-        {tab === "feed" && currentFeed.length > 0 && (
-          <button onClick={()=>setComposeOpen(true)} style={{position:"fixed",bottom:88,right:"50%",transform:"translateX(170px)",width:58,height:58,borderRadius:"50%",background:t.accent,border:"none",color:"white",fontSize:26,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:`0 6px 24px ${t.accent}66`,cursor:"pointer",zIndex:40,transition:"background 0.3s"}}>＋</button>
-        )}
-
-        {/* ── BOTTOM NAV ── */}
-        <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:420,background:t.cardBg,borderTop:`2px solid ${t.accentPale}`,display:"flex",padding:"10px 0 22px",zIndex:50,transition:"background 0.3s"}}>
-          {[
-            {id:"feed",  icon:"🏠", label:"Home"},
-            {id:"chat",  icon:"💬", label:"Chat"},
-            {id:"calendar",icon:"📅",label:"Calendar"},
-            {id:"profile",icon:"👤",label:"My Profile"},
-          ].map(n=>(
-            <div key={n.id} onClick={()=>setTab(n.id)} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3,cursor:"pointer",padding:"4px 0"}}>
-              <span style={{fontSize:24}}>{n.icon}</span>
-              <span style={{fontSize:px(11),fontWeight:800,color:tab===n.id?t.accent:"#9B7B62",transition:"color 0.3s",letterSpacing:"0.2px"}}>{n.label}</span>
-              {tab===n.id&&<div style={{width:20,height:3,borderRadius:3,background:t.accent,marginTop:1}}/>}
-            </div>
-          ))}
-        </div>
-
-        {/* ── COMPOSE SHEET ── */}
-        {composeOpen&&(
-          <Overlay onClose={()=>setComposeOpen(false)}>
-            <SheetHandle/>
-            <div style={{fontFamily:"Lora,serif",fontSize:px(20),fontWeight:600,color:"#3D2314",marginBottom:6}}>What would you like to share?</div>
-            <div style={{fontSize:px(13),color:"#9B7B62",marginBottom:18}}>Sharing with: <strong style={{color:t.accent}}>{activeGroupInfo.icon} {activeGroupInfo.label}</strong></div>
-            <div style={{display:"flex",flexDirection:"column",gap:10}}>
-              {[
-                {icon:"📷", label:"Share a Photo",      sub:"Add a photo from your camera roll with a caption", type:"photo"},
-                {icon:"📍", label:"Post a Check-in",    sub:"Let family know how you're doing right now", type:"checkin"},
-                {icon:"📅", label:"Add an Event",       sub:"Add something to the family calendar", type:"event"},
-              ].map(opt=>(
-                <div key={opt.label}
-                  onClick={() => {
-                    if(opt.type === "event") { setComposeOpen(false); setAddEventOpen(true); }
-                    else openUpload(opt.type);
-                  }}
-                  style={{background:t.bg,border:`2px solid ${t.accentPale}`,borderRadius:18,padding:"16px 18px",display:"flex",alignItems:"center",gap:14,cursor:"pointer"}}>
-                  <div style={{fontSize:28,width:52,height:52,borderRadius:14,background:"white",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,border:`1px solid ${t.accentPale}`}}>{opt.icon}</div>
-                  <div>
-                    <div style={{fontSize:px(15),fontWeight:700,color:"#3D2314"}}>{opt.label}</div>
-                    <div style={{fontSize:px(12),color:"#9B7B62",marginTop:2}}>{opt.sub}</div>
-                  </div>
-                  <span style={{marginLeft:"auto",fontSize:20,color:t.accentLight}}>›</span>
-                </div>
-              ))}
-            </div>
-          </Overlay>
-        )}
-
-        {/* ── ADD EVENT SHEET ── */}
-        {addEventOpen&&(
-          <Overlay onClose={()=>setAddEventOpen(false)} maxHeight="88vh">
-            <SheetHandle/>
-            <div style={{fontFamily:"Lora,serif",fontSize:px(20),fontWeight:600,color:"#3D2314",marginBottom:18}}>Add an Event 📅</div>
-            {[
-              {label:"Event Name",placeholder:"e.g. Easter Brunch, Jake's Birthday...",field:"title"},
-              {label:"Time",placeholder:"e.g. 10:00 AM",field:"time"},
-              {label:"Location",placeholder:"e.g. Grandma's house",field:"location"},
-            ].map(f=>(
-              <div key={f.field} style={{marginBottom:16}}>
-                <label style={{fontSize:px(13),fontWeight:700,color:"#9B7B62",letterSpacing:"0.4px",textTransform:"uppercase",marginBottom:6,display:"block"}}>{f.label}</label>
-                <input value={newEvent[f.field]} onChange={e=>setNewEvent(n=>({...n,[f.field]:e.target.value}))} placeholder={f.placeholder}
-                  style={{width:"100%",padding:"14px 16px",borderRadius:14,border:"1.5px solid #F5DDD1",background:"#FAF6F0",fontSize:px(15),color:"#3D2314",outline:"none"}}/>
-              </div>
-            ))}
-            <div style={{display:"flex",gap:10,marginBottom:16}}>
-              <div style={{flex:1}}>
-                <label style={{fontSize:px(13),fontWeight:700,color:"#9B7B62",letterSpacing:"0.4px",textTransform:"uppercase",marginBottom:6,display:"block"}}>Month</label>
-                <select value={newEvent.month} onChange={e=>setNewEvent(n=>({...n,month:e.target.value}))}
-                  style={{width:"100%",padding:"14px 16px",borderRadius:14,border:"1.5px solid #F5DDD1",background:"#FAF6F0",fontSize:px(15),color:"#3D2314",outline:"none"}}>
-                  {["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"].map(m=><option key={m}>{m}</option>)}
-                </select>
-              </div>
-              <div style={{flex:1}}>
-                <label style={{fontSize:px(13),fontWeight:700,color:"#9B7B62",letterSpacing:"0.4px",textTransform:"uppercase",marginBottom:6,display:"block"}}>Day</label>
-                <input type="number" min="1" max="31" value={newEvent.day} onChange={e=>setNewEvent(n=>({...n,day:e.target.value}))} placeholder="1–31"
-                  style={{width:"100%",padding:"14px 16px",borderRadius:14,border:"1.5px solid #F5DDD1",background:"#FAF6F0",fontSize:px(15),color:"#3D2314",outline:"none"}}/>
-              </div>
-            </div>
-            <div style={{marginBottom:20}}>
-              <label style={{fontSize:px(13),fontWeight:700,color:"#9B7B62",letterSpacing:"0.4px",textTransform:"uppercase",marginBottom:6,display:"block"}}>Family Group</label>
-              <select value={newEvent.group} onChange={e=>setNewEvent(n=>({...n,group:e.target.value}))}
-                style={{width:"100%",padding:"14px 16px",borderRadius:14,border:"1.5px solid #F5DDD1",background:"#FAF6F0",fontSize:px(15),color:"#3D2314",outline:"none"}}>
-                {groups.map(g=><option key={g.id}>{g.label}</option>)}
-              </select>
-            </div>
-            <BigBtn onClick={handleAddEvent} disabled={!newEvent.title.trim()||!newEvent.day}>Add to Calendar</BigBtn>
-          </Overlay>
-        )}
-
-        {/* ── EVENT DETAIL SHEET ── */}
-        {selectedEvent&&(
-          <Overlay onClose={()=>setSelectedEvent(null)}>
-            <SheetHandle/>
-            <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:18}}>
-              <div style={{width:62,height:62,borderRadius:16,background:"#D4922A",color:"white",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                <span style={{fontSize:10,fontWeight:700,letterSpacing:1,textTransform:"uppercase"}}>{selectedEvent.month}</span>
-                <span style={{fontSize:26,fontWeight:700,lineHeight:1}}>{selectedEvent.day}</span>
-              </div>
-              <div>
-                <div style={{fontFamily:"Lora,serif",fontSize:px(20),fontWeight:600,color:"#3D2314"}}>{selectedEvent.title}</div>
-                <div style={{fontSize:px(13),color:"#9B7B62",marginTop:2}}>{selectedEvent.group}</div>
-              </div>
-            </div>
-            {selectedEvent.time&&<div style={{fontSize:px(15),color:"#6B4C35",marginBottom:8}}>🕐 {selectedEvent.time}</div>}
-            {selectedEvent.location&&<div style={{fontSize:px(15),color:"#6B4C35",marginBottom:18}}>📍 {selectedEvent.location}</div>}
-            {!selectedEvent.isBirthday&&(
-              <>
-                <div style={{background:"#FBF0D9",borderRadius:14,padding:"14px 16px",marginBottom:18}}>
-                  <div style={{fontSize:px(14),color:"#6B4C35",marginBottom:4}}>✅ {selectedEvent.going+(rsvp[selectedEvent.id]?1:0)} going · 🤔 {selectedEvent.maybe} maybe</div>
-                </div>
-                <div style={{display:"flex",gap:10}}>
-                  <button onClick={()=>toggleRsvp(selectedEvent.id)} style={{flex:1,padding:"15px",borderRadius:50,border:"2px solid #D4922A",background:rsvp[selectedEvent.id]?"#D4922A":"transparent",fontSize:px(15),fontWeight:700,color:rsvp[selectedEvent.id]?"white":"#D4922A",cursor:"pointer"}}>{rsvp[selectedEvent.id]?"✅ I'm Going!":"Yes, I'll Be There"}</button>
-                  <button style={{flex:1,padding:"15px",borderRadius:50,border:"2px solid #D4922A",background:"transparent",fontSize:px(15),fontWeight:700,color:"#D4922A",cursor:"pointer"}}>Maybe</button>
-                </div>
-              </>
-            )}
-          </Overlay>
-        )}
-
-        {/* ── COMMENT SHEET ── */}
-        {commentOpen!==null&&(()=>{
-          const allPosts = Object.values(feedPosts).flat();
-          const postItem = allPosts.find(x=>x.id===commentOpen);
-          const postCmts = postComments(commentOpen);
-          return (
-            <div onClick={()=>setCommentOpen(null)} style={{position:"fixed",inset:0,background:"rgba(61,35,20,0.45)",zIndex:60,display:"flex",alignItems:"flex-end",animation:"fadeIn 0.2s ease"}}>
-              <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:420,margin:"0 auto",background:t.cardBg,borderRadius:"24px 24px 0 0",maxHeight:"82vh",display:"flex",flexDirection:"column",animation:"slideUp 0.25s ease"}}>
-                <div style={{padding:"16px 20px 14px",borderBottom:`1px solid ${t.accentPale}`,flexShrink:0}}>
-                  <SheetHandle color={t.accentLight}/>
-                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-                    <div style={{fontFamily:"Lora,serif",fontSize:px(18),fontWeight:600,color:"#3D2314"}}>
-                      Comments {postCmts.length>0&&<span style={{fontSize:px(14),color:"#9B7B62",fontWeight:400}}>({postCmts.length})</span>}
-                    </div>
-                    <button onClick={()=>setCommentOpen(null)} style={{background:t.accentPale,border:"none",borderRadius:50,padding:"6px 14px",fontSize:px(14),fontWeight:700,color:t.accentDeep,cursor:"pointer"}}>Close</button>
-                  </div>
-                  {postItem&&(
-                    <div style={{display:"flex",alignItems:"center",gap:10,background:t.bg,borderRadius:12,padding:"10px 12px",border:`1px solid ${t.accentPale}`}}>
-                      <span style={{fontSize:20}}>{postItem.avatar}</span>
-                      <div style={{flex:1,minWidth:0}}>
-                        <span style={{fontSize:px(13),fontWeight:700,color:t.accentDeep}}>{postItem.name}: </span>
-                        <span style={{fontSize:px(13),color:"#6B4C35"}}>{postItem.caption||postItem.status||postItem.title}</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <div className="scrollbar-hide" style={{flex:1,overflowY:"auto",padding:"16px 20px"}}>
-                  {postCmts.length===0&&(
-                    <div style={{textAlign:"center",padding:"36px 0",color:"#9B7B62"}}>
-                      <div style={{fontSize:40,marginBottom:10}}>💬</div>
-                      <div style={{fontSize:px(15),fontWeight:700,color:"#6B4C35",marginBottom:6}}>No comments yet</div>
-                      <div style={{fontSize:px(14)}}>Be the first to say something!</div>
-                    </div>
-                  )}
-                  {postCmts.map((c,i)=>(
-                    <div key={c.id} style={{display:"flex",gap:12,marginBottom:18,animation:"fadeUp 0.25s ease both",animationDelay:`${i*0.05}s`}}>
-                      <div style={{width:40,height:40,borderRadius:"50%",background:t.accentPale,border:`2px solid ${t.accentLight}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0,marginTop:2}}>{c.avatar}</div>
-                      <div style={{flex:1}}>
-                        <div style={{background:t.bg,borderRadius:"6px 18px 18px 18px",padding:"12px 16px",display:"inline-block",maxWidth:"100%",border:`1px solid ${t.accentPale}`}}>
-                          <div style={{fontSize:px(13),fontWeight:800,color:t.accentDeep,marginBottom:4}}>{c.name}</div>
-                          <div style={{fontSize:px(15),color:"#3D2314",lineHeight:1.55}}>{c.text}</div>
-                        </div>
-                        <div style={{fontSize:px(12),color:"#9B7B62",marginTop:5,paddingLeft:4}}>{c.time}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div style={{padding:"12px 16px 32px",borderTop:`1px solid ${t.accentPale}`,flexShrink:0,background:t.cardBg}}>
-                  <div style={{display:"flex",gap:10,alignItems:"flex-end"}}>
-                    <div style={{width:40,height:40,borderRadius:"50%",background:t.accentPale,border:`2px solid ${t.accentLight}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>{obAvatar||"👩"}</div>
-                    <div style={{flex:1,background:t.bg,borderRadius:20,border:`2px solid ${t.accentPale}`,display:"flex",alignItems:"center",padding:"10px 16px",gap:10}}>
-                      <input value={commentInput} onChange={e=>setCommentInput(e.target.value)}
-                        onKeyDown={e=>{ if(e.key==="Enter"&&commentInput.trim()) handleAddComment(commentOpen); }}
-                        placeholder="Say something warm... 🧡"
-                        style={{flex:1,background:"none",border:"none",outline:"none",fontSize:px(15),color:"#3D2314"}}/>
-                      <button onClick={()=>handleAddComment(commentOpen)} disabled={!commentInput.trim()}
-                        style={{width:36,height:36,borderRadius:"50%",background:commentInput.trim()?t.accent:"#D4B8A8",border:"none",color:"white",fontSize:18,cursor:commentInput.trim()?"pointer":"not-allowed",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"background 0.15s"}}>
-                        ↑
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          );
-        })()}
-
-        {/* ── UPLOAD FLOW ── */}
-        <UploadSheet />
-
-      </div>
-    </>
-  );
+  return el;
+}
+function t(){return document.createTextNode(Array.from(arguments).join(''));}
+function app(children){
+  var el=h('div',{id:'app'});
+  (Array.isArray(children)?children:[children]).forEach(function(c){if(c)el.appendChild(typeof c==='string'?t(c):c);});
+  return el;
+}
+function div(attrs,children){
+  var el=h('div',attrs);
+  if(children)(Array.isArray(children)?children:[children]).forEach(function(c){if(c!=null)el.appendChild(typeof c==='string'?t(c):c);});
+  return el;
+}
+function btn(attrs,label){var el=h('button',attrs);el.appendChild(t(label));return el;}
+function inp(attrs){return h('input',attrs);}
+function txt(attrs){return h('textarea',attrs);}
+function span(attrs,content){var el=h('span',attrs);if(content)el.appendChild(typeof content==='string'?t(content):content);return el;}
+
+function update(){
+  var old=document.getElementById('app');
+  var next=render();
+  if(old)old.replaceWith(next);
+  else document.body.appendChild(next);
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<KeepUp/>);
-document.getElementById("splash").style.display = "none";
+function set(key,val){S[key]=val;update();}
+function setNested(obj,key,val){S[obj]=Object.assign({},S[obj]);S[obj][key]=val;update();}
+
+// ── HELPERS ────────────────────────────────────────────────────
+function topbar(t,extra){
+  return div({style:{background:t.cb,padding:'11px 13px 9px',display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:'1px solid '+t.ap,flexShrink:0}},[
+    div({style:{fontFamily:'Lora,serif',fontSize:'20px',fontWeight:600,color:t.a},innerHTML:'keep <em>up</em>'}),
+    div({style:{display:'flex',gap:'6px',alignItems:'center'}},extra||[]),
+  ]);
+}
+function handle(){return div({style:{width:'44px',height:'5px',borderRadius:'5px',background:'#C9A882',margin:'0 auto 14px',opacity:.35}});}
+function overlay(content,onClose){
+  var el=div({class:'overlay'});
+  el.addEventListener('click',onClose);
+  var sheet=div({class:'sheet'});
+  sheet.addEventListener('click',function(e){e.stopPropagation();});
+  (Array.isArray(content)?content:[content]).forEach(function(c){if(c)sheet.appendChild(typeof c==='string'?t(c):c);});
+  el.appendChild(sheet);
+  return el;
+}
+function bigbtn(label,onClick,disabled){
+  var el=btn({class:'bigbtn',onKeydown:function(){}},label);
+  if(disabled)el.disabled=true;
+  el.addEventListener('click',onClick);
+  return el;
+}
+function navbar(){
+  var t=gt(S.group);
+  var tabs=[{id:'feed',icon:'🏠',label:'Home'},{id:'chat',icon:'💬',label:'Chat'},{id:'calendar',icon:'📅',label:'Calendar'},{id:'profile',icon:'👤',label:'Profile'}];
+  return div({class:'nav'},tabs.map(function(n){
+    var isActive=S.tab===n.id;
+    var b=div({class:'navbtn',style:{cursor:'pointer'}});
+    b.appendChild(div({style:{fontSize:'20px',textAlign:'center'},innerHTML:n.icon}));
+    b.appendChild(div({style:{fontSize:'10px',fontWeight:800,color:isActive?t.a:'#9B7B62',textAlign:'center'}},n.label));
+    if(isActive)b.appendChild(div({style:{width:'15px',height:'3px',borderRadius:'3px',background:t.a,margin:'1px auto 0'}}));
+    b.addEventListener('click',function(){S.tab=n.id;if(n.id==='chat')S.openChat=null;update();});
+    return b;
+  }));
+}
+
+// ── ONBOARDING ─────────────────────────────────────────────────
+function renderOnboarding(){
+  var step=['welcome','name','avatar','grp','done'][S.obStep];
+  var wrap=div({id:'app',style:{background:'#FAF6F0',display:'flex',flexDirection:'column',height:'100vh'}});
+
+  if(S.obStep>0&&S.obStep<4){
+    var dots=div({style:{display:'flex',justifyContent:'center',gap:'5px',padding:'18px 0 0'}});
+    [1,2,3].forEach(function(i){dots.appendChild(div({style:{width:i<=S.obStep?'24px':'7px',height:'7px',borderRadius:'7px',background:i<=S.obStep?'#C4714A':'#E8C4A8',transition:'all .3s'}},[]));});
+    wrap.appendChild(dots);
+    var back=btn({style:{position:'absolute',top:'14px',left:'14px',background:'#F5DDD1',border:'none',borderRadius:'50px',padding:'7px 13px',fontSize:'13px',fontWeight:700,color:'#6B4226',cursor:'pointer'}},'Back');
+    back.addEventListener('click',function(){S.obStep--;update();});
+    wrap.appendChild(back);
+  }
+
+  if(step==='welcome'){
+    var hero=div({style:{flex:'0 0 46%',background:'linear-gradient(170deg,#F5DDD1,#FAF0E6 60%,#E8F2E9)',display:'flex',alignItems:'center',justifyContent:'center'}});
+    var icon=div({style:{fontSize:'72px',animation:'float 3s ease-in-out infinite'}},[]); icon.textContent='🏡';
+    hero.appendChild(icon); wrap.appendChild(hero);
+    var body=div({style:{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'20px 26px 32px'}});
+    body.appendChild(div({style:{fontFamily:'Lora,serif',fontSize:'30px',fontWeight:600,color:'#C4714A',marginBottom:'8px',textAlign:'center'},innerHTML:'keep <em>up</em>'}));
+    body.appendChild(div({style:{fontSize:'15px',color:'#6B4C35',textAlign:'center',lineHeight:1.65,marginBottom:'24px'}},'Stay close to the people who matter most. No ads. No algorithms.'));
+    body.appendChild(bigbtn('Get Started',function(){S.obStep=1;update();}));
+    wrap.appendChild(body);
+  }
+
+  if(step==='name'){
+    var body=div({style:{flex:1,display:'flex',flexDirection:'column',padding:'64px 24px 32px',animation:'fadeUp .4s ease both'}});
+    body.appendChild(div({style:{fontFamily:'Lora,serif',fontSize:'24px',fontWeight:600,color:'#3D2314',marginBottom:'8px'}},"What's your name?"));
+    body.appendChild(div({style:{fontSize:'14px',color:'#9B7B62',marginBottom:'20px',lineHeight:1.6}},'Use whatever your family calls you.'));
+    var input=inp({type:'text',placeholder:'e.g. Mom, Grandpa Joe, Jake...',style:{padding:'14px 16px',borderRadius:'13px',border:'2px solid #E8956D',background:'#FFF9F2',fontSize:'16px',color:'#3D2314',outline:'none',width:'100%',marginBottom:'10px'}});
+    input.value=S.name;
+    input.addEventListener('input',function(){S.name=this.value;});
+    body.appendChild(input);
+    body.appendChild(div({style:{flex:1}}));
+    body.appendChild(bigbtn('Continue',function(){if(!S.name.trim())return;localStorage.setItem('ku_name',S.name);S.obStep=2;update();}));
+    wrap.appendChild(body);
+    setTimeout(function(){input.focus();},100);
+  }
+
+  if(step==='avatar'){
+    var body=div({style:{flex:1,display:'flex',flexDirection:'column',padding:'64px 24px 32px',animation:'fadeUp .4s ease both'}});
+    body.appendChild(div({style:{fontFamily:'Lora,serif',fontSize:'24px',fontWeight:600,color:'#3D2314',marginBottom:'8px'}},'Pick your picture'));
+    var preview=div({style:{display:'flex',alignItems:'center',gap:'12px',background:'#FFF9F2',borderRadius:'13px',padding:'13px',marginBottom:'18px',border:'1.5px solid #F5DDD1'}});
+    var avi=div({style:{width:'46px',height:'46px',borderRadius:'50%',background:'#F5DDD1',border:'2px solid #E8956D',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'24px'}});
+    avi.textContent=S.avatar;
+    preview.appendChild(avi);
+    preview.appendChild(div({style:{fontSize:'15px',fontWeight:700,color:'#3D2314'}},S.name||'Your Name'));
+    body.appendChild(preview);
+    var grid=div({style:{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:'8px',marginBottom:'18px'}});
+    AVTS.forEach(function(a){
+      var b=btn({style:{aspectRatio:1,borderRadius:'13px',background:S.avatar===a?'#F5DDD1':'#FFF9F2',border:'2px solid '+(S.avatar===a?'#C4714A':'rgba(107,66,38,.12)'),fontSize:'24px',cursor:'pointer'}},a);
+      b.addEventListener('click',function(){S.avatar=a;localStorage.setItem('ku_av',a);update();});
+      grid.appendChild(b);
+    });
+    body.appendChild(grid);
+    body.appendChild(div({style:{flex:1}}));
+    body.appendChild(bigbtn("That's me!",function(){S.obStep=3;update();}));
+    wrap.appendChild(body);
+  }
+
+  if(step==='grp'){
+    var body=div({style:{flex:1,display:'flex',flexDirection:'column',padding:'64px 24px 32px',animation:'fadeUp .4s ease both'}});
+    body.appendChild(div({style:{fontFamily:'Lora,serif',fontSize:'24px',fontWeight:600,color:'#3D2314',marginBottom:'8px'}},'Create your first group'));
+    var ginput=inp({type:'text',placeholder:"e.g. The Johnsons, Immediate Family...",style:{padding:'14px 16px',borderRadius:'13px',border:'2px solid #E8956D',background:'#FFF9F2',fontSize:'16px',color:'#3D2314',outline:'none',width:'100%',marginBottom:'16px'}});
+    ginput.value=S.grpName;
+    ginput.addEventListener('input',function(){S.grpName=this.value;});
+    body.appendChild(ginput);
+    var egrid=div({style:{display:'flex',flexWrap:'wrap',gap:'8px',marginBottom:'20px'}});
+    GEMJ.forEach(function(e){
+      var b=btn({style:{width:'44px',height:'44px',borderRadius:'11px',background:S.grpEmoji===e?'#F5DDD1':'#FFF9F2',border:'2px solid '+(S.grpEmoji===e?'#C4714A':'rgba(107,66,38,.12)'),fontSize:'21px',cursor:'pointer'}},e);
+      b.addEventListener('click',function(){S.grpEmoji=e;update();});
+      egrid.appendChild(b);
+    });
+    body.appendChild(egrid);
+    body.appendChild(div({style:{flex:1}}));
+    body.appendChild(bigbtn('Create Group',function(){
+      if(!S.grpName.trim())return;
+      S.groups=[{id:'imm',label:S.grpName,icon:S.grpEmoji}];
+      S.obStep=4;update();
+    }));
+    wrap.appendChild(body);
+  }
+
+  if(step==='done'){
+    var body=div({style:{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'32px 26px',animation:'fadeUp .5s ease both'}});
+    var ei=div({style:{fontSize:'66px',marginBottom:'16px',animation:'float 3s ease-in-out infinite'}}); ei.textContent='🎉';
+    body.appendChild(ei);
+    body.appendChild(div({style:{fontFamily:'Lora,serif',fontSize:'26px',fontWeight:600,color:'#3D2314',marginBottom:'9px',textAlign:'center'}},"You're all set, "+(S.name||'friend')+'!'));
+    body.appendChild(div({style:{fontSize:'14px',color:'#6B4C35',textAlign:'center',lineHeight:1.7,marginBottom:'26px'}},S.grpEmoji+' '+(S.grpName||'Your Family')+' is ready. Invite your family!'));
+    body.appendChild(bigbtn('Take me to Keep Up',function(){localStorage.setItem('ku_ob','1');S.boarded=true;update();}));
+    wrap.appendChild(body);
+  }
+  return wrap;
+}
+
+// ── FEED ───────────────────────────────────────────────────────
+function renderFeedItem(item,i,t){
+  var pc=S.cmts[item.id]||[];
+  var wrap=div({style:{animation:'fadeUp .3s ease both',animationDelay:(i*.06)+'s'}});
+
+  if(item.type==='photo'){
+    var card=div({style:{background:t.cb,borderRadius:'17px',overflow:'hidden',boxShadow:'0 2px 12px rgba(0,0,0,.07)',border:'1px solid '+t.ap}});
+    var hdr=div({style:{display:'flex',alignItems:'center',gap:'8px',padding:'10px 12px 7px'}});
+    var avi=div({style:{width:'36px',height:'36px',borderRadius:'50%',background:t.ap,border:'2px solid '+t.ap,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'18px',flexShrink:0}}); avi.textContent=item.av;
+    hdr.appendChild(avi);
+    var nm=div(); nm.appendChild(div({style:{fontSize:'14px',fontWeight:700,color:'#3D2314'}},item.name)); nm.appendChild(div({style:{fontSize:'11px',color:'#9B7B62'}},item.time));
+    hdr.appendChild(nm); card.appendChild(hdr);
+    if(item.imgUrl){var img=h('img',{style:{width:'100%',aspectRatio:'4/3',objectFit:'cover',display:'block'}});img.src=item.imgUrl;card.appendChild(img);}
+    else{var ph=div({style:{width:'100%',aspectRatio:'4/3',background:'linear-gradient(135deg,'+t.ap+','+t.sb+')',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'58px'}});ph.textContent=item.emoji;card.appendChild(ph);}
+    var body=div({style:{padding:'10px 12px'}});
+    body.appendChild(div({style:{fontSize:'13px',lineHeight:1.6,color:'#3D2314'}},item.cap));
+    var actions=div({style:{display:'flex',alignItems:'center',gap:'6px',marginTop:'9px',flexWrap:'wrap'}});
+    if(S.rxns[item.id]){var ri=div({style:{padding:'4px 10px',borderRadius:'50%',background:t.ap,fontSize:'12px',fontWeight:600,color:t.ad}});ri.textContent=S.rxns[item.id]+' Reacted';actions.appendChild(ri);}
+    var rxb=btn({style:{display:'flex',alignItems:'center',gap:'4px',padding:'5px 11px',borderRadius:'50px',background:t.bg,border:'2px solid '+t.ap,fontSize:'12px',fontWeight:700,color:'#6B4C35',cursor:'pointer'}},'React');
+    rxb.addEventListener('click',function(){S.rxPick=S.rxPick===item.id?null:item.id;update();});
+    actions.appendChild(rxb);
+    var cmb=btn({style:{display:'flex',alignItems:'center',gap:'4px',padding:'5px 11px',borderRadius:'50px',background:t.bg,border:'2px solid '+t.ap,fontSize:'12px',fontWeight:700,color:'#6B4C35',cursor:'pointer',marginLeft:'auto'}},'Comment'+(pc.length?' ('+pc.length+')':''));
+    cmb.addEventListener('click',function(){S.cmtOpen=item.id;S.cmtIn='';update();});
+    actions.appendChild(cmb);
+    if(S.rxPick===item.id){
+      var rp=div({style:{width:'100%',display:'flex',gap:'6px',padding:'6px 0 2px',animation:'pop .18s ease'}});
+      RXS.forEach(function(e){var rb=btn({style:{flex:1,fontSize:'22px',padding:'7px 0',borderRadius:'11px',background:S.rxns[item.id]===e?t.ap:t.bg,border:'2px solid '+(S.rxns[item.id]===e?t.al:t.ap),cursor:'pointer'}},e);rb.addEventListener('click',function(){S.rxns[item.id]=S.rxns[item.id]===e?null:e;S.rxPick=null;update();});rp.appendChild(rb);});
+      actions.appendChild(rp);
+    }
+    body.appendChild(actions);
+    if(pc.length){
+      var lcmt=div({style:{marginTop:'8px',background:t.bg,border:'1px solid '+t.ap,borderRadius:'11px',padding:'7px 10px',cursor:'pointer',display:'flex',gap:'6px',alignItems:'center'}});
+      var lai=span({style:{fontSize:'15px'}}); lai.textContent=pc[pc.length-1].av; lcmt.appendChild(lai);
+      lcmt.appendChild(div({style:{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',fontSize:'11px',color:'#6B4C35'}},pc[pc.length-1].name+': '+pc[pc.length-1].text));
+      lcmt.addEventListener('click',function(){S.cmtOpen=item.id;S.cmtIn='';update();});
+      body.appendChild(lcmt);
+    }
+    card.appendChild(body); wrap.appendChild(card);
+  }
+
+  if(item.type==='checkin'){
+    var card=div({style:{background:t.ap,border:'2px solid '+t.al,borderRadius:'17px',padding:'13px',display:'flex',alignItems:'flex-start',gap:'10px'}});
+    var avi=div({style:{width:'40px',height:'40px',borderRadius:'50%',background:t.al,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'20px',flexShrink:0}}); avi.textContent=item.av;
+    card.appendChild(avi);
+    var body=div({style:{flex:1}});
+    body.appendChild(div({style:{fontSize:'12px',fontWeight:700,color:t.ad}},item.name+' checked in'));
+    body.appendChild(div({style:{fontSize:'13px',color:'#3D2314',marginTop:'4px',lineHeight:1.5}},item.status));
+    body.appendChild(div({style:{fontSize:'11px',color:'#9B7B62',marginTop:'4px'}},item.time));
+    var rb=btn({style:{marginTop:'7px',padding:'5px 11px',borderRadius:'50px',background:'white',border:'1.5px solid '+t.al,fontSize:'12px',fontWeight:700,color:t.ad,cursor:'pointer'}},S.rxns[item.id]||'React');
+    rb.addEventListener('click',function(){S.rxPick=S.rxPick===item.id?null:item.id;update();});
+    body.appendChild(rb);
+    if(S.rxPick===item.id){var rp=div({style:{display:'flex',gap:'6px',padding:'6px 0 2px',animation:'pop .18s ease'}});RXS.forEach(function(e){var rb2=btn({style:{flex:1,fontSize:'20px',padding:'6px 0',borderRadius:'10px',background:S.rxns[item.id]===e?'white':t.ap,border:'2px solid '+(S.rxns[item.id]===e?t.al:'transparent'),cursor:'pointer'}},e);rb2.addEventListener('click',function(){S.rxns[item.id]=e;S.rxPick=null;update();});rp.appendChild(rb2);});body.appendChild(rp);}
+    card.appendChild(body); wrap.appendChild(card);
+  }
+
+  if(item.type==='event'){
+    var card=div({style:{background:'#FBF0D9',border:'2px solid #E8C878',borderRadius:'17px',padding:'13px'}});
+    var hdr=div({style:{display:'flex',alignItems:'center',gap:'10px',marginBottom:'8px'}});
+    var dt=div({style:{width:'44px',height:'44px',borderRadius:'12px',background:'#D4922A',color:'white',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',flexShrink:0}});
+    dt.appendChild(div({style:{fontSize:'8px',fontWeight:700,letterSpacing:'1px',textTransform:'uppercase'}},item.month));
+    dt.appendChild(div({style:{fontSize:'18px',fontWeight:700,lineHeight:1}},String(item.day)));
+    hdr.appendChild(dt);
+    var info=div(); info.appendChild(div({style:{fontSize:'14px',fontWeight:700,color:'#3D2314'}},item.title)); info.appendChild(div({style:{fontSize:'11px',color:'#9B7B62',marginTop:'2px'}},item.who)); hdr.appendChild(info);
+    card.appendChild(hdr);
+    card.appendChild(div({style:{fontSize:'12px',color:'#6B4C35',marginBottom:'8px'}},'Going: '+item.going+' | Maybe: '+item.maybe));
+    var acts=div({style:{display:'flex',gap:'8px'}});
+    var gb=btn({style:{flex:1,padding:'8px',borderRadius:'50px',border:'2px solid #D4922A',background:S.rsvp[item.id]?'#D4922A':'transparent',fontSize:'12px',fontWeight:700,color:S.rsvp[item.id]?'white':'#D4922A',cursor:'pointer'}},S.rsvp[item.id]?"Going!":"I'll Be There");
+    gb.addEventListener('click',function(){S.rsvp[item.id]=!S.rsvp[item.id];update();});
+    acts.appendChild(gb);
+    acts.appendChild(btn({style:{flex:1,padding:'8px',borderRadius:'50px',border:'2px solid #D4922A',background:'transparent',fontSize:'12px',fontWeight:700,color:'#D4922A',cursor:'pointer'}},'Maybe'));
+    card.appendChild(acts); wrap.appendChild(card);
+  }
+  return wrap;
+}
+
+// ── MAIN RENDER ────────────────────────────────────────────────
+function render(){
+  if(!S.boarded) return renderOnboarding();
+
+  var t=gt(S.group);
+  var agi=S.groups.find(function(g){return g.id===S.group;})||S.groups[0];
+  var wrap=div({id:'app',style:{background:t.bg}});
+
+  // MANAGE GROUP SCREEN
+  if(S.screen==='manageGroup'){
+    var mt=gt(S.manGroup);var gi=S.groups.find(function(g){return g.id===S.manGroup;})||S.groups[0];var gm=S.mems[S.manGroup]||[];
+    wrap.appendChild(topbar(mt,[
+      btn({style:{background:mt.ap,border:'none',borderRadius:'50px',padding:'7px 13px',fontSize:'13px',cursor:'pointer',color:mt.ad,fontWeight:700},onClick:function(){S.screen='main';update();}},'Back')
+    ]));
+    var body=div({class:'scr',style:{padding:'14px 14px 80px'}});
+    var info=div({style:{background:mt.ap,borderRadius:'18px',padding:'18px',marginBottom:'12px',textAlign:'center'}});
+    var gi2=div({style:{fontSize:'44px',marginBottom:'7px'}}); gi2.textContent=gi.icon; info.appendChild(gi2);
+    info.appendChild(div({style:{fontFamily:'Lora,serif',fontSize:'20px',fontWeight:600,color:mt.ad}},gi.label));
+    info.appendChild(div({style:{fontSize:'13px',color:mt.a,marginTop:'3px'}},gm.length+' members'));
+    body.appendChild(info);
+    var invBox=div({style:{background:mt.cb,borderRadius:'18px',overflow:'hidden',marginBottom:'12px',boxShadow:'0 2px 12px rgba(0,0,0,.06)'}});
+    invBox.appendChild(div({style:{padding:'12px 14px 9px',borderBottom:'1px solid '+mt.ap,fontSize:'13px',fontWeight:800,color:mt.ad}},'Invite Link'));
+    var linkRow=div({style:{margin:'10px 13px',background:mt.bg,borderRadius:'11px',border:'1.5px dashed '+mt.al,padding:'10px 12px',display:'flex',alignItems:'center',gap:'8px'}});
+    linkRow.appendChild(div({style:{flex:1,fontSize:'11px',color:'#6B4C35',fontFamily:'monospace',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},'keepup.app/join/'+S.manGroup+'-a7x92k'));
+    var cb=btn({style:{background:S.copied?'#7A9E7E':mt.a,color:'white',border:'none',borderRadius:'9px',padding:'6px 12px',fontSize:'12px',fontWeight:700,cursor:'pointer'}},S.copied?'Copied!':'Copy');
+    cb.addEventListener('click',function(){if(navigator.clipboard)navigator.clipboard.writeText('keepup.app/join/'+S.manGroup+'-a7x92k');S.copied=true;update();setTimeout(function(){S.copied=false;update();},2000);});
+    linkRow.appendChild(cb); invBox.appendChild(linkRow); body.appendChild(invBox);
+    var memBox=div({style:{background:mt.cb,borderRadius:'18px',overflow:'hidden',boxShadow:'0 2px 12px rgba(0,0,0,.06)'}});
+    memBox.appendChild(div({style:{padding:'12px 14px 9px',borderBottom:'1px solid '+mt.ap,fontSize:'13px',fontWeight:800,color:mt.ad}},'Members'));
+    gm.forEach(function(m){
+      var row=div({style:{display:'flex',alignItems:'center',gap:'10px',padding:'12px 14px',borderBottom:'1px solid '+mt.ap}});
+      var a=div({style:{width:'38px',height:'38px',borderRadius:'50%',background:mt.ap,border:'2px solid '+mt.al,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'19px'}}); a.textContent=m.av; row.appendChild(a);
+      var nd=div({style:{flex:1}}); nd.appendChild(div({style:{fontSize:'14px',fontWeight:700,color:'#3D2314'}},m.name)); nd.appendChild(div({style:{fontSize:'12px',color:'#9B7B62'}},m.role)); row.appendChild(nd);
+      if(!m.you){var rb=btn({style:{background:'#F5D1D1',border:'none',borderRadius:'50px',padding:'6px 11px',fontSize:'12px',fontWeight:700,color:'#C44A4A',cursor:'pointer'}},'Remove');rb.addEventListener('click',function(){S.mems[S.manGroup]=S.mems[S.manGroup].filter(function(x){return x.id!==m.id;});update();});row.appendChild(rb);}
+      memBox.appendChild(row);
+    });
+    body.appendChild(memBox); wrap.appendChild(body); wrap.appendChild(navbar()); return wrap;
+  }
+
+  // CREATE GROUP
+  if(S.screen==='createGroup'){
+    wrap.appendChild(topbar(t,[btn({style:{background:t.ap,border:'none',borderRadius:'50px',padding:'7px 13px',fontSize:'13px',cursor:'pointer',color:t.ad,fontWeight:700},onClick:function(){S.screen='main';update();}},'Back')]));
+    var body=div({class:'scr',style:{padding:'18px 18px 80px'}});
+    var preview=div({style:{textAlign:'center',marginBottom:'18px'}});
+    var pe=div({style:{fontSize:'44px',marginBottom:'8px'}}); pe.textContent=S.newGrpEmoji; preview.appendChild(pe);
+    preview.appendChild(div({style:{fontFamily:'Lora,serif',fontSize:'22px',fontWeight:600,color:'#3D2314'}},'New Family Group'));
+    body.appendChild(preview);
+    var ni=inp({type:'text',placeholder:"e.g. Mom's Side, Cousins...",style:{width:'100%',padding:'13px',borderRadius:'13px',border:'1.5px solid rgba(107,66,38,.15)',background:'#FFF9F2',fontSize:'15px',color:'#3D2314',outline:'none',marginBottom:'14px'}});
+    ni.value=S.newGrpName; ni.addEventListener('input',function(){S.newGrpName=this.value;});
+    body.appendChild(ni);
+    var eg=div({style:{display:'flex',flexWrap:'wrap',gap:'8px',marginBottom:'18px'}});
+    GEMJ.forEach(function(e){var b=btn({style:{width:'44px',height:'44px',borderRadius:'11px',background:S.newGrpEmoji===e?'#F5DDD1':'#FFF9F2',border:'2px solid '+(S.newGrpEmoji===e?'#C4714A':'rgba(107,66,38,.12)'),fontSize:'21px',cursor:'pointer'}},e);b.addEventListener('click',function(){S.newGrpEmoji=e;update();});eg.appendChild(b);});
+    body.appendChild(eg);
+    body.appendChild(bigbtn('Create Group',function(){
+      if(!S.newGrpName.trim())return;
+      var id='g'+Date.now();
+      S.groups.push({id:id,label:S.newGrpName,icon:S.newGrpEmoji});
+      S.mems[id]=[{id:1,av:S.avatar,name:S.name||'You',role:'Admin',you:true}];
+      S.newGrpName='';S.newGrpEmoji='❤️';S.group=id;S.screen='main';update();
+    }));
+    wrap.appendChild(body); wrap.appendChild(navbar()); return wrap;
+  }
+
+  // TOPBAR
+  var tbExtras=[];
+  tbExtras.push(btn({style:{background:t.ap,border:'none',borderRadius:'50px',padding:'5px 9px',fontSize:'12px',fontWeight:700,color:t.ad,cursor:'pointer'},onClick:function(){S.screen='manageGroup';S.manGroup=S.group;update();}},'Members'));
+  var avi=div({style:{width:'30px',height:'30px',borderRadius:'50%',background:t.ap,border:'2px solid '+t.al,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'15px'}}); avi.textContent=S.avatar; tbExtras.push(avi);
+  wrap.appendChild(topbar(t,tbExtras));
+
+  // GROUP PILLS (feed only)
+  if(S.tab==='feed'){
+    var pills=div({style:{background:t.sb,borderBottom:'1px solid '+t.ap,flexShrink:0}});
+    var pr=div({class:'scr',style:{padding:'5px 12px 8px',display:'flex',gap:'6px',overflowX:'auto',overflowY:'visible'}});
+    S.groups.forEach(function(g){
+      var gt2=gt(g.id);var ia=S.group===g.id;
+      var pb=btn({style:{flexShrink:0,display:'flex',alignItems:'center',gap:'5px',padding:'6px 12px 6px 7px',borderRadius:'50px',background:ia?gt2.ap:t.bg,border:'2px solid '+(ia?gt2.a:'rgba(107,66,38,.12)'),cursor:'pointer',fontSize:'12px',fontWeight:700,color:ia?gt2.ad:'#6B4C35'}});
+      var ic=span({style:{width:'22px',height:'22px',borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'12px',background:ia?gt2.al:'white'}}); ic.textContent=g.icon; pb.appendChild(ic);
+      pb.appendChild(t(g.label));
+      pb.addEventListener('click',function(){S.group=g.id;update();});
+      pr.appendChild(pb);
+    });
+    var nb=btn({style:{flexShrink:0,padding:'6px 12px',borderRadius:'50px',background:t.bg,border:'2px dashed '+t.al,cursor:'pointer',fontSize:'12px',fontWeight:700,color:t.ad}},'+ New');
+    nb.addEventListener('click',function(){S.screen='createGroup';update();});
+    pr.appendChild(nb); pills.appendChild(pr); wrap.appendChild(pills);
+  }
+
+  // FEED TAB
+  if(S.tab==='feed'){
+    var curFeed=S.showEmp?[]:(S.feed[S.group]||[]);
+    if(curFeed.length===0){
+      var emp=div({style:{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'20px 20px 80px',animation:'fadeUp .4s ease both'}});
+      var ec=gEmp(S.group);
+      var ei=div({style:{fontSize:'58px',marginBottom:'12px',animation:'float 3s ease-in-out infinite'}}); ei.textContent=ec.emoji; emp.appendChild(ei);
+      emp.appendChild(div({style:{fontFamily:'Lora,serif',fontSize:'20px',fontWeight:600,color:t.ad,textAlign:'center',marginBottom:'9px'}},ec.head));
+      emp.appendChild(div({style:{fontSize:'13px',color:'#9B7B62',textAlign:'center',lineHeight:1.65,marginBottom:'18px',maxWidth:'280px'}},ec.sub));
+      var sb=btn({style:{width:'100%',padding:'14px',borderRadius:'50px',background:ec.col,border:'none',color:'white',fontSize:'15px',fontWeight:800,cursor:'pointer',marginBottom:'9px'}},ec.cta);
+      sb.addEventListener('click',function(){S.compose=true;update();});
+      emp.appendChild(sb);
+      var ib=btn({style:{width:'100%',padding:'12px',borderRadius:'50px',background:'transparent',border:'2px solid '+t.ap,color:t.ad,fontSize:'13px',fontWeight:700,cursor:'pointer'}},'Invite family members first');
+      ib.addEventListener('click',function(){S.screen='manageGroup';S.manGroup=S.group;update();});
+      emp.appendChild(ib); wrap.appendChild(emp);
+    } else {
+      var composebar=div({style:{padding:'8px 12px 0',background:t.bg,flexShrink:0}});
+      var cb2=btn({style:{width:'100%',padding:'9px 12px',borderRadius:'13px',background:t.cb,border:'2px dashed '+t.al,display:'flex',alignItems:'center',gap:'8px',cursor:'pointer',textAlign:'left',fontSize:'13px',color:'#9B7B62',fontWeight:600}},'Share something with your family...');
+      cb2.addEventListener('click',function(){S.compose=true;update();});
+      composebar.appendChild(cb2); wrap.appendChild(composebar);
+      var feedEl=div({class:'scr',style:{padding:'9px 12px 88px',display:'flex',flexDirection:'column',gap:'10px'}});
+      curFeed.forEach(function(item,i){feedEl.appendChild(renderFeedItem(item,i,t));});
+      wrap.appendChild(feedEl);
+      var fab=btn({style:{position:'fixed',bottom:'80px',right:'50%',transform:'translateX(160px)',width:'48px',height:'48px',borderRadius:'50%',background:t.a,border:'none',color:'white',fontSize:'22px',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 6px 20px '+t.a+'66',cursor:'pointer',zIndex:40}},'+');
+      fab.addEventListener('click',function(){S.compose=true;update();});
+      wrap.appendChild(fab);
+    }
+  }
+
+  // CHAT TAB
+  if(S.tab==='chat'){
+    if(S.openChat){
+      var isDm=S.openChat.type==='dm';var cid=S.openChat.id;
+      var dm=isDm?S.dms.find(function(d){return d.id===cid;}):null;
+      var cg=!isDm?S.groups.find(function(g){return g.id===cid;}):null;
+      var ct=!isDm?gt(cid):{a:'#C4714A',al:'#E8956D',ap:'#F5DDD1',ad:'#6B4226',bg:'#FAF6F0',cb:'#FFF9F2'};
+      var ctitle=isDm?dm.members.map(function(m){return m.name;}).join(', '):cg.label;
+      var cicon=isDm?dm.members[0].av:cg.icon;
+      var msgs=S.chatMsgs[cid]||[];var iv=S.chatIn[cid]||'';
+      var chdr=div({style:{background:ct.cb,padding:'9px 11px',display:'flex',alignItems:'center',gap:'8px',borderBottom:'1px solid '+ct.ap,flexShrink:0}});
+      var bb=btn({style:{background:ct.ap,border:'none',borderRadius:'50px',padding:'6px 11px',fontSize:'12px',fontWeight:700,color:ct.ad,cursor:'pointer'}},'Back');
+      bb.addEventListener('click',function(){S.openChat=null;update();});
+      chdr.appendChild(bb);
+      var ci=div({style:{width:'30px',height:'30px',borderRadius:'50%',background:ct.ap,border:'2px solid '+ct.al,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'16px',flexShrink:0}}); ci.textContent=cicon; chdr.appendChild(ci);
+      chdr.appendChild(div({style:{fontSize:'14px',fontWeight:700,color:'#3D2314'}},ctitle));
+      wrap.appendChild(chdr);
+      var mlist=div({class:'scr',style:{padding:'10px 11px 6px',display:'flex',flexDirection:'column',gap:'8px',background:ct.bg}});
+      if(!msgs.length){var em=div({style:{textAlign:'center',padding:'40px 18px',color:'#9B7B62'}});var ei2=div({style:{fontSize:'40px',marginBottom:'8px'}});ei2.textContent=cicon;em.appendChild(ei2);em.appendChild(div({style:{fontSize:'13px',fontWeight:700,color:'#6B4C35'}},'Start the conversation!'));mlist.appendChild(em);}
+      msgs.forEach(function(msg){
+        var iy=msg.you;
+        var row=div({style:{display:'flex',flexDirection:iy?'row-reverse':'row',alignItems:'flex-end',gap:'6px'}});
+        if(!iy){var ma=div({style:{width:'25px',height:'25px',borderRadius:'50%',background:ct.ap,border:'1.5px solid '+ct.al,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'12px',flexShrink:0}});ma.textContent=msg.av;row.appendChild(ma);}
+        var mb=div({style:{maxWidth:'72%'}});
+        var mt2=div({style:{padding:'8px 11px',borderRadius:iy?'15px 15px 3px 15px':'15px 15px 15px 3px',background:iy?ct.a:'white',color:iy?'white':'#3D2314',fontSize:'13px',lineHeight:1.55,boxShadow:'0 1px 5px rgba(0,0,0,.07)'}},msg.text);
+        mb.appendChild(mt2);
+        mb.appendChild(div({style:{fontSize:'9px',color:'#9B7B62',marginTop:'2px',textAlign:iy?'right':'left'}},msg.time));
+        row.appendChild(mb); mlist.appendChild(row);
+      });
+      wrap.appendChild(mlist);
+      var cinp=div({style:{padding:'7px 10px 22px',borderTop:'1px solid '+ct.ap,background:ct.cb,flexShrink:0,display:'flex',gap:'6px',alignItems:'flex-end'}});
+      var cii=inp({type:'text',placeholder:'Message...',style:{flex:1,background:ct.bg,borderRadius:'19px',border:'1.5px solid '+ct.ap,padding:'7px 11px',fontSize:'13px',color:'#3D2314',outline:'none'}});
+      cii.value=iv;
+      cii.addEventListener('input',function(){if(!S.chatIn)S.chatIn={};S.chatIn[cid]=this.value;});
+      cii.addEventListener('keydown',function(e){if(e.key==='Enter'&&this.value.trim())sendChat(cid,isDm);});
+      cinp.appendChild(cii);
+      var sb2=btn({style:{width:'36px',height:'36px',borderRadius:'50%',background:ct.a,border:'none',color:'white',fontSize:'17px',cursor:'pointer',flexShrink:0}},'↑');
+      sb2.addEventListener('click',function(){sendChat(cid,isDm);});
+      cinp.appendChild(sb2); wrap.appendChild(cinp);
+    } else {
+      var clist=div({class:'scr',style:{padding:'10px 12px 88px'}});
+      var ndb=btn({style:{width:'100%',marginBottom:'12px',padding:'10px 13px',borderRadius:'13px',background:t.cb,border:'2px dashed '+t.al,display:'flex',alignItems:'center',gap:'8px',cursor:'pointer',textAlign:'left',fontSize:'13px',color:t.ad,fontWeight:700}},'✏ New direct message');
+      ndb.addEventListener('click',function(){S.newDm=true;update();});
+      clist.appendChild(ndb);
+      clist.appendChild(div({style:{fontSize:'11px',fontWeight:800,color:'#9B7B62',letterSpacing:'.6px',textTransform:'uppercase',marginBottom:'7px'}},'Group Chats'));
+      S.groups.forEach(function(g){
+        var ct2=gt(g.id);var pv=CPREV[g.id];
+        var row=div({style:{display:'flex',alignItems:'center',gap:'10px',padding:'10px 11px',borderRadius:'15px',background:ct2.cb,border:'1.5px solid '+ct2.ap,cursor:'pointer',marginBottom:'6px'}});
+        var gi=div({style:{width:'40px',height:'40px',borderRadius:'50%',background:ct2.ap,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'19px',flexShrink:0,border:'2px solid '+ct2.al}});gi.textContent=g.icon;row.appendChild(gi);
+        var gd=div({style:{flex:1,minWidth:0}});
+        var gr=div({style:{display:'flex',alignItems:'baseline',justifyContent:'space-between',gap:'5px'}});
+        gr.appendChild(div({style:{fontSize:'14px',fontWeight:700,color:'#3D2314'}},g.label));
+        if(pv)gr.appendChild(div({style:{fontSize:'10px',color:'#9B7B62'}},pv.time));
+        gd.appendChild(gr);
+        if(pv)gd.appendChild(div({style:{fontSize:'12px',color:'#9B7B62',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},pv.who+': '+pv.text));
+        row.appendChild(gd);
+        row.appendChild(div({style:{fontSize:'17px',color:ct2.al}},'›'));
+        row.addEventListener('click',function(){S.openChat={type:'group',id:g.id};update();});
+        clist.appendChild(row);
+      });
+      clist.appendChild(div({style:{fontSize:'11px',fontWeight:800,color:'#9B7B62',letterSpacing:'.6px',textTransform:'uppercase',margin:'12px 0 7px'}},'Direct Messages'));
+      if(!S.dms.length){clist.appendChild(div({style:{textAlign:'center',padding:'18px',background:'#FFF9F2',borderRadius:'14px',border:'1.5px solid #F5DDD1',fontSize:'13px',color:'#6B4C35'}},'No direct messages yet'));}
+      S.dms.forEach(function(dm){
+        var row=div({style:{display:'flex',alignItems:'center',gap:'10px',padding:'10px 11px',borderRadius:'15px',background:'#FFF9F2',border:'1.5px solid #F5DDD1',cursor:'pointer',marginBottom:'6px'}});
+        var da=div({style:{width:'40px',height:'40px',borderRadius:'50%',background:'#F5DDD1',border:'2px solid #E8956D',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'19px'}});da.textContent=dm.members[0].av;row.appendChild(da);
+        var dd=div({style:{flex:1,minWidth:0}});
+        var dr=div({style:{display:'flex',justifyContent:'space-between'}});dr.appendChild(div({style:{fontSize:'14px',fontWeight:700,color:'#3D2314'}},dm.members.map(function(m){return m.name;}).join(', ')));dr.appendChild(div({style:{fontSize:'10px',color:'#9B7B62'}},dm.lt));dd.appendChild(dr);
+        dd.appendChild(div({style:{fontSize:'12px',color:'#9B7B62',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},dm.last));
+        row.appendChild(dd);row.appendChild(div({style:{fontSize:'17px',color:'#E8956D'}},'›'));
+        row.addEventListener('click',function(){S.openChat={type:'dm',id:dm.id};update();});
+        clist.appendChild(row);
+      });
+      wrap.appendChild(clist);
+    }
+  }
+
+  // CALENDAR TAB
+  if(S.tab==='calendar'){
+    var cal=div({class:'scr',style:{padding:'13px 12px 88px'}});
+    var calHdr=div({style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'11px'}});
+    calHdr.appendChild(btn({style:{width:'32px',height:'32px',borderRadius:'50%',background:t.ap,border:'none',fontSize:'16px',cursor:'pointer',color:t.ad,fontWeight:700}},'‹'));
+    calHdr.appendChild(div({style:{fontFamily:'Lora,serif',fontSize:'16px',fontWeight:600,color:'#3D2314'}},'April 2026'));
+    calHdr.appendChild(btn({style:{width:'32px',height:'32px',borderRadius:'50%',background:t.ap,border:'none',fontSize:'16px',cursor:'pointer',color:t.ad,fontWeight:700}},'›'));
+    cal.appendChild(calHdr);
+    var grid=div({style:{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:'2px',marginBottom:'6px'}});
+    ['S','M','T','W','T','F','S'].forEach(function(d){grid.appendChild(div({style:{textAlign:'center',fontSize:'10px',fontWeight:700,color:'#9B7B62',padding:'3px 0'}},d));});
+    [{d:30,p:1},{d:31,p:1},{d:1},{d:2},{d:3},{d:4},{d:5},{d:6},{d:7},{d:8},{d:9},{d:10},{d:11},{d:12},{d:13},{d:14},{d:15},{d:16},{d:17},{d:18},{d:19,ev:1},{d:20},{d:21,ev:1,bd:1},{d:22,bd:1},{d:23},{d:24},{d:25},{d:26},{d:27},{d:28},{d:29},{d:30},{d:1,n:1},{d:2,n:1},{d:3,n:1}].forEach(function(day){
+      var isToday=day.d===16&&!day.p&&!day.n;
+      var dc=div({style:{aspectRatio:1,borderRadius:'50%',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',fontSize:'11px',fontWeight:600,position:'relative',color:isToday?'white':day.p||day.n?'rgba(107,66,38,.2)':'#6B4C35',background:isToday?t.a:'transparent',cursor:'pointer'}},String(day.d));
+      if(day.ev||day.bd){var dots=div({style:{position:'absolute',bottom:'1px',display:'flex',gap:'2px'}});if(day.ev){var de=div({style:{width:'3px',height:'3px',borderRadius:'50%',background:isToday?'white':t.al}});dots.appendChild(de);}if(day.bd){var db=div({style:{width:'3px',height:'3px',borderRadius:'50%',background:'#D4922A'}});dots.appendChild(db);}dc.appendChild(dots);}
+      grid.appendChild(dc);
+    });
+    cal.appendChild(grid);
+    var aeb=btn({style:{width:'100%',padding:'11px',borderRadius:'13px',background:t.ap,border:'2px dashed '+t.al,fontSize:'13px',fontWeight:700,color:t.ad,cursor:'pointer',marginBottom:'14px'}},'+ Add Event');
+    aeb.addEventListener('click',function(){S.addEv=true;update();});
+    cal.appendChild(aeb);
+    cal.appendChild(div({style:{fontFamily:'Lora,serif',fontSize:'14px',fontWeight:600,color:'#3D2314',marginBottom:'8px'}},'🎂 Birthdays'));
+    [{name:'Mom',date:'Apr 22',av:'👩',d:6},{name:'Grandma Rose',date:'May 3',av:'👵',d:17},{name:'Jake',date:'Jun 14',av:'👦',d:59}].forEach(function(b){
+      var br=div({style:{background:'#FBF0D9',border:'1.5px solid #E8C878',borderRadius:'13px',padding:'10px 12px',display:'flex',alignItems:'center',gap:'10px',marginBottom:'6px'}});
+      var ba=div({style:{width:'36px',height:'36px',borderRadius:'50%',background:'#F8E4B0',border:'2px solid #E8C878',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'18px'}});ba.textContent=b.av;br.appendChild(ba);
+      var bd2=div({style:{flex:1}});bd2.appendChild(div({style:{fontSize:'13px',fontWeight:700,color:'#3D2314'}},b.name));bd2.appendChild(div({style:{fontSize:'11px',color:'#9B7B62'}},'🎂 '+b.date));br.appendChild(bd2);
+      br.appendChild(div({style:{fontSize:'10px',fontWeight:700,color:'#D4922A',background:'#F8E4B0',borderRadius:'50px',padding:'2px 8px'}},b.d===0?'Today!':b.d===1?'Tomorrow!':b.d+'d'));
+      cal.appendChild(br);
+    });
+    cal.appendChild(div({style:{fontFamily:'Lora,serif',fontSize:'14px',fontWeight:600,color:'#3D2314',marginBottom:'8px',marginTop:'8px'}},'📅 Events'));
+    S.evs.forEach(function(ev){
+      var er=div({style:{background:'#FBF0D9',border:'1.5px solid #E8C878',borderRadius:'15px',padding:'11px',marginBottom:'8px',cursor:'pointer'}});
+      var eh=div({style:{display:'flex',alignItems:'center',gap:'10px',marginBottom:'7px'}});
+      var edt=div({style:{width:'44px',height:'44px',borderRadius:'12px',background:'#D4922A',color:'white',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',flexShrink:0}});
+      edt.appendChild(div({style:{fontSize:'7px',fontWeight:700,letterSpacing:'1px',textTransform:'uppercase'}},ev.month));
+      edt.appendChild(div({style:{fontSize:'18px',fontWeight:700,lineHeight:1}},String(ev.day)));
+      eh.appendChild(edt);
+      var ei2=div(); ei2.appendChild(div({style:{fontSize:'13px',fontWeight:700,color:'#3D2314'}},ev.title)); if(ev.time)ei2.appendChild(div({style:{fontSize:'11px',color:'#9B7B62'}},ev.group+' · '+ev.time)); eh.appendChild(ei2);
+      er.appendChild(eh);
+      var ea=div({style:{display:'flex',gap:'7px'}});
+      var egb=btn({style:{flex:1,padding:'7px',borderRadius:'50px',border:'2px solid #D4922A',background:S.rsvp[ev.id]?'#D4922A':'transparent',fontSize:'11px',fontWeight:700,color:S.rsvp[ev.id]?'white':'#D4922A',cursor:'pointer'}},S.rsvp[ev.id]?"Going!":"I'll Be There");
+      egb.addEventListener('click',function(e){e.stopPropagation();S.rsvp[ev.id]=!S.rsvp[ev.id];update();});
+      ea.appendChild(egb);ea.appendChild(btn({style:{flex:1,padding:'7px',borderRadius:'50px',border:'2px solid #D4922A',background:'transparent',fontSize:'11px',fontWeight:700,color:'#D4922A',cursor:'pointer'}},'Maybe'));
+      er.appendChild(ea);cal.appendChild(er);
+    });
+    wrap.appendChild(cal);
+  }
+
+  // PROFILE
+  if(S.tab==='profile'){
+    var prof=div({class:'scr',style:{padding:'24px 18px 88px',display:'flex',flexDirection:'column',alignItems:'center'}});
+    var pa=div({style:{width:'80px',height:'80px',borderRadius:'50%',background:t.ap,border:'3px solid '+t.al,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'40px',marginBottom:'12px'}});pa.textContent=S.avatar;prof.appendChild(pa);
+    prof.appendChild(div({style:{fontFamily:'Lora,serif',fontSize:'22px',fontWeight:600,color:'#3D2314',marginBottom:'4px'}},S.name||'Your Name'));
+    prof.appendChild(div({style:{fontSize:'14px',color:'#9B7B62',marginBottom:'24px'}},'Keep Up member'));
+    prof.appendChild(div({style:{fontSize:'14px',color:'#9B7B62',textAlign:'center',lineHeight:1.7}},'Profile settings coming soon!'));
+    wrap.appendChild(prof);
+  }
+
+  wrap.appendChild(navbar());
+
+  // OVERLAYS
+  if(S.compose){
+    var ov=overlay([
+      handle(),
+      div({style:{fontFamily:'Lora,serif',fontSize:'18px',fontWeight:600,color:'#3D2314',marginBottom:'3px'}},'Share with '+agi.icon+' '+agi.label),
+      div({style:{height:'14px'}}),
+      ...[{icon:'📷',label:'Share a Photo',type:'photo'},{icon:'📍',label:'Post a Check-in',type:'checkin'},{icon:'📅',label:'Add an Event',type:'event'}].map(function(opt){
+        var row=div({style:{background:t.bg,border:'2px solid '+t.ap,borderRadius:'15px',padding:'12px 13px',display:'flex',alignItems:'center',gap:'10px',cursor:'pointer',marginBottom:'8px'}});
+        var oi=div({style:{fontSize:'22px',width:'42px',height:'42px',borderRadius:'11px',background:'white',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,border:'1px solid '+t.ap}});oi.textContent=opt.icon;row.appendChild(oi);
+        row.appendChild(div({style:{fontSize:'14px',fontWeight:700,color:'#3D2314'}},opt.label));
+        row.appendChild(div({style:{marginLeft:'auto',fontSize:'16px',color:t.al}},'›'));
+        row.addEventListener('click',function(){if(opt.type==='event'){S.compose=false;S.addEv=true;}else{S.upType=opt.type;S.upStep=opt.type==='photo'?2:3;S.upCap='';S.upCi='';S.upEmoji='🌻';S.upImg=null;S.compose=false;S.upOpen=true;}update();});
+        return row;
+      })
+    ],function(){S.compose=false;update();});
+    wrap.appendChild(ov);
+  }
+
+  if(S.addEv){
+    var evSheet=[handle(),div({style:{fontFamily:'Lora,serif',fontSize:'18px',fontWeight:600,color:'#3D2314',marginBottom:'13px'}},'Add an Event')];
+    var evFields={};
+    ['title','time','loc'].forEach(function(f){
+      var label=f==='title'?'Event Name':f==='time'?'Time':'Location';
+      var ph=f==='title'?'e.g. Easter Brunch':f==='time'?'e.g. 10:00 AM':"e.g. Grandma's house";
+      evSheet.push(div({style:{marginBottom:'10px'}}));
+      var fi=inp({type:'text',placeholder:ph,style:{width:'100%',padding:'11px 12px',borderRadius:'12px',border:'1.5px solid #F5DDD1',background:'#FAF6F0',fontSize:'14px',color:'#3D2314',outline:'none'}});
+      fi.value=S.nEv[f]||'';fi.addEventListener('input',function(){S.nEv[f]=this.value;});
+      evFields[f]=fi;evSheet.push(fi);
+    });
+    var row2=div({style:{display:'flex',gap:'8px',marginBottom:'10px',marginTop:'4px'}});
+    var ms=h('select',{style:{flex:1,padding:'11px 12px',borderRadius:'12px',border:'1.5px solid #F5DDD1',background:'#FAF6F0',fontSize:'13px',color:'#3D2314',outline:'none'}});
+    MONTHS.forEach(function(m){var o=h('option');o.textContent=m;o.value=m;if(m===S.nEv.month)o.selected=true;ms.appendChild(o);});
+    ms.addEventListener('change',function(){S.nEv.month=this.value;});
+    var ds=inp({type:'number',placeholder:'1-31',style:{flex:1,padding:'11px 12px',borderRadius:'12px',border:'1.5px solid #F5DDD1',background:'#FAF6F0',fontSize:'13px',color:'#3D2314',outline:'none'}});
+    ds.value=S.nEv.day||'';ds.addEventListener('input',function(){S.nEv.day=this.value;});
+    row2.appendChild(ms);row2.appendChild(ds);evSheet.push(row2);
+    var gs=h('select',{style:{width:'100%',padding:'11px 12px',borderRadius:'12px',border:'1.5px solid #F5DDD1',background:'#FAF6F0',fontSize:'13px',color:'#3D2314',outline:'none',marginBottom:'14px'}});
+    S.groups.forEach(function(g){var o=h('option');o.textContent=g.label;o.value=g.label;gs.appendChild(o);});
+    gs.addEventListener('change',function(){S.nEv.group=this.value;});
+    evSheet.push(gs);
+    evSheet.push(bigbtn('Add to Calendar',function(){
+      if(!S.nEv.title||!S.nEv.day)return;
+      S.evs.push(Object.assign({},S.nEv,{id:Date.now(),going:1,maybe:0,day:parseInt(S.nEv.day)||1}));
+      S.nEv={title:'',month:'APR',day:'',time:'',loc:'',group:'Immediate'};S.addEv=false;update();
+    }));
+    wrap.appendChild(overlay(evSheet,function(){S.addEv=false;update();}));
+  }
+
+  if(S.cmtOpen!==null){
+    var allP=Object.values(S.feed).reduce(function(a,b){return a.concat(b);},[]);
+    var pc2=S.cmts[S.cmtOpen]||[];
+    var cmtSheet=[handle(),div({style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'12px'}})];
+    cmtSheet[1].appendChild(div({style:{fontFamily:'Lora,serif',fontSize:'15px',fontWeight:600,color:'#3D2314'}},'Comments'+(pc2.length?' ('+pc2.length+')':'')));
+    var cb3=btn({style:{background:t.ap,border:'none',borderRadius:'50px',padding:'4px 10px',fontSize:'12px',fontWeight:700,color:t.ad,cursor:'pointer'}},'Close');
+    cb3.addEventListener('click',function(){S.cmtOpen=null;update();});
+    cmtSheet[1].appendChild(cb3);
+    if(!pc2.length)cmtSheet.push(div({style:{textAlign:'center',padding:'24px 0',color:'#9B7B62',fontSize:'13px'}},'No comments yet. Be the first!'));
+    pc2.forEach(function(c){
+      var cr=div({style:{display:'flex',gap:'8px',marginBottom:'12px'}});
+      var ca=div({style:{width:'30px',height:'30px',borderRadius:'50%',background:t.ap,border:'2px solid '+t.al,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'15px',flexShrink:0}});ca.textContent=c.av;cr.appendChild(ca);
+      var cd=div(); var cb4=div({style:{background:t.bg,borderRadius:'5px 13px 13px 13px',padding:'8px 11px',border:'1px solid '+t.ap}});
+      cb4.appendChild(div({style:{fontSize:'11px',fontWeight:800,color:t.ad,marginBottom:'2px'}},c.name));cb4.appendChild(div({style:{fontSize:'13px',color:'#3D2314',lineHeight:1.5}},c.text));cd.appendChild(cb4);
+      cd.appendChild(div({style:{fontSize:'10px',color:'#9B7B62',marginTop:'2px'}},c.time));cr.appendChild(cd);cmtSheet.push(cr);
+    });
+    var cinp2=div({style:{display:'flex',gap:'6px',alignItems:'center',marginTop:'12px',borderTop:'1px solid '+t.ap,paddingTop:'12px'}});
+    var ci2=inp({type:'text',placeholder:'Say something...',style:{flex:1,padding:'9px 12px',borderRadius:'20px',border:'2px solid '+t.ap,background:t.bg,fontSize:'13px',color:'#3D2314',outline:'none'}});
+    ci2.value=S.cmtIn;ci2.addEventListener('input',function(){S.cmtIn=this.value;});
+    ci2.addEventListener('keydown',function(e){if(e.key==='Enter'&&S.cmtIn.trim())addComment(S.cmtOpen);});
+    cinp2.appendChild(ci2);
+    var csb=btn({style:{width:'34px',height:'34px',borderRadius:'50%',background:t.a,border:'none',color:'white',fontSize:'16px',cursor:'pointer',flexShrink:0}},'↑');
+    csb.addEventListener('click',function(){addComment(S.cmtOpen);});
+    cinp2.appendChild(csb);cmtSheet.push(cinp2);
+    wrap.appendChild(overlay(cmtSheet,function(){S.cmtOpen=null;update();}));
+  }
+
+  if(S.upOpen){
+    var upOv=div({style:{position:'fixed',inset:0,background:'rgba(61,35,20,.5)',zIndex:70,display:'flex',alignItems:'flex-end',animation:'fadeIn .2s ease'}});
+    var upSheet=div({style:{width:'100%',maxWidth:'430px',margin:'0 auto',background:S.upStep===4?t.ad:'#FFF9F2',borderRadius:'24px 24px 0 0',animation:'slideUp .28s ease',maxHeight:'92vh',display:'flex',flexDirection:'column',overflow:'hidden'}});
+    upOv.addEventListener('click',function(){if(S.upStep!==4){S.upOpen=false;update();}});
+    upSheet.addEventListener('click',function(e){e.stopPropagation();});
+
+    if(S.upStep===4){
+      var sc=div({style:{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'40px 26px 56px',background:'linear-gradient(160deg,'+t.ad+','+t.a+')'}});
+      var si=div({style:{fontSize:'56px',marginBottom:'18px'}});si.textContent='✅';sc.appendChild(si);
+      sc.appendChild(div({style:{fontFamily:'Lora,serif',fontSize:'22px',fontWeight:600,color:'white',textAlign:'center',marginBottom:'6px'}},S.upType==='checkin'?'Check-in posted!':'Photo shared!'));
+      sc.appendChild(div({style:{fontSize:'14px',color:'rgba(255,255,255,.75)',textAlign:'center'}},'Your family can see it now'));
+      upSheet.appendChild(sc);
+    }
+
+    if(S.upStep===2){
+      var uh=div({style:{padding:'13px 15px 10px',borderBottom:'1px solid #F5DDD1',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}});
+      var ucb=btn({style:{background:'#F5DDD1',border:'none',borderRadius:'50px',padding:'6px 12px',fontSize:'13px',fontWeight:700,color:'#6B4226',cursor:'pointer'}},'Cancel');ucb.addEventListener('click',function(){S.upOpen=false;update();});
+      uh.appendChild(ucb);uh.appendChild(div({style:{fontSize:'16px',fontWeight:700,color:'#C4714A'}},'Add a Photo'));uh.appendChild(div({style:{fontSize:'11px',fontWeight:700,color:'#9B7B62',background:'#F5DDD1',padding:'4px 9px',borderRadius:'50px'}},'1 of 2'));
+      upSheet.appendChild(uh);
+      var ub=div({class:'scr',style:{padding:'14px 15px'}});
+      var photoArea=div({style:{width:'100%',aspectRatio:'4/3',borderRadius:'16px',border:'2.5px dashed '+t.al,background:'linear-gradient(135deg,'+t.ap+','+t.sb+')',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',cursor:'pointer',marginBottom:'12px',overflow:'hidden',position:'relative'}});
+      if(S.upImg){var pi=h('img',{style:{width:'100%',height:'100%',objectFit:'cover'}});pi.src=S.upImg;photoArea.appendChild(pi);var pc3=div({style:{position:'absolute',bottom:'8px',right:'8px',background:'rgba(0,0,0,.55)',borderRadius:'50px',padding:'4px 11px',color:'white',fontSize:'12px',fontWeight:700}});pc3.textContent='Change';photoArea.appendChild(pc3);}
+      else{var pi2=div({style:{fontSize:'38px',marginBottom:'6px'}});pi2.textContent='📷';photoArea.appendChild(pi2);photoArea.appendChild(div({style:{fontSize:'14px',fontWeight:700,color:t.ad}},'Tap to add a photo'));}
+      var fi2=h('input',{type:'file',accept:'image/*',style:{display:'none'}});
+      fi2.addEventListener('change',function(){var f=this.files&&this.files[0];if(!f)return;var r=new FileReader();r.onload=function(e){S.upImg=e.target.result;update();};r.readAsDataURL(f);});
+      photoArea.addEventListener('click',function(){fi2.click();});
+      ub.appendChild(photoArea);ub.appendChild(fi2);
+      if(!S.upImg){
+        var eg2=div({style:{display:'flex',flexWrap:'wrap',gap:'6px'}});
+        PEMJ.forEach(function(e){var b=btn({style:{width:'38px',height:'38px',borderRadius:'9px',fontSize:'18px',background:S.upEmoji===e?t.ap:'#FFF9F2',border:'2px solid '+(S.upEmoji===e?t.a:'rgba(107,66,38,.12)'),cursor:'pointer'}},e);b.addEventListener('click',function(){S.upEmoji=e;update();});eg2.appendChild(b);});
+        ub.appendChild(eg2);
+      }
+      upSheet.appendChild(ub);
+      var uf=div({style:{padding:'12px 15px 26px',flexShrink:0}});
+      var unb=btn({style:{width:'100%',padding:'13px',borderRadius:'50px',background:t.a,border:'none',color:'white',fontSize:'14px',fontWeight:800,cursor:'pointer'}},'Next: Add Caption');
+      unb.addEventListener('click',function(){S.upStep=2.5;update();});
+      uf.appendChild(unb);upSheet.appendChild(uf);
+    }
+
+    if(S.upStep===2.5){
+      var uh2=div({style:{padding:'13px 15px 10px',borderBottom:'1px solid #F5DDD1',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}});
+      var ubb=btn({style:{background:'#F5DDD1',border:'none',borderRadius:'50px',padding:'6px 12px',fontSize:'13px',fontWeight:700,color:'#6B4226',cursor:'pointer'}},'Back');ubb.addEventListener('click',function(){S.upStep=2;update();});
+      uh2.appendChild(ubb);uh2.appendChild(div({style:{fontSize:'16px',fontWeight:700,color:'#C4714A'}},'Add Caption'));uh2.appendChild(div({style:{fontSize:'11px',fontWeight:700,color:'#9B7B62',background:'#F5DDD1',padding:'4px 9px',borderRadius:'50px'}},'2 of 2'));
+      upSheet.appendChild(uh2);
+      var ub2=div({class:'scr',style:{padding:'14px 15px'}});
+      var tp=div({style:{width:'100%',height:'120px',borderRadius:'13px',background:'linear-gradient(135deg,'+t.ap+','+t.sb+')',display:'flex',alignItems:'center',justifyContent:'center',marginBottom:'12px',overflow:'hidden'}});
+      if(S.upImg){var tpi=h('img',{style:{width:'100%',height:'100%',objectFit:'cover'}});tpi.src=S.upImg;tp.appendChild(tpi);}else{var tpe=div({style:{fontSize:'56px'}});tpe.textContent=S.upEmoji;tp.appendChild(tpe);}
+      ub2.appendChild(tp);
+      var ta=txt({placeholder:"Tell your family what's going on...",rows:4,style:{width:'100%',padding:'12px',borderRadius:'13px',border:'2px solid #F5DDD1',background:'#FAF6F0',fontSize:'15px',color:'#3D2314',outline:'none',resize:'none',lineHeight:1.6,marginBottom:'8px'}});
+      ta.value=S.upCap;ta.addEventListener('input',function(){S.upCap=this.value;});
+      ub2.appendChild(ta);upSheet.appendChild(ub2);
+      var uf2=div({style:{padding:'12px 15px 26px',flexShrink:0}});
+      var usb=btn({style:{width:'100%',padding:'13px',borderRadius:'50px',background:t.a,border:'none',color:'white',fontSize:'14px',fontWeight:800,cursor:'pointer'}},'Share with '+agi.label);
+      usb.addEventListener('click',submitPost);uf2.appendChild(usb);upSheet.appendChild(uf2);
+    }
+
+    if(S.upStep===3){
+      var uh3=div({style:{padding:'13px 15px 10px',borderBottom:'1px solid #F5DDD1',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}});
+      var ucb2=btn({style:{background:'#F5DDD1',border:'none',borderRadius:'50px',padding:'6px 12px',fontSize:'13px',fontWeight:700,color:'#6B4226',cursor:'pointer'}},'Cancel');ucb2.addEventListener('click',function(){S.upOpen=false;update();});
+      uh3.appendChild(ucb2);uh3.appendChild(div({style:{fontSize:'16px',fontWeight:700,color:'#C4714A'}},'Check-in'));uh3.appendChild(div({style:{width:'55px'}}));
+      upSheet.appendChild(uh3);
+      var ub3=div({class:'scr',style:{padding:'14px 15px'}});
+      var ta2=txt({placeholder:"Let your family know how you're doing...",rows:5,style:{width:'100%',padding:'12px',borderRadius:'13px',border:'2px solid #F5DDD1',background:'#FAF6F0',fontSize:'15px',color:'#3D2314',outline:'none',resize:'none',lineHeight:1.6,marginBottom:'12px'}});
+      ta2.value=S.upCi;ta2.addEventListener('input',function(){S.upCi=this.value;});
+      ub3.appendChild(ta2);
+      ['Good morning! Starting the day with...','Been thinking about everyone. Miss you all!','Good news! ','Quiet day today. Anyone free for a call?'].forEach(function(p){
+        var pb=btn({style:{display:'flex',alignItems:'center',gap:'8px',padding:'9px 11px',borderRadius:'11px',textAlign:'left',background:'#FFF9F2',border:'1.5px solid #F5DDD1',cursor:'pointer',width:'100%',marginBottom:'6px',fontSize:'12px',color:'#6B4C35',fontWeight:600}},p);
+        pb.addEventListener('click',function(){S.upCi=p;ta2.value=p;});
+        ub3.appendChild(pb);
+      });
+      upSheet.appendChild(ub3);
+      var uf3=div({style:{padding:'12px 15px 26px',flexShrink:0}});
+      var csb2=btn({style:{width:'100%',padding:'13px',borderRadius:'50px',background:t.a,border:'none',color:'white',fontSize:'14px',fontWeight:800,cursor:'pointer'}},'Post Check-in');
+      csb2.addEventListener('click',submitPost);uf3.appendChild(csb2);upSheet.appendChild(uf3);
+    }
+
+    upOv.appendChild(upSheet);wrap.appendChild(upOv);
+  }
+
+  if(S.newDm){
+    var dmGrp2=S.groups.find(function(g){return g.id===S.dmGrp;})||S.groups[0];var dmMems=S.mems[S.dmGrp]||[];
+    var dmSheet=[handle(),div({style:{fontFamily:'Lora,serif',fontSize:'18px',fontWeight:600,color:'#3D2314',marginBottom:'12px'}},'New Direct Message')];
+    var gpr=div({style:{display:'flex',gap:'6px',marginBottom:'11px',overflowX:'auto'}});
+    S.groups.forEach(function(g){var gt2=gt(g.id);var gb2=btn({style:{flexShrink:0,display:'flex',alignItems:'center',gap:'4px',padding:'5px 10px',borderRadius:'50px',background:S.dmGrp===g.id?gt2.ap:'#FAF6F0',border:'2px solid '+(S.dmGrp===g.id?gt2.a:'rgba(107,66,38,.12)'),fontSize:'12px',fontWeight:700,color:S.dmGrp===g.id?gt2.ad:'#6B4C35',cursor:'pointer'}},g.icon+' '+g.label);gb2.addEventListener('click',function(){S.dmGrp=g.id;S.dmSel=[];update();});gpr.appendChild(gb2);});
+    dmSheet.push(gpr);
+    dmMems.filter(function(m){return!m.you;}).forEach(function(mem){
+      var gt2=gt(S.dmGrp);var sel=S.dmSel.includes(mem.id);
+      var mr=div({style:{display:'flex',alignItems:'center',gap:'10px',padding:'9px 11px',borderRadius:'13px',background:sel?gt2.ap:'#FAF6F0',border:'2px solid '+(sel?gt2.a:'rgba(107,66,38,.1)'),cursor:'pointer',marginBottom:'6px'}});
+      var ma=div({style:{width:'34px',height:'34px',borderRadius:'50%',background:sel?gt2.al:gt2.ap,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'17px',flexShrink:0}});ma.textContent=mem.av;mr.appendChild(ma);
+      mr.appendChild(div({style:{flex:1,fontSize:'13px',fontWeight:700,color:'#3D2314'}},mem.name));
+      var ck=div({style:{width:'20px',height:'20px',borderRadius:'50%',background:sel?gt2.a:'white',border:'2px solid '+(sel?gt2.a:'rgba(107,66,38,.18)'),display:'flex',alignItems:'center',justifyContent:'center',fontSize:'11px',color:'white',fontWeight:700}},sel?'✓':'');
+      mr.appendChild(ck);
+      mr.addEventListener('click',function(){if(sel)S.dmSel=S.dmSel.filter(function(x){return x!==mem.id;});else S.dmSel.push(mem.id);update();});
+      dmSheet.push(mr);
+    });
+    var dsb=bigbtn(S.dmSel.length===0?'Select someone':'Start Chat',function(){
+      if(!S.dmSel.length)return;
+      var sm=dmMems.filter(function(m){return S.dmSel.includes(m.id);});
+      var nid='dm-'+Date.now();
+      S.dms.push({id:nid,members:sm,last:'',lt:'Now'});
+      S.chatMsgs[nid]=[];S.dmSel=[];S.newDm=false;S.openChat={type:'dm',id:nid};update();
+    },S.dmSel.length===0);
+    dmSheet.push(dsb);
+    wrap.appendChild(overlay(dmSheet,function(){S.newDm=false;S.dmSel=[];update();}));
+  }
+
+  return wrap;
+}
+
+function sendChat(cid,isDm){
+  var iv=S.chatIn[cid]||'';if(!iv.trim())return;
+  var msg={id:Date.now(),av:S.avatar,name:S.name||'You',text:iv.trim(),time:'Just now',you:true};
+  if(!S.chatMsgs[cid])S.chatMsgs[cid]=[];
+  S.chatMsgs[cid].push(msg);
+  S.chatIn[cid]='';
+  if(isDm){var dm=S.dms.find(function(d){return d.id===cid;});if(dm){dm.last=iv.trim();dm.lt='Just now';}}
+  update();
+}
+
+function addComment(pid){
+  if(!S.cmtIn.trim())return;
+  if(!S.cmts[pid])S.cmts[pid]=[];
+  S.cmts[pid].push({id:Date.now(),av:S.avatar,name:S.name||'You',text:S.cmtIn.trim(),time:'Just now'});
+  S.cmtIn='';update();
+}
+
+function submitPost(){
+  var p;
+  if(S.upType==='checkin'){p={id:Date.now(),type:'checkin',av:S.avatar,name:S.name||'You',time:'Just now',status:S.upCi};}
+  else{p={id:Date.now(),type:'photo',av:S.avatar,name:S.name||'You',time:'Just now',emoji:S.upImg?null:S.upEmoji,imgUrl:S.upImg,cap:S.upCap};}
+  if(!S.feed[S.group])S.feed[S.group]=[];
+  S.feed[S.group].unshift(p);
+  S.upStep=4;update();
+  setTimeout(function(){S.upOpen=false;S.upStep=1;update();},2200);
+}
+
+// ── BOOT ───────────────────────────────────────────────────────
+update();
 </script>
 </body>
 </html>
