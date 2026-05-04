@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"/>
+<meta name="theme-color" content="#C4714A"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-title" content="Keep Up"/>
+<title>Keep Up</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;background:#FAF6F0;font-family:sans-serif;color:#3D2314;}
+#app{height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:24px;}
+.logo{font-size:64px;}
+h1{font-size:28px;color:#C4714A;}
+p{font-size:15px;color:#9B7B62;text-align:center;max-width:280px;line-height:1.6;}
+button{padding:14px 32px;border-radius:50px;background:#C4714A;border:none;color:white;font-size:16px;font-weight:700;cursor:pointer;}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="logo">&#127969;</div>
+  <h1>Keep Up</h1>
+  <p>Stay close to the people who matter most. No ads. No algorithms. Just your family.</p>
+  <button onclick="alert('Keep Up is loading! Full app coming soon.')">Get Started</button>
+  <p style="font-size:12px;margin-top:8px;color:#C4714A;">Tap the 3-dot menu and Add to Home Screen</p>
+</div>
+</body>
+</html>
