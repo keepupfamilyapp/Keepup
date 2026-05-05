@@ -209,7 +209,7 @@ function buildOnboarding(){
     var scr=d({cls:"ob-screen",css:{position:"relative"}});
     scr.appendChild(dots(1));
     var body=d({cls:"ob-body"});
-    body.appendChild(d({cls:"ob-title"},"What\'s your name?"));
+    body.appendChild(d({cls:"ob-title"},"What's your name?"));
     body.appendChild(d({cls:"ob-sub"},"Use whatever your family calls you \u2014 Mom, Grandpa Joe, Jake\u2026"));
     var inp2=el("input",{type:"text",cls:"ob-input",placeholder:"Your name or nickname\u2026"});
     inp2.value=ST.obName;
@@ -241,7 +241,7 @@ function buildOnboarding(){
     });
     body.appendChild(grid);
     body.appendChild(d({cls:"ob-spacer"}));
-    body.appendChild(obBtn("That\'s me! \u2192",function(){ST.obStep=3;redraw();}));
+    body.appendChild(obBtn("That's me! \u2192",function(){ST.obStep=3;redraw();}));
     scr.appendChild(body);wrap.appendChild(scr);return wrap;
   }
 
@@ -276,7 +276,7 @@ function buildOnboarding(){
     var scr=d({cls:"ob-screen"});
     var body=d({cls:"ob-body",css:{alignItems:"center",justifyContent:"center",textAlign:"center"}});
     var ei=d({css:{fontSize:"68px",marginBottom:"18px",animation:"float 3s ease-in-out infinite"}});ei.textContent="\uD83C\uDF89";body.appendChild(ei);
-    body.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"28px",fontWeight:600,color:"#3D2314",marginBottom:"10px"}},"You\'re all set, "+(ST.obName||"friend")+"!"));
+    body.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"28px",fontWeight:600,color:"#3D2314",marginBottom:"10px"}},"You're all set, "+(ST.obName||"friend")+"!"));
     body.appendChild(d({css:{fontSize:"14px",color:"#6B4C35",lineHeight:1.7,marginBottom:"28px"}},ST.obGrpEmoji+" "+ST.obGrpName+" is ready. Now invite your family!"));
     body.appendChild(obBtn("Take me to Keep Up \uD83C\uDFE1",function(){
       // Apply onboarding data to app state
