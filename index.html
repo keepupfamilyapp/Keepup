@@ -4,656 +4,942 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"/>
 <meta name="theme-color" content="#C4714A"/>
-<title>Keep Up</title>
-<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Lora:ital,wght@0,600;1,400&display=swap" rel="stylesheet"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="default"/>
+<meta name="apple-mobile-web-app-title" content="Keep Up"/>
+<title>Keep Up 🏡</title>
+<link rel="manifest" id="pwa-manifest"/>
+<script>
+// Inline manifest
+const md=JSON.stringify({name:"Keep Up",short_name:"Keep Up",start_url:"./",display:"standalone",background_color:"#FAF6F0",theme_color:"#C4714A",orientation:"portrait",icons:[{src:"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='32' fill='%23C4714A'/%3E%3Ctext y='140' x='96' font-size='110' text-anchor='middle'%3E%F0%9F%8F%A1%3C/text%3E%3C/svg%3E",sizes:"192x192",type:"image/svg+xml"}]});
+document.getElementById('pwa-manifest').href=URL.createObjectURL(new Blob([md],{type:'application/json'}));
+// Inline service worker
+if('serviceWorker' in navigator){const sw=`const C='ku1';self.addEventListener('install',e=>self.skipWaiting());self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;e.respondWith(caches.match(e.request).then(c=>c||fetch(e.request)));});`;navigator.serviceWorker.register(URL.createObjectURL(new Blob([sw],{type:'text/javascript'}))).catch(()=>{});}
+</script>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&family=Nunito:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
 <style>
-*{box-sizing:border-box;margin:0;padding:0;}
-html,body{height:100%;width:100%;max-width:100%;background:#FAF6F0;font-family:Nunito,sans-serif;overflow:hidden;}
-#app{height:100vh;height:100dvh;width:100%;max-width:100%;display:flex;flex-direction:column;overflow:hidden;position:relative;}
-.scr{overflow-y:auto;-webkit-overflow-scrolling:touch;flex:1;scrollbar-width:none;}
-.scr::-webkit-scrollbar{display:none;}
-.nav{display:flex;background:#FFF9F2;border-top:2px solid #F5DDD1;padding:8px 0 16px;flex-shrink:0;}
-.navbtn{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;border:none;background:none;font-family:inherit;}
-.card{background:#FFF9F2;border-radius:16px;overflow:hidden;margin-bottom:10px;border:1px solid #F5DDD1;box-shadow:0 2px 8px rgba(0,0,0,.06);width:100%;box-sizing:border-box;}
-.pill{display:flex;align-items:center;gap:5px;padding:6px 12px;border-radius:50px;border:2px solid rgba(107,66,38,.12);background:#FAF6F0;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:inherit;flex-shrink:0;}
-.pill.active{background:#F5DDD1;border-color:#C4714A;color:#6B4226;}
-.overlay{position:fixed;inset:0;background:rgba(61,35,20,.45);z-index:60;display:flex;align-items:flex-end;}
-.sheet{width:100%;max-width:430px;margin:0 auto;background:#FFF9F2;border-radius:24px 24px 0 0;padding:20px 18px 36px;max-height:88vh;overflow-y:auto;}
-.handle{width:44px;height:5px;border-radius:5px;background:#C9A882;margin:0 auto 16px;opacity:.35;}
-@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%;overflow:hidden;overscroll-behavior:none;}
+body{font-family:'Nunito',sans-serif;background:#FAF6F0;color:#3D2314;}
+#app{height:100vh;height:100dvh;display:flex;flex-direction:column;max-width:430px;margin:0 auto;overflow:hidden;position:relative;}
+.scroll{overflow-y:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+.scroll::-webkit-scrollbar{display:none;}
+button,input,select,textarea{font-family:'Nunito',sans-serif;-webkit-appearance:none;border-radius:0;}
+button:active{opacity:.82;}
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
 @keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+@keyframes popIn{from{opacity:0;transform:scale(.88)}to{opacity:1;transform:scale(1)}}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+.fade-up{animation:fadeUp .3s ease both;}
+.float{animation:float 3s ease-in-out infinite;}
+.pulse-btn{animation:pulse 2.5s ease-in-out infinite;}
 </style>
 </head>
 <body>
-<div id="app"></div>
-<script>
-var TH={
-  imm:{a:"#C4714A",al:"#E8956D",ap:"#F5DDD1",ad:"#6B4226",bg:"#FAF6F0",cb:"#FFF9F2",sb:"#FFF3E8"},
-  moms:{a:"#B5699A",al:"#D48DBB",ap:"#F5E0EF",ad:"#6B3355",bg:"#FDF6FB",cb:"#FFF9FD",sb:"#F9EDF6"},
-  dads:{a:"#4A7C59",al:"#6FA882",ap:"#D8EDE0",ad:"#2D4F38",bg:"#F4FAF6",cb:"#F9FDF9",sb:"#E8F5ED"},
-  cousins:{a:"#C4922A",al:"#E0B355",ap:"#FBF0D0",ad:"#7A5A14",bg:"#FDFAF2",cb:"#FFFCF4",sb:"#F8F0D8"}
+<div id="app"><div style="display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;gap:16px;background:#FAF6F0;">
+  <div style="font-size:48px;animation:float 2s ease-in-out infinite">🏡</div>
+  <div style="font-family:Lora,serif;font-size:28px;color:#C4714A;font-weight:600">keep <em>up</em></div>
+  <div style="width:32px;height:32px;border:3px solid #F5DDD1;border-top-color:#C4714A;border-radius:50%;animation:spin 0.8s linear infinite"></div>
+</div></div>
+
+<script type="module">
+import{h,render,Component}from'https://esm.sh/preact@10.19.2';
+import{useState,useRef,useEffect,useCallback}from'https://esm.sh/preact@10.19.2/hooks';
+import{html}from'https://esm.sh/htm@3.1.1/preact';
+
+// ── THEMES ──────────────────────────────────────────────────────────────────
+const T={
+  imm:    {a:"#C4714A",al:"#E8956D",ap:"#F5DDD1",ad:"#6B4226",bg:"#FAF6F0",cb:"#FFF9F2",sb:"#FFF3E8"},
+  moms:   {a:"#B5699A",al:"#D48DBB",ap:"#F5E0EF",ad:"#6B3355",bg:"#FDF6FB",cb:"#FFF9FD",sb:"#F9EDF6"},
+  dads:   {a:"#4A7C59",al:"#6FA882",ap:"#D8EDE0",ad:"#2D4F38",bg:"#F4FAF6",cb:"#F9FDF9",sb:"#E8F5ED"},
+  cousins:{a:"#C4922A",al:"#E0B355",ap:"#FBF0D0",ad:"#7A5A14",bg:"#FDFAF2",cb:"#FFFCF4",sb:"#F8F0D8"},
 };
-function th(id){return TH[id]||TH.imm;}
+const gt=id=>T[id]||{a:"#7A6FAA",al:"#A89ECC",ap:"#ECEAF8",ad:"#3D3566",bg:"#F7F6FD",cb:"#FDFCFF",sb:"#EEEAF8"};
 
-var ST={
-  tab:"feed",group:"imm",name:"Sean",
-  avatar:"\uD83D\uDC68",
-  openChat:null,
-  chatMsgs:{
-    imm:[
-      {id:1,av:"\uD83D\uDC69",name:"Mom",text:"Don't forget dinner is at 6 everyone!",time:"2h ago",you:false},
-      {id:2,av:"\uD83D\uDC66",name:"Jake",text:"I'll be there! Bringing dessert",time:"1h ago",you:false},
-      {id:3,av:"\uD83D\uDC68",name:"You",text:"Same, can't wait!",time:"45m ago",you:true}
-    ],
-    moms:[
-      {id:4,av:"\uD83D\uDC75",name:"Grandma Rose",text:"Who's coming to visit this Sunday?",time:"3h ago",you:false},
-      {id:5,av:"\uD83E\uDDD1",name:"Uncle Tom",text:"I'll pick you up Grandma!",time:"2h ago",you:false}
-    ],
-    dads:[
-      {id:6,av:"\uD83D\uDC74",name:"Grandpa Joe",text:"Cabin trip planning starts now!",time:"Yesterday",you:false}
-    ],
-    cousins:[
-      {id:7,av:"\uD83D\uDC66",name:"Jake",text:"Video call this Saturday?",time:"30m ago",you:false},
-      {id:8,av:"\uD83D\uDC67",name:"Lily",text:"Yes!! I'm free all day",time:"20m ago",you:false}
-    ]
-  },
-  chatIn:{},
-  dms:[
-    {id:"dm-1",members:[{av:"\uD83D\uDC66",name:"Jake"}],last:"Are you coming Sunday?",lt:"1h ago",msgs:[
-      {id:1,av:"\uD83D\uDC66",name:"Jake",text:"Hey! Are you coming Sunday?",time:"1h ago",you:false},
-      {id:2,av:"\uD83D\uDC68",name:"You",text:"Yes for sure! What time?",time:"45m ago",you:true},
-      {id:3,av:"\uD83D\uDC66",name:"Jake",text:"Noon! Can't wait to see everyone",time:"30m ago",you:false}
-    ]},
-    {id:"dm-2",members:[{av:"\uD83D\uDC75",name:"Grandma Rose"}],last:"Love you sweetheart!",lt:"Yesterday",msgs:[
-      {id:4,av:"\uD83D\uDC75",name:"Grandma Rose",text:"Just thinking of you today honey",time:"Yesterday",you:false},
-      {id:5,av:"\uD83D\uDC68",name:"You",text:"Thinking of you too Grandma! Miss you",time:"Yesterday",you:true},
-      {id:6,av:"\uD83D\uDC75",name:"Grandma Rose",text:"Love you sweetheart!",time:"Yesterday",you:false}
-    ]}
+// ── DATA ─────────────────────────────────────────────────────────────────────
+const INIT_GROUPS=[
+  {id:"imm",label:"Immediate",icon:"❤️"},
+  {id:"moms",label:"Mom's Side",icon:"🌸"},
+  {id:"dads",label:"Dad's Side",icon:"🌲"},
+  {id:"cousins",label:"Cousins",icon:"⭐"},
+];
+const FEED={
+  imm:[
+    {id:1,type:"photo",av:"👩",name:"Mom",time:"2h ago",emoji:"🌻",cap:"Finally got the garden going! The sunflowers are already taller than me 😂"},
+    {id:2,type:"checkin",av:"👦",name:"Jake",time:"4h ago",status:"Just landed in Portland 🌧️ — first work trip ever! Wish me luck!"},
+    {id:3,type:"event",month:"APR",day:19,title:"Easter Brunch 🐣",who:"Added by Mom",going:4,maybe:1},
+    {id:4,type:"photo",av:"👧",name:"Lily",time:"Yesterday",emoji:"🎨",cap:"Finished my art project! Took three weeks but I'm so happy with how it turned out 🎉"},
   ],
-  newDm:false,dmSel:[],dmGrp:"imm",
-  addEv:false,
-  nEv:{title:"",month:"APR",day:"",time:"",loc:"",groupId:"imm"},
-  compose:false,
-  upOpen:false,upType:"photo",upStep:1,upCap:"",upCi:"",upImg:null,
-  cmtOpen:null,cmtIn:"",rxPick:null,reactions:{},rsvp:{},
-  comments:{
-    1:[{id:101,av:"\uD83D\uDC74",name:"Grandpa Joe",text:"Those are gorgeous!",time:"1h ago"}],
-    4:[{id:201,av:"\uD83D\uDC69",name:"Mom",text:"Lily this is STUNNING",time:"3h ago"}]
-  },
-  groups:[
-    {id:"imm",label:"Immediate",icon:"\u2764\uFE0F"},
-    {id:"moms",label:"Mom's Side",icon:"\uD83C\uDF38"},
-    {id:"dads",label:"Dad's Side",icon:"\uD83C\uDF32"},
-    {id:"cousins",label:"Cousins",icon:"\u2B50"}
+  moms:[
+    {id:10,type:"photo",av:"👵",name:"Grandma Rose",time:"1h ago",emoji:"🌷",cap:"The rose bushes are blooming already! Come visit soon. Love to all 💕"},
+    {id:11,type:"checkin",av:"🧑",name:"Uncle Tom",time:"3h ago",status:"Driving up to see Grandma this weekend — anyone else coming?"},
+    {id:12,type:"event",month:"APR",day:19,title:"Easter Brunch 🐣",who:"Added by Grandma Rose",going:9,maybe:2},
   ],
-  mems:{
-    imm:[{av:"\uD83D\uDC69",name:"You",role:"Admin",you:true},{av:"\uD83D\uDC68",name:"Mike",role:"Member"},{av:"\uD83D\uDC66",name:"Jake",role:"Member"},{av:"\uD83D\uDC67",name:"Lily",role:"Member"}],
-    moms:[{av:"\uD83D\uDC75",name:"Grandma Rose",role:"Admin"},{av:"\uD83D\uDC69",name:"You",role:"Member",you:true},{av:"\uD83E\uDDD1",name:"Uncle Tom",role:"Member"}],
-    dads:[{av:"\uD83D\uDC74",name:"Grandpa Joe",role:"Admin"},{av:"\uD83D\uDC69",name:"You",role:"Member",you:true},{av:"\uD83D\uDC68",name:"Uncle Bill",role:"Member"}],
-    cousins:[{av:"\uD83D\uDC69",name:"You",role:"Admin",you:true},{av:"\uD83D\uDC66",name:"Jake",role:"Member"},{av:"\uD83D\uDC67",name:"Lily",role:"Member"}]
-  },
-  feed:{
-    imm:[
-      {id:1,type:"photo",av:"\uD83D\uDC69",name:"Mom",time:"2h ago",emoji:"\uD83C\uDF3B",cap:"Finally got the garden going! The sunflowers are taller than me."},
-      {id:2,type:"checkin",av:"\uD83D\uDC66",name:"Jake",time:"4h ago",status:"Just landed in Portland! First work trip ever. Wish me luck!"},
-      {id:3,type:"event",month:"APR",day:19,title:"Easter Brunch",who:"Added by Mom",going:4,maybe:1},
-      {id:4,type:"photo",av:"\uD83D\uDC67",name:"Lily",time:"Yesterday",emoji:"\uD83C\uDFA8",cap:"Finished my art project! Three weeks of work and so happy with it."}
-    ],
-    moms:[
-      {id:10,type:"photo",av:"\uD83D\uDC75",name:"Grandma Rose",time:"1h ago",emoji:"\uD83C\uDF37",cap:"The rose bushes are blooming! Come visit soon."},
-      {id:11,type:"checkin",av:"\uD83E\uDDD1",name:"Uncle Tom",time:"3h ago",status:"Driving up to see Grandma this weekend. Anyone else coming?"}
-    ],
-    dads:[
-      {id:20,type:"photo",av:"\uD83D\uDC74",name:"Grandpa Joe",time:"2h ago",emoji:"\uD83C\uDFA3",cap:"Caught the big one! 14 inches. Grandma disagrees."},
-      {id:21,type:"checkin",av:"\uD83D\uDC68",name:"Uncle Bill",time:"Yesterday",status:"Cabin is booked for July! Who's in?"}
-    ],
-    cousins:[
-      {id:30,type:"checkin",av:"\uD83D\uDC66",name:"Jake",time:"30m ago",status:"Anyone want to do a group video call this weekend?"},
-      {id:31,type:"photo",av:"\uD83D\uDC67",name:"Lily",time:"5h ago",emoji:"\uD83C\uDFAE",cap:"Finally beat this game after 80 hours. I need to go outside."}
-    ]
-  },
-  evs:[
-    {id:1,month:"APR",day:19,title:"Easter Brunch",group:"Mom's Side",groupId:"moms",going:9,maybe:2,time:"10:00 AM",loc:"Grandma's house"},
-    {id:2,month:"APR",day:21,title:"Jake's Birthday",group:"Immediate",groupId:"imm",going:5,maybe:1,time:"6:00 PM",loc:"TBD"},
-    {id:3,month:"JUL",day:12,title:"Family Cabin Trip",group:"Dad's Side",groupId:"dads",going:6,maybe:3,time:"All day",loc:"Lake Tahoe"}
-  ]
+  dads:[
+    {id:20,type:"photo",av:"👴",name:"Grandpa Joe",time:"2h ago",emoji:"🎣",cap:"Caught the big one finally! 14 inches. Grandma says it's too small to count. I say she's wrong."},
+    {id:21,type:"checkin",av:"👨‍🦳",name:"Uncle Bill",time:"Yesterday",status:"Cabin is booked for July! Who's in? 🏕️"},
+    {id:22,type:"event",month:"JUL",day:12,title:"Family Cabin Trip 🏕️",who:"Added by Uncle Bill",going:6,maybe:3},
+  ],
+  cousins:[
+    {id:30,type:"checkin",av:"👦",name:"Jake",time:"30m ago",status:"Anyone want to do a group video call this weekend? It's been forever 😭"},
+    {id:31,type:"photo",av:"👧",name:"Lily",time:"5h ago",emoji:"🎮",cap:"Finally beat this game after 80 hours. I think I need to go outside."},
+    {id:32,type:"checkin",av:"🧒",name:"Emma",time:"Yesterday",status:"I graduated!! Officially done with college 🎓🎉"},
+  ],
+};
+const INIT_COMMENTS={
+  1:[{id:101,av:"👴",name:"Grandpa Joe",text:"Those are gorgeous! Save me some seeds 🌻",time:"1h ago"},{id:102,av:"👦",name:"Jake",text:"Taller than you isn't saying much Mom 😂",time:"45m ago"}],
+  4:[{id:201,av:"👩",name:"Mom",text:"Lily this is STUNNING 😭❤️",time:"3h ago"}],
+  20:[{id:401,av:"👩",name:"Grandma",text:"14 inches is NOT the big one Joe 😂",time:"1h ago"}],
+};
+const REACTIONS=["🥰","😂","🙌","😮","💪"];
+const GRP_EMOJIS=["❤️","🌸","🌲","⭐","🏠","🎉","🌻","🦋","🌊","🍂","🎶","🌙"];
+const AVATARS=["👩","👨","👵","👴","👧","👦","🧒","👩‍🦱","👨‍🦳","🧑"];
+const PHOTO_EMOJIS=["🌻","🌷","🌸","🎨","🎣","🎮","🏡","🌅","🍕","🎂","🌿","🐶","🐱","☀️","🌙","❄️","🎸","📚","🏖️","🏔️","🌈","🎉","🦋","🍂"];
+const BIRTHDAYS=[
+  {name:"Mom",date:"Apr 22",av:"👩",d:6},
+  {name:"Grandma Rose",date:"May 3",av:"👵",d:17},
+  {name:"Jake",date:"Jun 14",av:"👦",d:59},
+];
+const EVENTS_INIT=[
+  {id:1,month:"APR",day:19,title:"Easter Brunch 🐣",group:"Mom's Side",going:9,maybe:2,time:"10:00 AM",loc:"Grandma's house"},
+  {id:2,month:"APR",day:21,title:"Jake's Birthday 🎂",group:"Immediate",going:5,maybe:1,time:"6:00 PM",loc:"TBD"},
+  {id:3,month:"JUL",day:12,title:"Family Cabin Trip 🏕️",group:"Dad's Side",going:6,maybe:3,time:"All day",loc:"Lake Tahoe"},
+];
+const CAL=[
+  {d:30,p:1},{d:31,p:1},{d:1},{d:2},{d:3},{d:4},{d:5},{d:6},{d:7},{d:8},{d:9},{d:10},{d:11},{d:12},
+  {d:13},{d:14},{d:15},{d:16},{d:17},{d:18},{d:19,ev:1},{d:20},{d:21,ev:1,bd:1},{d:22,bd:1},
+  {d:23},{d:24},{d:25},{d:26},{d:27},{d:28},{d:29},{d:30},{d:1,n:1},{d:2,n:1},{d:3,n:1},
+];
+const CHAT_PREV={
+  imm:{who:"Mom",text:"Don't forget dinner is at 6!",time:"2h ago"},
+  moms:{who:"Uncle Tom",text:"I'll pick up Grandma on the way 🚗",time:"Yesterday"},
+  dads:{who:"Uncle Bill",text:"Cabin confirmed! Sending address 🏕️",time:"Mon"},
+  cousins:{who:"Emma",text:"Who's free for a video call Saturday??",time:"Sun"},
+};
+const EMPTY={
+  imm:{emoji:"🏡",head:"Your family feed is waiting!",sub:"Be the first to share something with your immediate family.",cta:"Share Something ❤️",color:"#C4714A"},
+  moms:{emoji:"🌸",head:"Say hello to Mom's Side!",sub:"Start the conversation with a photo or check-in.",cta:"Post Something 🌸",color:"#B5699A"},
+  dads:{emoji:"🌲",head:"Dad's Side is quiet right now.",sub:"A fishing photo? A weekend plan? Even a quick hello.",cta:"Start the Feed 🌲",color:"#4A7C59"},
+  cousins:{emoji:"⭐",head:"Cousins group — let's go!",sub:"When did you last catch up? Post something!",cta:"Post First ⭐",color:"#C4922A"},
+};
+const getEmpty=id=>EMPTY[id]||{emoji:"✨",head:"Nothing here yet!",sub:"Be the first to share.",cta:"Share Something",color:"#7A6FAA"};
+const INIT_MEMBERS={
+  imm:[{id:1,av:"👩",name:"You (Sarah)",role:"Admin",you:true},{id:2,av:"👨",name:"Mike",role:"Member"},{id:3,av:"👦",name:"Jake",role:"Member"},{id:4,av:"👧",name:"Lily",role:"Member"}],
+  moms:[{id:5,av:"👵",name:"Grandma Rose",role:"Admin"},{id:1,av:"👩",name:"You (Sarah)",role:"Member",you:true},{id:6,av:"🧑",name:"Uncle Tom",role:"Member"}],
+  dads:[{id:7,av:"👴",name:"Grandpa Joe",role:"Admin"},{id:1,av:"👩",name:"You (Sarah)",role:"Member",you:true},{id:8,av:"👨‍🦳",name:"Uncle Bill",role:"Member"}],
+  cousins:[{id:1,av:"👩",name:"You (Sarah)",role:"Admin",you:true},{id:3,av:"👦",name:"Jake",role:"Member"},{id:4,av:"👧",name:"Lily",role:"Member"},{id:9,av:"🧒",name:"Emma",role:"Member"}],
 };
 
-function el(tag,attrs,children){
-  var e=document.createElement(tag);
-  if(attrs){
-    if(attrs.cls){e.className=attrs.cls;delete attrs.cls;}
-    if(attrs.css){Object.assign(e.style,attrs.css);delete attrs.css;}
-    if(attrs.html){e.innerHTML=attrs.html;delete attrs.html;}
-    Object.keys(attrs).forEach(function(k){
-      if(k==="value")e.value=attrs[k];
-      else if(k==="disabled"&&attrs[k])e.setAttribute("disabled","");
-      else if(k==="rows")e.rows=attrs[k];
-      else if(k==="placeholder")e.placeholder=attrs[k];
-      else if(k==="type")e.type=attrs[k];
-      else if(k==="accept")e.accept=attrs[k];
-      else e.setAttribute(k,attrs[k]);
-    });
+// ── HELPERS ──────────────────────────────────────────────────────────────────
+const s=(obj)=>Object.entries(obj).map(([k,v])=>`${k.replace(/[A-Z]/g,c=>'-'+c.toLowerCase())}:${v}`).join(';');
+const btn=(txt,onClick,disabled,extra={})=>html`<button onClick=${onClick} disabled=${disabled} style=${{width:"100%",padding:"15px",borderRadius:"50px",background:disabled?"#D4B8A8":"#C4714A",border:"none",color:"white",fontSize:"17px",fontWeight:800,cursor:disabled?"not-allowed":"pointer",boxShadow:disabled?"none":"0 6px 24px rgba(196,113,74,0.35)",...extra}}>${txt}</button>`;
+const handle=(color="#C9A882")=>html`<div style=${{width:"48px",height:"5px",borderRadius:"5px",background:color,margin:"0 auto 18px",opacity:.35}}></div>`;
+
+// ── MAIN APP ─────────────────────────────────────────────────────────────────
+function App(){
+  const [boarded,setBoarded]=useState(localStorage.getItem("ku_ob")==="1");
+  const [obStep,setObStep]=useState(0);
+  const [obName,setObName]=useState(localStorage.getItem("ku_name")||"");
+  const [obAv,setObAv]=useState(localStorage.getItem("ku_av")||"👩");
+  const [obBday,setObBday]=useState("");
+  const [obGrpName,setObGrpName]=useState("");
+  const [obGrpEmoji,setObGrpEmoji]=useState("❤️");
+
+  const [tab,setTab]=useState("feed");
+  const [activeGrp,setActiveGrp]=useState("imm");
+  const [groups,setGroups]=useState(INIT_GROUPS);
+  const [screen,setScreen]=useState("main");
+  const [manageGrp,setManageGrp]=useState("imm");
+  const [composeOpen,setComposeOpen]=useState(false);
+  const [reactions,setReactions]=useState({});
+  const [rxPicker,setRxPicker]=useState(null);
+  const [rsvp,setRsvp]=useState({});
+  const [comments,setComments]=useState(INIT_COMMENTS);
+  const [cmtOpen,setCmtOpen]=useState(null);
+  const [cmtInput,setCmtInput]=useState("");
+  const [members,setMembers]=useState(INIT_MEMBERS);
+  const [events,setEvents]=useState(EVENTS_INIT);
+  const [addEvOpen,setAddEvOpen]=useState(false);
+  const [selEv,setSelEv]=useState(null);
+  const [newEv,setNewEv]=useState({title:"",month:"APR",day:"",time:"",loc:"",group:"Immediate"});
+  const [textSz,setTextSz]=useState("normal");
+  const [showEmpty,setShowEmpty]=useState(false);
+  const [grpName,setGrpName]=useState("");
+  const [grpEmoji,setGrpEmoji]=useState("❤️");
+  const [copied,setCopied]=useState(false);
+
+  // upload
+  const [upOpen,setUpOpen]=useState(false);
+  const [upStep,setUpStep]=useState(1);
+  const [upType,setUpType]=useState("photo");
+  const [upEmoji,setUpEmoji]=useState("🌻");
+  const [upCap,setUpCap]=useState("");
+  const [upCi,setUpCi]=useState("");
+  const [feed,setFeed]=useState(FEED);
+  const [preview,setPreview]=useState(null);
+  const fileRef=useRef(null);
+
+  // chat
+  const [openChat,setOpenChat]=useState(null);
+  const [newDmOpen,setNewDmOpen]=useState(false);
+  const [dmGrp,setDmGrp]=useState("imm");
+  const [dmSel,setDmSel]=useState([]);
+  const [chatInputs,setChatInputs]=useState({});
+  const [chatMsgs,setChatMsgs]=useState({"dm-1":[
+    {id:1,av:"👦",name:"Jake",text:"Hey, are you joining Easter brunch?",time:"Yesterday"},
+    {id:2,av:"👩",name:"You",text:"Yes! Bringing potato salad 🥗",time:"Yesterday",you:true},
+    {id:3,av:"👦",name:"Jake",text:"Perfect!! Can't wait 🐣",time:"Yesterday"},
+  ]});
+  const [dms,setDms]=useState([{id:"dm-1",members:[{id:3,av:"👦",name:"Jake"}],last:"Perfect!! Can't wait 🐣",lt:"Yesterday"}]);
+
+  useEffect(()=>{if(obName)localStorage.setItem("ku_name",obName);},[obName]);
+  useEffect(()=>{localStorage.setItem("ku_av",obAv);},[obAv]);
+
+  const fs=textSz==="xlarge"?1.22:textSz==="large"?1.1:1;
+  const px=n=>Math.round(n*fs)+"px";
+  const t=gt(activeGrp);
+  const ag=groups.find(g=>g.id===activeGrp)||groups[0];
+  const getM=gid=>members[gid]||[{id:1,av:"👩",name:"You",role:"Admin",you:true}];
+  const isAdmin=gid=>!!getM(gid).find(x=>x.you&&x.role==="Admin");
+  const pCmts=id=>comments[id]||[];
+
+  const doReact=(id,e)=>{setReactions(r=>({...r,[id]:r[id]===e?null:e}));setRxPicker(null);};
+  const addCmt=pid=>{
+    if(!cmtInput.trim())return;
+    setComments(p=>({...p,[pid]:[...(p[pid]||[]),{id:Date.now(),av:obAv,name:obName||"You",text:cmtInput.trim(),time:"Just now"}]}));
+    setCmtInput("");
+  };
+  const addEvent=()=>{
+    if(!newEv.title.trim()||!newEv.day)return;
+    setEvents(e=>[...e,{...newEv,id:Date.now(),going:1,maybe:0,day:parseInt(newEv.day)||1}]);
+    setNewEv({title:"",month:"APR",day:"",time:"",loc:"",group:"Immediate"});
+    setAddEvOpen(false);
+  };
+  const openUpload=type=>{
+    setUpType(type);setUpStep(type==="photo"?2:3);
+    setUpCap("");setUpCi("");setUpEmoji("🌻");setPreview(null);
+    setComposeOpen(false);setUpOpen(true);
+  };
+  const submitPost=()=>{
+    const p=upType==="checkin"
+      ?{id:Date.now(),type:"checkin",av:obAv,name:obName||"You",time:"Just now",status:upCi}
+      :{id:Date.now(),type:"photo",av:obAv,name:obName||"You",time:"Just now",emoji:preview?null:upEmoji,imgUrl:preview,cap:upCap};
+    setFeed(f=>({...f,[activeGrp]:[p,...(f[activeGrp]||[])]}));
+    setUpStep(4);
+    setTimeout(()=>{setUpOpen(false);setUpStep(1);},2600);
+  };
+  const makeGrp=()=>{
+    if(!grpName.trim())return;
+    const id="g"+Date.now();
+    setGroups(g=>[...g,{id,label:grpName.trim(),icon:grpEmoji}]);
+    setMembers(m=>({...m,[id]:[{id:1,av:obAv,name:obName||"You",role:"Admin",you:true}]}));
+    setGrpName("");setGrpEmoji("❤️");setActiveGrp(id);setScreen("main");
+  };
+  const finishOnboard=()=>{
+    if(obGrpName.trim())setGroups([{id:"imm",label:obGrpName,icon:obGrpEmoji}]);
+    localStorage.setItem("ku_ob","1");
+    setBoarded(true);
+  };
+
+  // ── OVERLAY ────────────────────────────────────────────────────────────────
+  const Overlay=({onClose,children,maxH="90vh"})=>html`
+    <div onClick=${onClose} style=${{position:"fixed",inset:0,background:"rgba(61,35,20,.45)",zIndex:60,display:"flex",alignItems:"flex-end",animation:"fadeIn .2s ease"}}>
+      <div onClick=${e=>e.stopPropagation()} style=${{width:"100%",maxWidth:"430px",margin:"0 auto",background:"#FFF9F2",borderRadius:"24px 24px 0 0",padding:"20px 20px 36px",animation:"slideUp .25s ease",maxHeight:maxH,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
+        ${children}
+      </div>
+    </div>`;
+
+  // ── ONBOARDING ─────────────────────────────────────────────────────────────
+  if(!boarded){
+    const steps=["welcome","name","avatar","birthday","group","done"];
+    const step=steps[obStep];
+    const canNext=step==="name"?obName.trim().length>0:step==="group"?obGrpName.trim().length>0:true;
+    return html`
+    <div id="app" style=${{background:"#FAF6F0"}}>
+      ${obStep>0&&obStep<5&&html`
+        <div style=${{position:"absolute",top:"24px",left:0,right:0,display:"flex",justifyContent:"center",gap:"6px",zIndex:10}}>
+          ${[1,2,3,4].map(i=>html`<div style=${{width:i<=obStep?"28px":"8px",height:"8px",borderRadius:"8px",background:i<=obStep?"#C4714A":"#E8C4A8",transition:"all .3s"}}></div>`)}
+        </div>
+        <button onClick=${()=>setObStep(s=>s-1)} style=${{position:"absolute",top:"18px",left:"18px",background:"#F5DDD1",border:"none",borderRadius:"50px",fontSize:"15px",cursor:"pointer",color:"#6B4226",zIndex:20,padding:"8px 16px",fontWeight:700}}>← Back</button>
+      `}
+
+      ${step==="welcome"&&html`
+        <div style=${{flex:1,display:"flex",flexDirection:"column",animation:"fadeUp .5s ease both"}}>
+          <div style=${{flex:"0 0 52%",background:"linear-gradient(170deg,#F5DDD1 0%,#FAF0E6 60%,#E8F2E9 100%)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <div class="float" style=${{fontSize:"80px",filter:"drop-shadow(0 12px 24px rgba(0,0,0,.15))"}}>🏡</div>
+          </div>
+          <div style=${{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"28px 32px 40px"}}>
+            <div style=${{fontFamily:"Lora,serif",fontSize:"32px",fontWeight:600,color:"#C4714A",marginBottom:"8px",textAlign:"center"}}>keep <em>up</em></div>
+            <div style=${{fontSize:"16px",color:"#6B4C35",textAlign:"center",lineHeight:1.65,marginBottom:"6px"}}>Stay close to the people who matter most.</div>
+            <div style=${{fontSize:"14px",color:"#9B7B62",textAlign:"center",lineHeight:1.6,marginBottom:"32px"}}>No ads. No algorithms. Just your family.</div>
+            ${btn("Get Started →",()=>setObStep(1),false)}
+          </div>
+        </div>
+      `}
+
+      ${step==="name"&&html`
+        <div style=${{flex:1,display:"flex",flexDirection:"column",padding:"80px 28px 40px",animation:"fadeUp .4s ease both"}}>
+          <div style=${{fontFamily:"Lora,serif",fontSize:"26px",fontWeight:600,color:"#3D2314",marginBottom:"8px"}}>What's your name?</div>
+          <div style=${{fontSize:"15px",color:"#9B7B62",marginBottom:"28px",lineHeight:1.6}}>Use whatever your family calls you — <strong style=${{color:"#C4714A"}}>"Mom"</strong>, <strong style=${{color:"#C4714A"}}>"Grandpa Joe"</strong>, <strong style=${{color:"#C4714A"}}>"Jake"</strong></div>
+          <input autoFocus value=${obName} onInput=${e=>setObName(e.target.value)} placeholder="Your name or nickname…"
+            style=${{padding:"18px 20px",borderRadius:"16px",border:"2px solid #E8956D",background:"#FFF9F2",fontSize:"18px",color:"#3D2314",outline:"none",marginBottom:"12px",width:"100%"}}/>
+          <div style=${{flex:1}}></div>
+          ${btn("Continue →",()=>setObStep(2),!canNext)}
+        </div>
+      `}
+
+      ${step==="avatar"&&html`
+        <div style=${{flex:1,display:"flex",flexDirection:"column",padding:"80px 28px 40px",animation:"fadeUp .4s ease both"}}>
+          <div style=${{fontFamily:"Lora,serif",fontSize:"26px",fontWeight:600,color:"#3D2314",marginBottom:"8px"}}>Pick your picture, ${obName||"friend"} 👋</div>
+          <div style=${{display:"flex",alignItems:"center",gap:"14px",background:"#FFF9F2",borderRadius:"16px",padding:"16px",marginBottom:"24px",border:"1.5px solid #F5DDD1"}}>
+            <div style=${{width:"54px",height:"54px",borderRadius:"50%",background:"#F5DDD1",border:"2px solid #E8956D",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"28px"}}>${obAv}</div>
+            <div><div style=${{fontSize:"17px",fontWeight:700,color:"#3D2314"}}>${obName||"Your Name"}</div><div style=${{fontSize:"13px",color:"#9B7B62",marginTop:"2px"}}>Just joined Keep Up 🎉</div></div>
+          </div>
+          <div style=${{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:"10px",marginBottom:"24px"}}>
+            ${AVATARS.map(av=>html`<button onClick=${()=>setObAv(av)} style=${{aspectRatio:1,borderRadius:"16px",background:obAv===av?"#F5DDD1":"#FFF9F2",border:`2.5px solid ${obAv===av?"#C4714A":"rgba(107,66,38,.12)"}`,fontSize:"28px",cursor:"pointer"}}>${av}</button>`)}
+          </div>
+          <div style=${{flex:1}}></div>
+          ${btn("That's me! →",()=>setObStep(3),false)}
+        </div>
+      `}
+
+      ${step==="birthday"&&html`
+        <div style=${{flex:1,display:"flex",flexDirection:"column",padding:"80px 28px 40px",animation:"fadeUp .4s ease both"}}>
+          <div style=${{fontFamily:"Lora,serif",fontSize:"26px",fontWeight:600,color:"#3D2314",marginBottom:"8px"}}>When's your birthday? 🎂</div>
+          <div style=${{background:"#E8F2E9",border:"1.5px solid #B8D4BB",borderRadius:"12px",padding:"12px 16px",marginBottom:"24px",display:"flex",gap:"10px",alignItems:"center"}}>
+            <span style=${{fontSize:"18px"}}>🔒</span>
+            <span style=${{fontSize:"13px",color:"#4A7C59",lineHeight:1.5}}>Only your family sees this — never public.</span>
+          </div>
+          <input type="date" value=${obBday} onInput=${e=>setObBday(e.target.value)}
+            style=${{padding:"18px 20px",borderRadius:"16px",border:"2px solid #E8956D",background:"#FFF9F2",fontSize:"17px",color:"#3D2314",outline:"none",marginBottom:"12px",width:"100%"}}/>
+          <div style=${{flex:1}}></div>
+          ${btn("Continue →",()=>setObStep(4),false,{marginBottom:"12px"})}
+          <button onClick=${()=>setObStep(4)} style=${{width:"100%",padding:"14px",borderRadius:"50px",background:"transparent",border:"none",color:"#9B7B62",fontSize:"15px",fontWeight:600,cursor:"pointer"}}>Skip for now</button>
+        </div>
+      `}
+
+      ${step==="group"&&html`
+        <div style=${{flex:1,display:"flex",flexDirection:"column",padding:"80px 28px 40px",animation:"fadeUp .4s ease both"}}>
+          <div style=${{fontFamily:"Lora,serif",fontSize:"26px",fontWeight:600,color:"#3D2314",marginBottom:"8px"}}>Create your first family group</div>
+          <div style=${{fontSize:"15px",color:"#9B7B62",marginBottom:"24px",lineHeight:1.6}}>Give it a name your family will recognise.</div>
+          <label style=${{fontSize:"13px",fontWeight:700,color:"#9B7B62",letterSpacing:".5px",textTransform:"uppercase",marginBottom:"8px",display:"block"}}>Group Name</label>
+          <input value=${obGrpName} onInput=${e=>setObGrpName(e.target.value)} placeholder="e.g. The Johnsons, Immediate Family…"
+            style=${{padding:"18px 20px",borderRadius:"16px",border:"2px solid #E8956D",background:"#FFF9F2",fontSize:"17px",color:"#3D2314",outline:"none",marginBottom:"20px",width:"100%"}}/>
+          <label style=${{fontSize:"13px",fontWeight:700,color:"#9B7B62",letterSpacing:".5px",textTransform:"uppercase",marginBottom:"10px",display:"block"}}>Group Icon</label>
+          <div style=${{display:"flex",flexWrap:"wrap",gap:"10px",marginBottom:"24px"}}>
+            ${GRP_EMOJIS.map(e=>html`<button onClick=${()=>setObGrpEmoji(e)} style=${{width:"48px",height:"48px",borderRadius:"12px",background:obGrpEmoji===e?"#F5DDD1":"#FFF9F2",border:`2px solid ${obGrpEmoji===e?"#C4714A":"rgba(107,66,38,.12)"}`,fontSize:"22px",cursor:"pointer"}}>${e}</button>`)}
+          </div>
+          <div style=${{flex:1}}></div>
+          ${btn("Create Group →",()=>setObStep(5),!canNext)}
+        </div>
+      `}
+
+      ${step==="done"&&html`
+        <div style=${{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"40px 32px",animation:"fadeUp .5s ease both"}}>
+          <div class="float" style=${{fontSize:"72px",marginBottom:"20px"}}>🎉</div>
+          <div style=${{fontFamily:"Lora,serif",fontSize:"28px",fontWeight:600,color:"#3D2314",marginBottom:"10px",textAlign:"center"}}>You're all set, ${obName||"friend"}!</div>
+          <div style=${{fontSize:"15px",color:"#6B4C35",textAlign:"center",lineHeight:1.7,marginBottom:"32px"}}>
+            <strong style=${{color:"#C4714A"}}>${obGrpEmoji} ${obGrpName||"Immediate Family"}</strong> is ready. Now invite your family!
+          </div>
+          ${btn("Take me to Keep Up 🏡",finishOnboard,false)}
+        </div>
+      `}
+    </div>`;
   }
-  if(children){var ch=Array.isArray(children)?children:[children];ch.forEach(function(c){if(c==null)return;e.appendChild(typeof c==="string"?document.createTextNode(c):c);});}
-  return e;
-}
-function d(a,c){return el("div",a,c);}
-function b(a,c){return el("button",a,c);}
 
-function redraw(){var old=document.getElementById("app");var next=buildApp();old.replaceWith(next);}
-
-function buildApp(){
-  var t=th(ST.group);
-  var grp=ST.groups.find(function(g){return g.id===ST.group;})||ST.groups[0];
-  var wrap=d({id:"app",css:{background:t.bg}});
-
-  var bar=d({css:{background:t.cb,padding:"11px 14px 9px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:"1px solid "+t.ap,flexShrink:0}});
-  bar.appendChild(d({html:"keep <em>up</em>",css:{fontFamily:"Lora,serif",fontSize:"20px",fontWeight:600,color:t.a}}));
-  var av=d({css:{width:"30px",height:"30px",borderRadius:"50%",background:t.ap,border:"2px solid "+t.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"15px"}});av.textContent=ST.avatar;bar.appendChild(av);
-  wrap.appendChild(bar);
-
-  if(ST.tab==="feed"){
-    var pb=d({css:{background:t.sb,borderBottom:"1px solid "+t.ap,flexShrink:0,display:"flex",padding:"5px 12px 8px",gap:"6px",overflowX:"auto",WebkitOverflowScrolling:"touch"}});
-    pb.style.scrollbarWidth="none";pb.style.maxWidth="100%";
-    ST.groups.forEach(function(g){
-      var gt=th(g.id);var ia=ST.group===g.id;
-      var p=b({cls:"pill"+(ia?" active":""),css:{background:ia?gt.ap:t.bg,borderColor:ia?gt.a:"rgba(107,66,38,.12)",color:ia?gt.ad:"#6B4C35"}});
-      p.textContent=g.icon+" "+g.label;
-      p.addEventListener("click",function(){ST.group=g.id;redraw();});pb.appendChild(p);
-    });
-    wrap.appendChild(pb);
+  // ── MANAGE GROUP ────────────────────────────────────────────────────────────
+  if(screen==="manageGroup"){
+    const mt=gt(manageGrp);
+    const gi=groups.find(g=>g.id===manageGrp)||groups[0];
+    const gm=getM(manageGrp);
+    const am=isAdmin(manageGrp);
+    return html`
+    <div id="app" style=${{background:mt.bg}}>
+      <div style=${{background:mt.cb,padding:"16px 20px 12px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:`1px solid ${mt.ap}`,flexShrink:0}}>
+        <button onClick=${()=>setScreen("main")} style=${{background:mt.ap,border:"none",borderRadius:"50px",padding:"8px 16px",fontSize:"15px",cursor:"pointer",color:mt.ad,fontWeight:700}}>← Back</button>
+        <div style=${{fontFamily:"Lora,serif",fontSize:"20px",fontWeight:600,color:mt.a}}>keep <em>up</em></div>
+        <div style=${{width:"70px"}}></div>
+      </div>
+      <div class="scroll" style=${{flex:1,padding:"16px 16px 100px"}}>
+        <div style=${{background:mt.ap,borderRadius:"20px",padding:"20px",marginBottom:"16px",textAlign:"center"}}>
+          <div style=${{fontSize:"48px",marginBottom:"8px"}}>${gi.icon}</div>
+          <div style=${{fontFamily:"Lora,serif",fontSize:"22px",fontWeight:600,color:mt.ad}}>${gi.label}</div>
+          <div style=${{fontSize:"14px",color:mt.a,marginTop:"4px"}}>${gm.length} members</div>
+          ${am&&html`<div style=${{display:"inline-block",background:mt.a,color:"white",fontSize:"12px",fontWeight:700,borderRadius:"50px",padding:"4px 12px",marginTop:"10px"}}>👑 You're the Admin</div>`}
+        </div>
+        ${am&&html`
+        <div style=${{background:mt.cb,borderRadius:"20px",overflow:"hidden",boxShadow:"0 2px 12px rgba(0,0,0,.06)",marginBottom:"14px"}}>
+          <div style=${{padding:"14px 16px 10px",borderBottom:`1px solid ${mt.ap}`}}>
+            <div style=${{fontSize:"14px",fontWeight:800,color:mt.ad}}>Invite Family Members</div>
+          </div>
+          <div style=${{margin:"12px 16px",background:mt.bg,borderRadius:"12px",border:`1.5px dashed ${mt.al}`,padding:"12px 14px",display:"flex",alignItems:"center",gap:"10px"}}>
+            <span style=${{flex:1,fontSize:"12px",color:"#6B4C35",fontFamily:"monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>keepup.app/join/${manageGrp}-a7x92k</span>
+            <button onClick=${()=>{navigator.clipboard?.writeText("keepup.app/join/"+manageGrp+"-a7x92k");setCopied(true);setTimeout(()=>setCopied(false),2000);}} style=${{background:copied?"#7A9E7E":mt.a,color:"white",border:"none",borderRadius:"10px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>${copied?"✓ Copied!":"Copy Link"}</button>
+          </div>
+        </div>`}
+        <div style=${{background:mt.cb,borderRadius:"20px",overflow:"hidden",boxShadow:"0 2px 12px rgba(0,0,0,.06)",marginBottom:"14px"}}>
+          <div style=${{padding:"14px 16px 10px",borderBottom:`1px solid ${mt.ap}`}}><div style=${{fontSize:"14px",fontWeight:800,color:mt.ad}}>Members (${gm.length})</div></div>
+          ${gm.map(mem=>html`
+          <div style=${{display:"flex",alignItems:"center",gap:"12px",padding:"14px 16px",borderBottom:`1px solid ${mt.ap}`}}>
+            <div style=${{width:"44px",height:"44px",borderRadius:"50%",background:mt.ap,border:`2px solid ${mt.al}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"22px"}}>${mem.av}</div>
+            <div style=${{flex:1}}>
+              <div style=${{fontSize:"15px",fontWeight:700,color:"#3D2314"}}>${mem.name}${mem.you?html`<span style=${{fontSize:"11px",fontWeight:700,color:mt.a,background:mt.ap,borderRadius:"50px",padding:"2px 9px",marginLeft:"8px"}}>You</span>`:""}</div>
+              <div style=${{fontSize:"13px",color:"#9B7B62",marginTop:"2px"}}>${mem.role}</div>
+            </div>
+            ${am&&!mem.you?html`<button onClick=${()=>setMembers(m=>({...m,[manageGrp]:getM(manageGrp).filter(x=>x.id!==mem.id)}))} style=${{background:"#F5D1D1",border:"none",borderRadius:"50px",padding:"8px 14px",fontSize:"13px",fontWeight:700,color:"#C44A4A",cursor:"pointer"}}>Remove</button>`:""}
+          </div>`)}
+        </div>
+      </div>
+    </div>`;
   }
 
-  var content;
-  if(ST.tab==="feed")content=buildFeed(t,grp);
-  else if(ST.tab==="chat")content=buildChat(t);
-  else if(ST.tab==="calendar")content=buildCal(t);
-  else content=buildProfile(t);
-  wrap.appendChild(content);
-
-  var nav=el("nav",{cls:"nav"});
-  [["feed","&#127968;","Home"],["chat","&#128172;","Chat"],["calendar","&#128197;","Cal"],["profile","&#128100;","Me"]].forEach(function(n){
-    var nb=b({cls:"navbtn"});
-    nb.appendChild(d({html:n[1],css:{fontSize:"20px"}}));
-    nb.appendChild(el("small",{css:{color:ST.tab===n[0]?t.a:"#9B7B62"}},n[2]));
-    if(ST.tab===n[0])nb.appendChild(d({css:{width:"15px",height:"3px",borderRadius:"3px",background:t.a,margin:"1px auto 0"}}));
-    nb.addEventListener("click",function(){ST.tab=n[0];if(n[0]!=="chat")ST.openChat=null;redraw();});nav.appendChild(nb);
-  });
-  wrap.appendChild(nav);
-
-  if(ST.newDm)wrap.appendChild(buildNewDm());
-  if(ST.addEv)wrap.appendChild(buildAddEvent(t));
-  if(ST.compose)wrap.appendChild(buildCompose(t,grp));
-  if(ST.upOpen)wrap.appendChild(buildUpload(t,grp));
-  if(ST.cmtOpen!==null)wrap.appendChild(buildComments(t));
-  return wrap;
-}
-
-function buildFeed(t,grp){
-  var wrap=d({css:{display:"flex",flexDirection:"column",flex:1,overflow:"hidden",minHeight:0}});
-  var cb=b({css:{margin:"8px 12px 0",padding:"10px 13px",borderRadius:"13px",background:t.cb,border:"2px dashed "+t.al,display:"flex",alignItems:"center",gap:"8px",cursor:"pointer",textAlign:"left",width:"calc(100% - 24px)",maxWidth:"calc(100% - 24px)",flexShrink:0,fontFamily:"inherit",boxSizing:"border-box"}});
-  var cav=d({css:{width:"28px",height:"28px",borderRadius:"50%",background:t.ap,border:"2px solid "+t.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"14px",flexShrink:0}});cav.textContent=ST.avatar;cb.appendChild(cav);
-  cb.appendChild(d({css:{fontSize:"13px",color:"#9B7B62",fontWeight:600}},"Share something with your family..."));
-  cb.addEventListener("click",function(){ST.compose=true;redraw();});wrap.appendChild(cb);
-  var list=d({cls:"scr",css:{padding:"9px 12px 80px",display:"flex",flexDirection:"column",gap:"10px",width:"100%",overflowX:"hidden"}});
-  (ST.feed[ST.group]||[]).forEach(function(item){list.appendChild(buildItem(item,t));});
-  wrap.appendChild(list);
-  var fab=b({css:{position:"fixed",bottom:"76px",right:"20px",width:"48px",height:"48px",borderRadius:"50%",background:t.a,border:"none",color:"white",fontSize:"22px",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 18px "+t.a+"88",cursor:"pointer",zIndex:40,fontFamily:"inherit"}},"+");
-  fab.addEventListener("click",function(){ST.compose=true;redraw();});wrap.appendChild(fab);
-  return wrap;
-}
-
-function buildItem(item,t){
-  var rx=ST.reactions[item.id];var pc=ST.comments[item.id]||[];
-  var wrap=d({css:{animation:"fadeUp .3s ease both"}});
-  if(item.type==="photo"){
-    var card=d({cls:"card"});
-    var hdr=d({css:{display:"flex",alignItems:"center",gap:"8px",padding:"10px 12px 7px"}});
-    var av=d({css:{width:"36px",height:"36px",borderRadius:"50%",background:t.ap,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"18px",flexShrink:0}});av.textContent=item.av;hdr.appendChild(av);
-    var nm=d();nm.appendChild(d({css:{fontSize:"14px",fontWeight:700,color:"#3D2314"}},item.name));nm.appendChild(d({css:{fontSize:"11px",color:"#9B7B62"}},item.time));hdr.appendChild(nm);card.appendChild(hdr);
-    if(item.imgUrl){var img=el("img",{css:{width:"100%",aspectRatio:"4/3",objectFit:"cover",display:"block"}});img.src=item.imgUrl;card.appendChild(img);}
-    else{var ph=d({css:{width:"100%",aspectRatio:"4/3",background:"linear-gradient(135deg,"+t.ap+","+t.sb+")",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"56px"}});ph.textContent=item.emoji;card.appendChild(ph);}
-    var body=d({css:{padding:"10px 12px"}});
-    body.appendChild(d({css:{fontSize:"13px",lineHeight:"1.6",color:"#3D2314",marginBottom:"8px"}},item.cap));
-    var acts=d({css:{display:"flex",gap:"6px",flexWrap:"wrap",alignItems:"center"}});
-    if(rx){var ri=d({css:{padding:"4px 10px",borderRadius:"50px",background:t.ap,fontSize:"12px",color:t.ad}});ri.textContent=rx+" Reacted";acts.appendChild(ri);}
-    var rb=b({css:{padding:"5px 12px",borderRadius:"50px",background:t.bg,border:"2px solid "+t.ap,fontSize:"12px",fontWeight:700,color:"#6B4C35",cursor:"pointer",fontFamily:"inherit"}},rx?"Change":"React");
-    rb.addEventListener("click",function(){ST.rxPick=ST.rxPick===item.id?null:item.id;redraw();});acts.appendChild(rb);
-    var cmb=b({css:{padding:"5px 12px",borderRadius:"50px",background:t.bg,border:"2px solid "+t.ap,fontSize:"12px",fontWeight:700,color:"#6B4C35",cursor:"pointer",marginLeft:"auto",fontFamily:"inherit"}},"Comment"+(pc.length?" ("+pc.length+")":""));
-    cmb.addEventListener("click",function(){ST.cmtOpen=item.id;ST.cmtIn="";redraw();});acts.appendChild(cmb);
-    if(ST.rxPick===item.id){
-      var rp=d({css:{width:"100%",display:"flex",gap:"5px",marginTop:"6px"}});
-      ["\uD83E\uDD70","\uD83D\uDE02","\uD83D\uDE4C","\uD83D\uDE2E","\uD83D\uDCAA"].forEach(function(e){
-        var rb2=b({css:{flex:1,fontSize:"20px",padding:"6px 0",borderRadius:"10px",background:rx===e?t.ap:t.bg,border:"2px solid "+(rx===e?t.al:t.ap),cursor:"pointer",fontFamily:"inherit"}},e);
-        rb2.addEventListener("click",function(){ST.reactions[item.id]=rx===e?null:e;ST.rxPick=null;redraw();});rp.appendChild(rb2);
-      });acts.appendChild(rp);
-    }
-    if(pc.length){var lc=d({css:{marginTop:"8px",background:t.bg,border:"1px solid "+t.ap,borderRadius:"10px",padding:"7px 10px",cursor:"pointer",fontSize:"12px",color:"#6B4C35",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},pc[pc.length-1].name+": "+pc[pc.length-1].text);lc.addEventListener("click",function(){ST.cmtOpen=item.id;ST.cmtIn="";redraw();});body.appendChild(lc);}
-    body.appendChild(acts);card.appendChild(body);wrap.appendChild(card);
+  // ── CREATE GROUP ────────────────────────────────────────────────────────────
+  if(screen==="createGroup"){
+    return html`
+    <div id="app" style=${{background:"#FAF6F0"}}>
+      <div style=${{background:"#FFF9F2",padding:"16px 20px 12px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:"1px solid #F5DDD1",flexShrink:0}}>
+        <button onClick=${()=>setScreen("main")} style=${{background:"#F5DDD1",border:"none",borderRadius:"50px",padding:"8px 16px",fontSize:"15px",cursor:"pointer",color:"#6B4226",fontWeight:700}}>← Back</button>
+        <div style=${{fontFamily:"Lora,serif",fontSize:"20px",fontWeight:600,color:"#C4714A"}}>keep <em>up</em></div>
+        <div style=${{width:"70px"}}></div>
+      </div>
+      <div class="scroll" style=${{flex:1,padding:"20px 20px 100px"}}>
+        <div style=${{textAlign:"center",marginBottom:"24px"}}>
+          <div style=${{fontSize:"52px",marginBottom:"10px"}}>${grpEmoji}</div>
+          <div style=${{fontFamily:"Lora,serif",fontSize:"24px",fontWeight:600,color:"#3D2314",marginBottom:"6px"}}>Create a Family Group</div>
+        </div>
+        <label style=${{fontSize:"13px",fontWeight:700,color:"#9B7B62",letterSpacing:".5px",textTransform:"uppercase",marginBottom:"8px",display:"block"}}>Group Name</label>
+        <input value=${grpName} onInput=${e=>setGrpName(e.target.value)} placeholder="e.g. Mom's Side, Cousins…"
+          style=${{width:"100%",padding:"16px",borderRadius:"14px",border:"1.5px solid rgba(107,66,38,.15)",background:"#FFF9F2",fontSize:"16px",color:"#3D2314",outline:"none",marginBottom:"20px"}}/>
+        <label style=${{fontSize:"13px",fontWeight:700,color:"#9B7B62",letterSpacing:".5px",textTransform:"uppercase",marginBottom:"10px",display:"block"}}>Group Icon</label>
+        <div style=${{display:"flex",flexWrap:"wrap",gap:"10px",marginBottom:"22px"}}>
+          ${GRP_EMOJIS.map(e=>html`<button onClick=${()=>setGrpEmoji(e)} style=${{width:"48px",height:"48px",borderRadius:"12px",background:grpEmoji===e?"#F5DDD1":"#FFF9F2",border:`2px solid ${grpEmoji===e?"#C4714A":"rgba(107,66,38,.12)"}`,fontSize:"22px",cursor:"pointer"}}>${e}</button>`)}
+        </div>
+        ${btn("Create Group",makeGrp,!grpName.trim())}
+      </div>
+    </div>`;
   }
-  if(item.type==="checkin"){
-    var card=d({css:{background:t.ap,border:"2px solid "+t.al,borderRadius:"16px",padding:"13px",display:"flex",gap:"10px"}});
-    var av=d({css:{width:"40px",height:"40px",borderRadius:"50%",background:t.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"20px",flexShrink:0}});av.textContent=item.av;card.appendChild(av);
-    var bd=d({css:{flex:1}});bd.appendChild(d({css:{fontSize:"12px",fontWeight:700,color:t.ad}},item.name+" checked in"));bd.appendChild(d({css:{fontSize:"13px",color:"#3D2314",marginTop:"4px",lineHeight:"1.5"}},item.status));bd.appendChild(d({css:{fontSize:"11px",color:"#9B7B62",marginTop:"4px"}},item.time));card.appendChild(bd);wrap.appendChild(card);
-  }
-  if(item.type==="event"){
-    var card=d({css:{background:"#FBF0D9",border:"2px solid #E8C878",borderRadius:"16px",padding:"13px"}});
-    var hdr=d({css:{display:"flex",alignItems:"center",gap:"10px",marginBottom:"8px"}});
-    var dt=d({css:{width:"44px",height:"44px",borderRadius:"12px",background:"#D4922A",color:"white",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",flexShrink:0}});
-    dt.appendChild(d({css:{fontSize:"8px",fontWeight:700,letterSpacing:"1px",textTransform:"uppercase"}},item.month));
-    dt.appendChild(d({css:{fontSize:"18px",fontWeight:700,lineHeight:"1"}},String(item.day)));
-    hdr.appendChild(dt);var inf=d();inf.appendChild(d({css:{fontSize:"14px",fontWeight:700,color:"#3D2314"}},item.title));inf.appendChild(d({css:{fontSize:"11px",color:"#9B7B62",marginTop:"2px"}},item.who));hdr.appendChild(inf);card.appendChild(hdr);
-    var acts=d({css:{display:"flex",gap:"8px"}});
-    var gb=b({css:{flex:1,padding:"8px",borderRadius:"50px",border:"2px solid #D4922A",background:ST.rsvp[item.id]?"#D4922A":"transparent",fontSize:"12px",fontWeight:700,color:ST.rsvp[item.id]?"white":"#D4922A",cursor:"pointer",fontFamily:"inherit"}},ST.rsvp[item.id]?"Going!":"I'll Be There");
-    gb.addEventListener("click",function(){ST.rsvp[item.id]=!ST.rsvp[item.id];redraw();});acts.appendChild(gb);
-    acts.appendChild(b({css:{flex:1,padding:"8px",borderRadius:"50px",border:"2px solid #D4922A",background:"transparent",fontSize:"12px",fontWeight:700,color:"#D4922A",cursor:"pointer",fontFamily:"inherit"}},"Maybe"));
-    card.appendChild(acts);wrap.appendChild(card);
-  }
-  return wrap;
+
+  // ── MAIN ───────────────────────────────────────────────────────────────────
+  const curFeed=showEmpty?[]:(feed[activeGrp]||[]);
+
+  return html`
+  <div id="app" style=${{background:t.bg,transition:"background .3s"}}>
+
+    <!-- TOPBAR -->
+    <div style=${{background:t.cb,padding:"13px 16px 10px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:`1px solid ${t.ap}`,flexShrink:0}}>
+      <div style=${{fontFamily:"Lora,serif",fontSize:"22px",fontWeight:600,color:t.a}}>keep <em>up</em></div>
+      <div style=${{display:"flex",gap:"8px",alignItems:"center"}}>
+        <button onClick=${()=>setTextSz(s=>s==="normal"?"large":s==="large"?"xlarge":"normal")} style=${{background:t.ap,border:"none",borderRadius:"50px",padding:"6px 10px",fontSize:"13px",fontWeight:700,color:t.ad,cursor:"pointer"}}>${textSz==="xlarge"?"A++":textSz==="large"?"A+":"A"}</button>
+        <button onClick=${()=>setShowEmpty(s=>!s)} style=${{background:t.ap,border:"none",borderRadius:"50px",padding:"6px 10px",fontSize:"13px",fontWeight:700,color:t.ad,cursor:"pointer"}}>${showEmpty?"📋":"🕳️"}</button>
+        <button style=${{width:"38px",height:"38px",borderRadius:"50%",background:"transparent",border:"none",fontSize:"22px",cursor:"pointer",position:"relative"}}>🔔<span style=${{position:"absolute",top:"5px",right:"5px",width:"8px",height:"8px",borderRadius:"50%",background:t.a,border:`2px solid ${t.cb}`}}></span></button>
+        ${tab==="feed"&&html`<button onClick=${()=>{setManageGrp(activeGrp);setScreen("manageGroup");}} style=${{background:t.ap,border:"none",borderRadius:"50px",padding:"7px 12px",fontSize:"13px",fontWeight:700,color:t.ad,cursor:"pointer"}}>👥</button>`}
+        <div style=${{width:"34px",height:"34px",borderRadius:"50%",background:t.ap,border:`2px solid ${t.al}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"17px"}}>${obAv}</div>
+      </div>
+    </div>
+
+    <!-- GROUP PILLS -->
+    ${tab==="feed"&&html`
+    <div style=${{background:t.sb,borderBottom:`1px solid ${t.ap}`,flexShrink:0}}>
+      <div class="scroll" style=${{padding:"6px 14px 10px",display:"flex",gap:"8px",overflowX:"auto"}}>
+        ${groups.map(g=>{const gt2=gt(g.id);const ia=activeGrp===g.id;return html`
+          <button onClick=${()=>setActiveGrp(g.id)} style=${{flexShrink:0,display:"flex",alignItems:"center",gap:"7px",padding:"8px 15px 8px 9px",borderRadius:"50px",background:ia?gt2.ap:t.bg,border:`2px solid ${ia?gt2.a:"rgba(107,66,38,.12)"}`,cursor:"pointer",fontSize:px(13),fontWeight:700,color:ia?gt2.ad:"#6B4C35"}}>
+            <span style=${{width:"25px",height:"25px",borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"14px",background:ia?gt2.al:"white"}}>${g.icon}</span>${g.label}
+          </button>`})}
+        <button onClick=${()=>setScreen("createGroup")} style=${{flexShrink:0,display:"flex",alignItems:"center",gap:"6px",padding:"8px 13px",borderRadius:"50px",background:t.bg,border:`2px dashed ${t.al}`,cursor:"pointer",fontSize:px(13),fontWeight:700,color:t.ad}}>＋ New</button>
+      </div>
+    </div>`}
+
+    <!-- FEED -->
+    ${tab==="feed"&&(curFeed.length===0?html`
+      <!-- EMPTY STATE -->
+      <div style=${{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"24px 24px 40px",animation:"fadeUp .4s ease both"}}>
+        <div class="float" style=${{fontSize:"64px",marginBottom:"16px",filter:"drop-shadow(0 8px 16px rgba(0,0,0,.12))"}}>${getEmpty(activeGrp).emoji}</div>
+        <div style=${{fontFamily:"Lora,serif",fontSize:px(22),fontWeight:600,color:t.ad,textAlign:"center",lineHeight:1.3,marginBottom:"10px"}}>${getEmpty(activeGrp).head}</div>
+        <div style=${{fontSize:px(15),color:"#9B7B62",textAlign:"center",lineHeight:1.65,marginBottom:"24px",maxWidth:"300px"}}>${getEmpty(activeGrp).sub}</div>
+        <div style=${{width:"100%",background:t.ap,borderRadius:"16px",padding:"14px 16px",marginBottom:"22px"}}>
+          <div style=${{fontSize:px(12),fontWeight:800,color:t.ad,letterSpacing:".5px",textTransform:"uppercase",marginBottom:"10px"}}>Ideas to get started:</div>
+          ${[{i:"📷",t:"Share a photo — something that made you smile"},{i:"📍",t:"Quick check-in — where are you, how are you?"},{i:"📅",t:"Add an event — birthday, dinner, get-together"}].map((idea,ix)=>html`
+            <div style=${{display:"flex",alignItems:"center",gap:"10px",padding:"8px 0",borderBottom:ix<2?`1px solid ${t.ap}`:"none"}}>
+              <span style=${{fontSize:"18px",flexShrink:0}}>${idea.i}</span>
+              <span style=${{fontSize:px(13),color:"#6B4C35",lineHeight:1.5}}>${idea.t}</span>
+            </div>`)}
+        </div>
+        <button onClick=${()=>setComposeOpen(true)} class="pulse-btn" style=${{width:"100%",padding:"17px",borderRadius:"50px",background:getEmpty(activeGrp).color,border:"none",color:"white",fontSize:px(16),fontWeight:800,cursor:"pointer",marginBottom:"12px"}}>${getEmpty(activeGrp).cta}</button>
+        <button onClick=${()=>{setManageGrp(activeGrp);setScreen("manageGroup");}} style=${{width:"100%",padding:"14px",borderRadius:"50px",background:"transparent",border:`2px solid ${t.ap}`,color:t.ad,fontSize:px(14),fontWeight:700,cursor:"pointer"}}>👥 Invite family members first</button>
+      </div>
+    `:html`
+      <!-- FEED WITH POSTS -->
+      <div style=${{padding:"10px 14px 0",background:t.bg,flexShrink:0}}>
+        <button onClick=${()=>setComposeOpen(true)} style=${{width:"100%",padding:"11px 14px",borderRadius:"16px",background:t.cb,border:`2px dashed ${t.al}`,display:"flex",alignItems:"center",gap:"10px",cursor:"pointer",textAlign:"left"}}>
+          <div style=${{width:"33px",height:"33px",borderRadius:"50%",background:t.ap,border:`2px solid ${t.al}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"16px",flexShrink:0}}>${obAv}</div>
+          <span style=${{fontSize:px(14),color:"#9B7B62",fontWeight:600}}>Share something with your family… 📸</span>
+        </button>
+      </div>
+      <div class="scroll" style=${{flex:1,padding:"12px 14px 100px",display:"flex",flexDirection:"column",gap:"12px"}}>
+        ${curFeed.map((item,i)=>{
+          const pc=pCmts(item.id);
+          if(item.type==="photo") return html`
+          <div style=${{background:t.cb,borderRadius:"20px",overflow:"hidden",boxShadow:"0 2px 14px rgba(0,0,0,.07)",border:`1px solid ${t.ap}`,animation:"fadeUp .3s ease both",animationDelay:i*.06+"s"}}>
+            <div style=${{display:"flex",alignItems:"center",gap:"10px",padding:"12px 14px 8px"}}>
+              <div style=${{width:"40px",height:"40px",borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"20px",border:`2px solid ${t.ap}`,background:t.ap,flexShrink:0}}>${item.av}</div>
+              <div style=${{flex:1}}><div style=${{fontSize:px(15),fontWeight:700,color:"#3D2314"}}>${item.name}</div><div style=${{fontSize:px(12),color:"#9B7B62",marginTop:"1px"}}>${item.time}</div></div>
+            </div>
+            ${item.imgUrl?html`<img src=${item.imgUrl} style=${{width:"100%",aspectRatio:"4/3",objectFit:"cover",display:"block"}}/>`:html`<div style=${{width:"100%",aspectRatio:"4/3",background:`linear-gradient(135deg,${t.ap},${t.sb})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"64px"}}>${item.emoji}</div>`}
+            <div style=${{padding:"12px 14px"}}>
+              <div style=${{fontSize:px(15),lineHeight:1.6,color:"#3D2314"}}>${item.cap}</div>
+              <div style=${{display:"flex",alignItems:"center",gap:"8px",marginTop:"12px",flexWrap:"wrap"}}>
+                ${reactions[item.id]&&html`<div style=${{display:"flex",alignItems:"center",gap:"5px",padding:"6px 12px",borderRadius:"50px",background:t.ap,border:`1.5px solid ${t.al}`,fontSize:px(13),fontWeight:600,color:t.ad}}>${reactions[item.id]} <span style=${{fontSize:px(11)}}>You reacted</span></div>`}
+                <button onClick=${()=>setRxPicker(rxPicker===item.id?null:item.id)} style=${{display:"flex",alignItems:"center",gap:"5px",padding:"7px 13px",borderRadius:"50px",background:t.bg,border:`2px solid ${t.ap}`,fontSize:px(13),fontWeight:700,color:"#6B4C35",cursor:"pointer"}}>😊 ${reactions[item.id]?"Change":"React"}</button>
+                <button onClick=${()=>{setCmtOpen(item.id);setCmtInput("");}} style=${{display:"flex",alignItems:"center",gap:"5px",padding:"7px 13px",borderRadius:"50px",background:t.bg,border:`2px solid ${t.ap}`,fontSize:px(13),fontWeight:700,color:"#6B4C35",cursor:"pointer",marginLeft:"auto"}}>💬 ${pc.length>0?pc.length:"Comment"}</button>
+                ${rxPicker===item.id&&html`<div style=${{width:"100%",display:"flex",gap:"8px",padding:"8px 0 2px",animation:"popIn .18s ease"}}>
+                  ${REACTIONS.map(e=>html`<button onClick=${()=>doReact(item.id,e)} style=${{flex:1,fontSize:"24px",padding:"9px 0",borderRadius:"13px",background:reactions[item.id]===e?t.ap:t.bg,border:`2px solid ${reactions[item.id]===e?t.al:t.ap}`,cursor:"pointer"}}>${e}</button>`)}
+                </div>`}
+              </div>
+              ${pc.length>0&&html`
+              <button onClick=${()=>{setCmtOpen(item.id);setCmtInput("");}} style=${{width:"100%",marginTop:"10px",background:t.bg,border:`1px solid ${t.ap}`,borderRadius:"13px",padding:"8px 12px",textAlign:"left",cursor:"pointer",display:"flex",gap:"8px",alignItems:"center"}}>
+                <span style=${{fontSize:"16px"}}>${pc[pc.length-1].av}</span>
+                <div style=${{flex:1,minWidth:0}}><span style=${{fontSize:px(12),fontWeight:700,color:t.ad}}>${pc[pc.length-1].name}: </span><span style=${{fontSize:px(12),color:"#6B4C35"}}>${pc[pc.length-1].text}</span></div>
+                ${pc.length>1&&html`<span style=${{fontSize:px(11),color:"#9B7B62",flexShrink:0}}>+${pc.length-1}</span>`}
+              </button>`}
+            </div>
+          </div>`;
+
+          if(item.type==="checkin") return html`
+          <div style=${{background:t.ap,border:`2px solid ${t.al}`,borderRadius:"20px",padding:"16px",display:"flex",alignItems:"flex-start",gap:"12px",animation:"fadeUp .3s ease both",animationDelay:i*.06+"s"}}>
+            <div style=${{width:"44px",height:"44px",borderRadius:"50%",background:t.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"22px",flexShrink:0}}>${item.av}</div>
+            <div style=${{flex:1}}>
+              <div style=${{fontSize:px(14),fontWeight:700,color:t.ad}}>${item.name} checked in</div>
+              <div style=${{fontSize:px(14),color:"#3D2314",marginTop:"4px",lineHeight:1.5}}>${item.status}</div>
+              <div style=${{fontSize:px(11),color:"#9B7B62",marginTop:"5px"}}>${item.time}</div>
+              <button onClick=${()=>setRxPicker(rxPicker===item.id?null:item.id)} style=${{marginTop:"8px",display:"flex",alignItems:"center",gap:"5px",padding:"6px 12px",borderRadius:"50px",background:"white",border:`1.5px solid ${t.al}`,fontSize:px(12),fontWeight:700,color:t.ad,cursor:"pointer"}}>${reactions[item.id]||"😊"} ${reactions[item.id]?"Change":"React"}</button>
+              ${rxPicker===item.id&&html`<div style=${{display:"flex",gap:"8px",padding:"8px 0 4px",animation:"popIn .18s ease"}}>
+                ${REACTIONS.map(e=>html`<button onClick=${()=>doReact(item.id,e)} style=${{flex:1,fontSize:"22px",padding:"7px 0",borderRadius:"11px",background:reactions[item.id]===e?"white":t.ap,border:`2px solid ${reactions[item.id]===e?t.al:"transparent"}`,cursor:"pointer"}}>${e}</button>`)}
+              </div>`}
+            </div>
+          </div>`;
+
+          if(item.type==="event") return html`
+          <div style=${{background:"#FBF0D9",border:"2px solid #E8C878",borderRadius:"20px",padding:"16px",animation:"fadeUp .3s ease both",animationDelay:i*.06+"s"}}>
+            <div style=${{display:"flex",alignItems:"center",gap:"12px",marginBottom:"10px"}}>
+              <div style=${{width:"50px",height:"50px",borderRadius:"14px",background:"#D4922A",color:"white",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                <span style=${{fontSize:"9px",fontWeight:700,letterSpacing:"1px",textTransform:"uppercase"}}>${item.month}</span>
+                <span style=${{fontSize:"20px",fontWeight:700,lineHeight:1}}>${item.day}</span>
+              </div>
+              <div><div style=${{fontSize:px(15),fontWeight:700,color:"#3D2314"}}>${item.title}</div><div style=${{fontSize:px(12),color:"#9B7B62",marginTop:"2px"}}>${item.who}</div></div>
+            </div>
+            <div style=${{fontSize:px(13),color:"#6B4C35",marginBottom:"10px"}}>✅ ${item.going} going · 🤔 ${item.maybe} maybe</div>
+            <div style=${{display:"flex",gap:"10px"}}>
+              <button onClick=${()=>setRsvp(r=>({...r,[item.id]:!r[item.id]}))} style=${{flex:1,padding:"10px",borderRadius:"50px",border:"2px solid #D4922A",background:rsvp[item.id]?"#D4922A":"transparent",fontSize:px(13),fontWeight:700,color:rsvp[item.id]?"white":"#D4922A",cursor:"pointer"}}>${rsvp[item.id]?"✅ Going!":"Yes, I'll Be There"}</button>
+              <button style=${{flex:1,padding:"10px",borderRadius:"50px",border:"2px solid #D4922A",background:"transparent",fontSize:px(13),fontWeight:700,color:"#D4922A",cursor:"pointer"}}>Maybe</button>
+            </div>
+          </div>`;
+          return null;
+        })}
+      </div>
+      ${curFeed.length>0&&html`<button onClick=${()=>setComposeOpen(true)} style=${{position:"fixed",bottom:"84px",right:"50%",transform:"translateX(168px)",width:"52px",height:"52px",borderRadius:"50%",background:t.a,border:"none",color:"white",fontSize:"24px",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:`0 6px 24px ${t.a}66`,cursor:"pointer",zIndex:40}}>＋</button>`}
+    `)}
+
+    <!-- CHAT INBOX -->
+    ${tab==="chat"&&!openChat&&html`
+    <div class="scroll" style=${{flex:1,padding:"12px 14px 100px"}}>
+      <button onClick=${()=>setNewDmOpen(true)} style=${{width:"100%",marginBottom:"16px",padding:"12px 16px",borderRadius:"16px",background:t.cb,border:`2px dashed ${t.al}`,display:"flex",alignItems:"center",gap:"10px",cursor:"pointer",textAlign:"left"}}>
+        <div style=${{width:"36px",height:"36px",borderRadius:"50%",background:t.ap,border:`2px solid ${t.al}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"18px",flexShrink:0}}>✏️</div>
+        <span style=${{fontSize:px(14),color:t.ad,fontWeight:700}}>New direct message…</span>
+      </button>
+      <div style=${{fontSize:px(11),fontWeight:800,color:"#9B7B62",letterSpacing:".6px",textTransform:"uppercase",marginBottom:"8px"}}>Group Chats</div>
+      ${groups.map(g=>{const ct=gt(g.id);const prev=CHAT_PREV[g.id];return html`
+      <div onClick=${()=>setOpenChat({type:"group",id:g.id})} style=${{display:"flex",alignItems:"center",gap:"12px",padding:"12px 13px",borderRadius:"18px",background:ct.cb,border:`1.5px solid ${ct.ap}`,cursor:"pointer",marginBottom:"8px"}}>
+        <div style=${{width:"45px",height:"45px",borderRadius:"50%",background:ct.ap,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"21px",flexShrink:0,border:`2px solid ${ct.al}`}}>${g.icon}</div>
+        <div style=${{flex:1,minWidth:0}}>
+          <div style=${{display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:"6px"}}>
+            <div style=${{fontSize:px(15),fontWeight:700,color:"#3D2314"}}>${g.label}</div>
+            ${prev&&html`<div style=${{fontSize:px(11),color:"#9B7B62",flexShrink:0}}>${prev.time}</div>`}
+          </div>
+          ${prev?html`<div style=${{fontSize:px(13),color:"#9B7B62",marginTop:"2px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}><span style=${{fontWeight:700,color:"#6B4C35"}}>${prev.who}:</span> ${prev.text}</div>`:html`<div style=${{fontSize:px(13),color:"#9B7B62",marginTop:"2px"}}>No messages yet</div>`}
+        </div>
+        <div style=${{fontSize:"20px",color:ct.al}}>›</div>
+      </div>`})}
+      <div style=${{fontSize:px(11),fontWeight:800,color:"#9B7B62",letterSpacing:".6px",textTransform:"uppercase",margin:"16px 0 8px"}}>Direct Messages</div>
+      ${dms.length===0?html`
+      <div style=${{textAlign:"center",padding:"24px 16px",background:"#FFF9F2",borderRadius:"18px",border:"1.5px solid #F5DDD1"}}>
+        <div style=${{fontSize:"36px",marginBottom:"8px"}}>💬</div>
+        <div style=${{fontSize:px(14),fontWeight:700,color:"#6B4C35",marginBottom:"4px"}}>No direct messages yet</div>
+        <div style=${{fontSize:px(13),color:"#9B7B62",lineHeight:1.5}}>Tap "New direct message" to chat privately with someone.</div>
+      </div>`:dms.map(dm=>html`
+      <div onClick=${()=>setOpenChat({type:"dm",id:dm.id})} style=${{display:"flex",alignItems:"center",gap:"12px",padding:"12px 13px",borderRadius:"18px",background:"#FFF9F2",border:"1.5px solid #F5DDD1",cursor:"pointer",marginBottom:"8px"}}>
+        <div style=${{position:"relative",width:"45px",height:"45px",flexShrink:0}}>
+          ${dm.members.length===1?html`<div style=${{width:"45px",height:"45px",borderRadius:"50%",background:"#F5DDD1",border:"2px solid #E8956D",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"22px"}}>${dm.members[0].av}</div>`:html`
+          <div style=${{position:"absolute",top:0,left:0,width:"31px",height:"31px",borderRadius:"50%",background:"#F5DDD1",border:"2px solid white",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"16px"}}>${dm.members[0].av}</div>
+          <div style=${{position:"absolute",bottom:0,right:0,width:"26px",height:"26px",borderRadius:"50%",background:"#E8956D",border:"2px solid white",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"13px"}}>${dm.members[1].av}</div>`}
+        </div>
+        <div style=${{flex:1,minWidth:0}}>
+          <div style=${{display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:"6px"}}>
+            <div style=${{fontSize:px(15),fontWeight:700,color:"#3D2314",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>${dm.members.map(m=>m.name).join(", ")}</div>
+            <div style=${{fontSize:px(11),color:"#9B7B62",flexShrink:0}}>${dm.lt}</div>
+          </div>
+          <div style=${{fontSize:px(13),color:"#9B7B62",marginTop:"2px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>${dm.last}</div>
+        </div>
+        <div style=${{fontSize:"20px",color:"#E8956D"}}>›</div>
+      </div>`)}
+    </div>`}
+
+    <!-- CHAT VIEW -->
+    ${tab==="chat"&&openChat&&(()=>{
+      const isDm=openChat.type==="dm";
+      const cid=openChat.id;
+      const dm=isDm?dms.find(d=>d.id===cid):null;
+      const g=!isDm?groups.find(g=>g.id===cid):null;
+      const ct=!isDm?gt(cid):{a:"#C4714A",al:"#E8956D",ap:"#F5DDD1",ad:"#6B4226",bg:"#FAF6F0",cb:"#FFF9F2"};
+      const title=isDm?dm?.members.map(m=>m.name).join(", "):g?.label;
+      const icon=isDm?(dm?.members.length===1?dm.members[0].av:"👥"):g?.icon;
+      const msgs=chatMsgs[cid]||[];
+      const iv=chatInputs[cid]||"";
+      const send=()=>{
+        if(!iv.trim())return;
+        const msg={id:Date.now(),av:obAv,name:obName||"You",text:iv.trim(),time:"Just now",you:true};
+        setChatMsgs(p=>({...p,[cid]:[...(p[cid]||[]),msg]}));
+        setChatInputs(p=>({...p,[cid]:""}));
+        if(isDm)setDms(p=>p.map(d=>d.id===cid?{...d,last:iv.trim(),lt:"Just now"}:d));
+      };
+      return html`
+      <div style=${{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+        <div style=${{background:ct.cb,padding:"11px 13px",display:"flex",alignItems:"center",gap:"10px",borderBottom:`1px solid ${ct.ap}`,flexShrink:0}}>
+          <button onClick=${()=>setOpenChat(null)} style=${{background:ct.ap,border:"none",borderRadius:"50px",padding:"7px 13px",fontSize:"13px",fontWeight:700,color:ct.ad,cursor:"pointer",flexShrink:0}}>← Back</button>
+          <div style=${{width:"34px",height:"34px",borderRadius:"50%",background:ct.ap,border:`2px solid ${ct.al}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"18px",flexShrink:0}}>${icon}</div>
+          <div style=${{flex:1,minWidth:0}}>
+            <div style=${{fontSize:px(15),fontWeight:700,color:"#3D2314",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>${title}</div>
+            <div style=${{fontSize:px(11),color:ct.al,marginTop:"1px"}}>${isDm?"Private message":getM(cid).length+" members"}</div>
+          </div>
+        </div>
+        <div class="scroll" style=${{flex:1,padding:"14px 13px 8px",display:"flex",flexDirection:"column",gap:"10px",background:ct.bg}}>
+          ${msgs.length===0&&html`<div style=${{textAlign:"center",padding:"48px 24px",color:"#9B7B62"}}><div style=${{fontSize:"44px",marginBottom:"10px"}}>${icon}</div><div style=${{fontSize:px(15),fontWeight:700,color:"#6B4C35",marginBottom:"6px"}}>Start the conversation!</div></div>`}
+          ${msgs.map((msg,i)=>{const iy=msg.you;return html`
+          <div style=${{display:"flex",flexDirection:iy?"row-reverse":"row",alignItems:"flex-end",gap:"8px",animation:"fadeUp .2s ease both",animationDelay:Math.min(i,6)*.04+"s"}}>
+            ${!iy&&html`<div style=${{width:"29px",height:"29px",borderRadius:"50%",background:ct.ap,border:`1.5px solid ${ct.al}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"14px",flexShrink:0}}>${msg.av}</div>`}
+            <div style=${{maxWidth:"72%"}}>
+              ${!iy&&html`<div style=${{fontSize:px(11),fontWeight:700,color:ct.ad,marginBottom:"3px",paddingLeft:"2px"}}>${msg.name}</div>`}
+              <div style=${{padding:"10px 13px",borderRadius:iy?"18px 18px 4px 18px":"18px 18px 18px 4px",background:iy?ct.a:"white",color:iy?"white":"#3D2314",fontSize:px(14),lineHeight:1.55,boxShadow:"0 1px 6px rgba(0,0,0,.07)",border:iy?"none":`1px solid ${ct.ap}`}}>${msg.text}</div>
+              <div style=${{fontSize:px(10),color:"#9B7B62",marginTop:"3px",textAlign:iy?"right":"left",paddingLeft:iy?"0":"2px"}}>${msg.time}</div>
+            </div>
+          </div>`;})}
+        </div>
+        <div style=${{padding:"9px 12px 26px",borderTop:`1px solid ${ct.ap}`,background:ct.cb,flexShrink:0,display:"flex",gap:"8px",alignItems:"flex-end"}}>
+          <div style=${{flex:1,background:ct.bg,borderRadius:"22px",border:`1.5px solid ${ct.ap}`,display:"flex",alignItems:"center",padding:"9px 13px"}}>
+            <input value=${iv} onInput=${e=>setChatInputs(p=>({...p,[cid]:e.target.value}))} onKeyDown=${e=>{if(e.key==="Enter"&&iv.trim())send();}} placeholder="Message…" style=${{flex:1,background:"none",border:"none",outline:"none",fontSize:px(15),color:"#3D2314"}}/>
+          </div>
+          <button onClick=${send} disabled=${!iv.trim()} style=${{width:"40px",height:"40px",borderRadius:"50%",flexShrink:0,background:iv.trim()?ct.a:"#D4B8A8",border:"none",color:"white",fontSize:"19px",cursor:iv.trim()?"pointer":"not-allowed",display:"flex",alignItems:"center",justifyContent:"center",transition:"background .15s"}}>↑</button>
+        </div>
+      </div>`;
+    })()}
+
+    <!-- NEW DM PICKER -->
+    ${newDmOpen&&html`
+    <div onClick=${()=>{setNewDmOpen(false);setDmSel([]);}} style=${{position:"fixed",inset:0,background:"rgba(61,35,20,.45)",zIndex:60,display:"flex",alignItems:"flex-end",animation:"fadeIn .2s ease"}}>
+      <div onClick=${e=>e.stopPropagation()} style=${{width:"100%",maxWidth:"430px",margin:"0 auto",background:"#FFF9F2",borderRadius:"24px 24px 0 0",padding:"20px 20px 36px",animation:"slideUp .25s ease",maxHeight:"80vh",display:"flex",flexDirection:"column"}}>
+        ${handle()}
+        <div style=${{fontFamily:"Lora,serif",fontSize:px(20),fontWeight:600,color:"#3D2314",marginBottom:"4px"}}>New Direct Message</div>
+        <div style=${{fontSize:px(13),color:"#9B7B62",marginBottom:"14px"}}>Choose family members to message privately.</div>
+        <div style=${{fontSize:px(12),fontWeight:700,color:"#9B7B62",letterSpacing:".4px",textTransform:"uppercase",marginBottom:"8px"}}>Pick from group:</div>
+        <div class="scroll" style=${{display:"flex",gap:"8px",marginBottom:"14px",overflowX:"auto",paddingBottom:"2px"}}>
+          ${groups.map(g=>{const gt2=gt(g.id);return html`
+          <button onClick=${()=>{setDmGrp(g.id);setDmSel([]);}} style=${{flexShrink:0,display:"flex",alignItems:"center",gap:"6px",padding:"7px 12px",borderRadius:"50px",background:dmGrp===g.id?gt2.ap:"#FAF6F0",border:`2px solid ${dmGrp===g.id?gt2.a:"rgba(107,66,38,.12)"}`,fontSize:px(13),fontWeight:700,color:dmGrp===g.id?gt2.ad:"#6B4C35",cursor:"pointer"}}>${g.icon} ${g.label}</button>`})}
+        </div>
+        <div style=${{fontSize:px(12),fontWeight:700,color:"#9B7B62",letterSpacing:".4px",textTransform:"uppercase",marginBottom:"8px"}}>Select people:</div>
+        <div class="scroll" style=${{flex:1,display:"flex",flexDirection:"column",gap:"8px",marginBottom:"16px"}}>
+          ${getM(dmGrp).filter(m=>!m.you).map(mem=>{const sel=dmSel.includes(mem.id);const gt2=gt(dmGrp);return html`
+          <div onClick=${()=>setDmSel(s=>sel?s.filter(x=>x!==mem.id):[...s,mem.id])} style=${{display:"flex",alignItems:"center",gap:"12px",padding:"11px 13px",borderRadius:"16px",background:sel?gt2.ap:"#FAF6F0",border:`2px solid ${sel?gt2.a:"rgba(107,66,38,.1)"}`,cursor:"pointer"}}>
+            <div style=${{width:"38px",height:"38px",borderRadius:"50%",background:sel?gt2.al:gt2.ap,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"19px",flexShrink:0,border:`2px solid ${sel?gt2.a:gt2.ap}`}}>${mem.av}</div>
+            <div style=${{flex:1}}><div style=${{fontSize:px(15),fontWeight:700,color:"#3D2314"}}>${mem.name}</div><div style=${{fontSize:px(12),color:"#9B7B62",marginTop:"1px"}}>${mem.role}</div></div>
+            <div style=${{width:"23px",height:"23px",borderRadius:"50%",background:sel?gt2.a:"white",border:`2px solid ${sel?gt2.a:"rgba(107,66,38,.18)"}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"12px",color:"white",fontWeight:700}}>${sel?"✓":""}</div>
+          </div>`})}
+        </div>
+        <button disabled=${dmSel.length===0} onClick=${()=>{
+          const sm=getM(dmGrp).filter(m=>dmSel.includes(m.id));
+          const nid="dm-"+Date.now();
+          setDms(p=>[...p,{id:nid,members:sm,last:"",lt:"Now"}]);
+          setChatMsgs(p=>({...p,[nid]:[]}));
+          setDmSel([]);setNewDmOpen(false);setOpenChat({type:"dm",id:nid});
+        }} style=${{width:"100%",padding:"16px",borderRadius:"50px",background:dmSel.length>0?"#C4714A":"#D4B8A8",border:"none",color:"white",fontSize:px(16),fontWeight:800,cursor:dmSel.length>0?"pointer":"not-allowed",transition:"all .2s"}}>
+          ${dmSel.length===0?"Select someone to message":"Start Chat →"}
+        </button>
+      </div>
+    </div>`}
+
+    <!-- CALENDAR -->
+    ${tab==="calendar"&&html`
+    <div class="scroll" style=${{flex:1,padding:"16px 14px 100px"}}>
+      <div style=${{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"14px"}}>
+        <button style=${{width:"36px",height:"36px",borderRadius:"50%",background:t.ap,border:"none",fontSize:"18px",cursor:"pointer",color:t.ad,fontWeight:700}}>‹</button>
+        <div style=${{fontFamily:"Lora,serif",fontSize:px(18),fontWeight:600,color:"#3D2314"}}>April 2026</div>
+        <button style=${{width:"36px",height:"36px",borderRadius:"50%",background:t.ap,border:"none",fontSize:"18px",cursor:"pointer",color:t.ad,fontWeight:700}}>›</button>
+      </div>
+      <div style=${{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:"3px",marginBottom:"8px"}}>
+        ${["S","M","T","W","T","F","S"].map((d,i)=>html`<div style=${{textAlign:"center",fontSize:px(11),fontWeight:700,color:"#9B7B62",padding:"5px 0"}} key=${i}>${d}</div>`)}
+        ${CAL.map((d,i)=>html`
+        <div style=${{aspectRatio:1,borderRadius:"50%",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",fontSize:px(13),fontWeight:600,color:d.d===16&&!d.p&&!d.n?"white":d.p||d.n?"rgba(107,66,38,.2)":"#6B4C35",background:d.d===16&&!d.p&&!d.n?t.a:"transparent",cursor:"pointer",position:"relative"}}>
+          ${d.d}
+          ${(d.ev||d.bd)&&html`<div style=${{position:"absolute",bottom:"2px",display:"flex",gap:"2px"}}>
+            ${d.ev&&html`<span style=${{width:"4px",height:"4px",borderRadius:"50%",background:d.d===16&&!d.p&&!d.n?"white":t.al}}></span>`}
+            ${d.bd&&html`<span style=${{width:"4px",height:"4px",borderRadius:"50%",background:"#D4922A"}}></span>`}
+          </div>`}
+        </div>`)}
+      </div>
+      <button onClick=${()=>setAddEvOpen(true)} style=${{width:"100%",padding:"13px",borderRadius:"16px",background:t.ap,border:`2px dashed ${t.al}`,fontSize:px(14),fontWeight:700,color:t.ad,cursor:"pointer",marginBottom:"18px",display:"flex",alignItems:"center",justifyContent:"center",gap:"8px"}}>📅 Add a New Event</button>
+      <div style=${{fontFamily:"Lora,serif",fontSize:px(16),fontWeight:600,color:"#3D2314",marginBottom:"10px"}}>🎂 Upcoming Birthdays</div>
+      <div style=${{display:"flex",flexDirection:"column",gap:"8px",marginBottom:"20px"}}>
+        ${BIRTHDAYS.map(b=>html`
+        <div style=${{background:"#FBF0D9",border:"1.5px solid #E8C878",borderRadius:"16px",padding:"12px 14px",display:"flex",alignItems:"center",gap:"12px"}}>
+          <div style=${{width:"40px",height:"40px",borderRadius:"50%",background:"#F8E4B0",border:"2px solid #E8C878",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"20px"}}>${b.av}</div>
+          <div style=${{flex:1}}><div style=${{fontSize:px(14),fontWeight:700,color:"#3D2314"}}>${b.name}'s Birthday</div><div style=${{fontSize:px(12),color:"#9B7B62",marginTop:"2px"}}>🎂 ${b.date}</div></div>
+          <div style=${{fontSize:px(11),fontWeight:700,color:"#D4922A",background:"#F8E4B0",borderRadius:"50px",padding:"3px 10px"}}>${b.d===0?"Today! 🎉":b.d===1?"Tomorrow!":b.d<7?b.d+" days":b.d+"d"}</div>
+        </div>`)}
+      </div>
+      <div style=${{fontFamily:"Lora,serif",fontSize:px(16),fontWeight:600,color:"#3D2314",marginBottom:"10px"}}>📅 Upcoming Events</div>
+      <div style=${{display:"flex",flexDirection:"column",gap:"10px"}}>
+        ${events.map(ev=>html`
+        <div onClick=${()=>setSelEv(ev)} style=${{background:"#FBF0D9",border:"1.5px solid #E8C878",borderRadius:"18px",padding:"14px",cursor:"pointer"}}>
+          <div style=${{display:"flex",alignItems:"center",gap:"12px",marginBottom:"8px"}}>
+            <div style=${{width:"46px",height:"46px",borderRadius:"13px",background:"#D4922A",color:"white",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+              <span style=${{fontSize:"9px",fontWeight:700,letterSpacing:"1px",textTransform:"uppercase"}}>${ev.month}</span>
+              <span style=${{fontSize:"19px",fontWeight:700,lineHeight:1}}>${ev.day}</span>
+            </div>
+            <div style=${{flex:1}}>
+              <div style=${{fontSize:px(14),fontWeight:700,color:"#3D2314"}}>${ev.title}</div>
+              <div style=${{fontSize:px(12),color:"#9B7B62",marginTop:"2px"}}>${ev.group}${ev.time?" · "+ev.time:""}</div>
+              ${ev.loc&&html`<div style=${{fontSize:px(12),color:"#9B7B62"}}>📍 ${ev.loc}</div>`}
+            </div>
+            <span style=${{fontSize:"18px",color:"#D4922A"}}>›</span>
+          </div>
+          <div style=${{fontSize:px(12),color:"#6B4C35",marginBottom:"8px"}}>✅ ${ev.going+(rsvp[ev.id]?1:0)} going · 🤔 ${ev.maybe} maybe</div>
+          <div style=${{display:"flex",gap:"8px"}}>
+            <button onClick=${e=>{e.stopPropagation();setRsvp(r=>({...r,[ev.id]:!r[ev.id]}));}} style=${{flex:1,padding:"9px",borderRadius:"50px",border:"2px solid #D4922A",background:rsvp[ev.id]?"#D4922A":"transparent",fontSize:px(12),fontWeight:700,color:rsvp[ev.id]?"white":"#D4922A",cursor:"pointer"}}>${rsvp[ev.id]?"✅ Going!":"Yes, I'll Be There"}</button>
+            <button onClick=${e=>e.stopPropagation()} style=${{flex:1,padding:"9px",borderRadius:"50px",border:"2px solid #D4922A",background:"transparent",fontSize:px(12),fontWeight:700,color:"#D4922A",cursor:"pointer"}}>Maybe</button>
+          </div>
+        </div>`)}
+      </div>
+    </div>`}
+
+    <!-- BOTTOM NAV -->
+    <div style=${{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:"430px",background:t.cb,borderTop:`2px solid ${t.ap}`,display:"flex",padding:"10px 0 20px",zIndex:50,flexShrink:0}}>
+      ${[{id:"feed",icon:"🏠",label:"Home"},{id:"chat",icon:"💬",label:"Chat"},{id:"calendar",icon:"📅",label:"Calendar"},{id:"profile",icon:"👤",label:"Profile"}].map(n=>html`
+      <div onClick=${()=>{setTab(n.id);if(n.id==="chat")setOpenChat(null);}} style=${{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:"2px",cursor:"pointer",padding:"3px 0"}}>
+        <span style=${{fontSize:"22px"}}>${n.icon}</span>
+        <span style=${{fontSize:px(10),fontWeight:800,color:tab===n.id?t.a:"#9B7B62",letterSpacing:".2px"}}>${n.label}</span>
+        ${tab===n.id&&html`<div style=${{width:"18px",height:"3px",borderRadius:"3px",background:t.a}}></div>`}
+      </div>`)}
+    </div>
+
+    <!-- COMPOSE SHEET -->
+    ${composeOpen&&html`
+    <${Overlay} onClose=${()=>setComposeOpen(false)}>
+      ${handle()}
+      <div style=${{fontFamily:"Lora,serif",fontSize:px(20),fontWeight:600,color:"#3D2314",marginBottom:"4px"}}>What would you like to share?</div>
+      <div style=${{fontSize:px(13),color:"#9B7B62",marginBottom:"16px"}}>Sharing with: <strong style=${{color:t.a}}>${ag.icon} ${ag.label}</strong></div>
+      <div style=${{display:"flex",flexDirection:"column",gap:"10px"}}>
+        ${[{icon:"📷",label:"Share a Photo",sub:"Add a photo with a caption",type:"photo"},{icon:"📍",label:"Post a Check-in",sub:"Let family know how you're doing",type:"checkin"},{icon:"📅",label:"Add an Event",sub:"Add to the family calendar",type:"event"}].map(opt=>html`
+        <div onClick=${()=>{if(opt.type==="event"){setComposeOpen(false);setAddEvOpen(true);}else openUpload(opt.type);}} style=${{background:t.bg,border:`2px solid ${t.ap}`,borderRadius:"18px",padding:"14px 15px",display:"flex",alignItems:"center",gap:"12px",cursor:"pointer"}}>
+          <div style=${{fontSize:"25px",width:"46px",height:"46px",borderRadius:"13px",background:"white",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,border:`1px solid ${t.ap}`}}>${opt.icon}</div>
+          <div><div style=${{fontSize:px(15),fontWeight:700,color:"#3D2314"}}>${opt.label}</div><div style=${{fontSize:px(12),color:"#9B7B62",marginTop:"2px"}}>${opt.sub}</div></div>
+          <span style=${{marginLeft:"auto",fontSize:"18px",color:t.al}}>›</span>
+        </div>`)}
+      </div>
+    </${Overlay}>`}
+
+    <!-- ADD EVENT -->
+    ${addEvOpen&&html`
+    <${Overlay} onClose=${()=>setAddEvOpen(false)} maxH="88vh">
+      ${handle()}
+      <div style=${{fontFamily:"Lora,serif",fontSize:px(20),fontWeight:600,color:"#3D2314",marginBottom:"16px"}}>Add an Event 📅</div>
+      ${[{label:"Event Name",placeholder:"e.g. Easter Brunch…",field:"title"},{label:"Time",placeholder:"e.g. 10:00 AM",field:"time"},{label:"Location",placeholder:"e.g. Grandma's house",field:"loc"}].map(f=>html`
+      <div style=${{marginBottom:"14px"}}>
+        <label style=${{fontSize:px(12),fontWeight:700,color:"#9B7B62",letterSpacing:".4px",textTransform:"uppercase",marginBottom:"6px",display:"block"}}>${f.label}</label>
+        <input value=${newEv[f.field]} onInput=${e=>setNewEv(n=>({...n,[f.field]:e.target.value}))} placeholder=${f.placeholder}
+          style=${{width:"100%",padding:"13px 14px",borderRadius:"14px",border:"1.5px solid #F5DDD1",background:"#FAF6F0",fontSize:px(15),color:"#3D2314",outline:"none"}}/>
+      </div>`)}
+      <div style=${{display:"flex",gap:"10px",marginBottom:"14px"}}>
+        <div style=${{flex:1}}>
+          <label style=${{fontSize:px(12),fontWeight:700,color:"#9B7B62",letterSpacing:".4px",textTransform:"uppercase",marginBottom:"6px",display:"block"}}>Month</label>
+          <select value=${newEv.month} onChange=${e=>setNewEv(n=>({...n,month:e.target.value}))} style=${{width:"100%",padding:"13px 14px",borderRadius:"14px",border:"1.5px solid #F5DDD1",background:"#FAF6F0",fontSize:px(14),color:"#3D2314",outline:"none"}}>
+            ${["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"].map(m=>html`<option>${m}</option>`)}
+          </select>
+        </div>
+        <div style=${{flex:1}}>
+          <label style=${{fontSize:px(12),fontWeight:700,color:"#9B7B62",letterSpacing:".4px",textTransform:"uppercase",marginBottom:"6px",display:"block"}}>Day</label>
+          <input type="number" min="1" max="31" value=${newEv.day} onInput=${e=>setNewEv(n=>({...n,day:e.target.value}))} placeholder="1–31"
+            style=${{width:"100%",padding:"13px 14px",borderRadius:"14px",border:"1.5px solid #F5DDD1",background:"#FAF6F0",fontSize:px(14),color:"#3D2314",outline:"none"}}/>
+        </div>
+      </div>
+      <div style=${{marginBottom:"18px"}}>
+        <label style=${{fontSize:px(12),fontWeight:700,color:"#9B7B62",letterSpacing:".4px",textTransform:"uppercase",marginBottom:"6px",display:"block"}}>Group</label>
+        <select value=${newEv.group} onChange=${e=>setNewEv(n=>({...n,group:e.target.value}))} style=${{width:"100%",padding:"13px 14px",borderRadius:"14px",border:"1.5px solid #F5DDD1",background:"#FAF6F0",fontSize:px(14),color:"#3D2314",outline:"none"}}>
+          ${groups.map(g=>html`<option>${g.label}</option>`)}
+        </select>
+      </div>
+      ${btn("Add to Calendar",addEvent,!newEv.title.trim()||!newEv.day)}
+    </${Overlay}>`}
+
+    <!-- EVENT DETAIL -->
+    ${selEv&&html`
+    <${Overlay} onClose=${()=>setSelEv(null)}>
+      ${handle()}
+      <div style=${{display:"flex",alignItems:"center",gap:"12px",marginBottom:"16px"}}>
+        <div style=${{width:"54px",height:"54px",borderRadius:"16px",background:"#D4922A",color:"white",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+          <span style=${{fontSize:"9px",fontWeight:700,letterSpacing:"1px",textTransform:"uppercase"}}>${selEv.month}</span>
+          <span style=${{fontSize:"22px",fontWeight:700,lineHeight:1}}>${selEv.day}</span>
+        </div>
+        <div><div style=${{fontFamily:"Lora,serif",fontSize:px(18),fontWeight:600,color:"#3D2314"}}>${selEv.title}</div><div style=${{fontSize:px(12),color:"#9B7B62",marginTop:"2px"}}>${selEv.group}</div></div>
+      </div>
+      ${selEv.time&&html`<div style=${{fontSize:px(14),color:"#6B4C35",marginBottom:"6px"}}>🕐 ${selEv.time}</div>`}
+      ${selEv.loc&&html`<div style=${{fontSize:px(14),color:"#6B4C35",marginBottom:"16px"}}>📍 ${selEv.loc}</div>`}
+      <div style=${{background:"#FBF0D9",borderRadius:"14px",padding:"12px 14px",marginBottom:"16px"}}>
+        <div style=${{fontSize:px(13),color:"#6B4C35"}}>✅ ${selEv.going+(rsvp[selEv.id]?1:0)} going · 🤔 ${selEv.maybe} maybe</div>
+      </div>
+      <div style=${{display:"flex",gap:"10px"}}>
+        <button onClick=${()=>setRsvp(r=>({...r,[selEv.id]:!r[selEv.id]}))} style=${{flex:1,padding:"14px",borderRadius:"50px",border:"2px solid #D4922A",background:rsvp[selEv.id]?"#D4922A":"transparent",fontSize:px(14),fontWeight:700,color:rsvp[selEv.id]?"white":"#D4922A",cursor:"pointer"}}>${rsvp[selEv.id]?"✅ I'm Going!":"Yes, I'll Be There"}</button>
+        <button style=${{flex:1,padding:"14px",borderRadius:"50px",border:"2px solid #D4922A",background:"transparent",fontSize:px(14),fontWeight:700,color:"#D4922A",cursor:"pointer"}}>Maybe</button>
+      </div>
+    </${Overlay}>`}
+
+    <!-- COMMENTS -->
+    ${cmtOpen!==null&&(()=>{
+      const allP=Object.values(feed).flat();
+      const pi=allP.find(x=>x.id===cmtOpen);
+      const pc=pCmts(cmtOpen);
+      return html`
+      <div onClick=${()=>setCmtOpen(null)} style=${{position:"fixed",inset:0,background:"rgba(61,35,20,.45)",zIndex:60,display:"flex",alignItems:"flex-end",animation:"fadeIn .2s ease"}}>
+        <div onClick=${e=>e.stopPropagation()} style=${{width:"100%",maxWidth:"430px",margin:"0 auto",background:t.cb,borderRadius:"24px 24px 0 0",maxHeight:"82vh",display:"flex",flexDirection:"column",animation:"slideUp .25s ease"}}>
+          <div style=${{padding:"14px 18px 12px",borderBottom:`1px solid ${t.ap}`,flexShrink:0}}>
+            ${handle(t.al)}
+            <div style=${{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"8px"}}>
+              <div style=${{fontFamily:"Lora,serif",fontSize:px(17),fontWeight:600,color:"#3D2314"}}>Comments ${pc.length>0&&html`<span style=${{fontSize:px(13),color:"#9B7B62",fontWeight:400}}>(${pc.length})</span>`}</div>
+              <button onClick=${()=>setCmtOpen(null)} style=${{background:t.ap,border:"none",borderRadius:"50px",padding:"5px 12px",fontSize:px(13),fontWeight:700,color:t.ad,cursor:"pointer"}}>Close</button>
+            </div>
+            ${pi&&html`<div style=${{display:"flex",alignItems:"center",gap:"8px",background:t.bg,borderRadius:"12px",padding:"8px 12px",border:`1px solid ${t.ap}`}}><span style=${{fontSize:"18px"}}>${pi.av}</span><div style=${{flex:1,minWidth:0}}><span style=${{fontSize:px(12),fontWeight:700,color:t.ad}}>${pi.name}: </span><span style=${{fontSize:px(12),color:"#6B4C35"}}>${pi.cap||pi.status||pi.title}</span></div></div>`}
+          </div>
+          <div class="scroll" style=${{flex:1,padding:"14px 18px"}}>
+            ${pc.length===0&&html`<div style=${{textAlign:"center",padding:"32px 0",color:"#9B7B62"}}><div style=${{fontSize:"36px",marginBottom:"8px"}}>💬</div><div style=${{fontSize:px(14),fontWeight:700,color:"#6B4C35",marginBottom:"4px"}}>No comments yet</div><div style=${{fontSize:px(13)}}>Be the first to say something!</div></div>`}
+            ${pc.map((c,i)=>html`
+            <div style=${{display:"flex",gap:"10px",marginBottom:"16px",animation:"fadeUp .25s ease both",animationDelay:i*.05+"s"}}>
+              <div style=${{width:"34px",height:"34px",borderRadius:"50%",background:t.ap,border:`2px solid ${t.al}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"17px",flexShrink:0,marginTop:"2px"}}>${c.av}</div>
+              <div style=${{flex:1}}>
+                <div style=${{background:t.bg,borderRadius:"6px 15px 15px 15px",padding:"10px 13px",display:"inline-block",maxWidth:"100%",border:`1px solid ${t.ap}`}}>
+                  <div style=${{fontSize:px(12),fontWeight:800,color:t.ad,marginBottom:"3px"}}>${c.name}</div>
+                  <div style=${{fontSize:px(14),color:"#3D2314",lineHeight:1.5}}>${c.text}</div>
+                </div>
+                <div style=${{fontSize:px(11),color:"#9B7B62",marginTop:"4px",paddingLeft:"3px"}}>${c.time}</div>
+              </div>
+            </div>`)}
+          </div>
+          <div style=${{padding:"10px 14px 26px",borderTop:`1px solid ${t.ap}`,flexShrink:0,background:t.cb}}>
+            <div style=${{display:"flex",gap:"8px",alignItems:"flex-end"}}>
+              <div style=${{width:"34px",height:"34px",borderRadius:"50%",background:t.ap,border:`2px solid ${t.al}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"17px",flexShrink:0}}>${obAv}</div>
+              <div style=${{flex:1,background:t.bg,borderRadius:"20px",border:`2px solid ${t.ap}`,display:"flex",alignItems:"center",padding:"9px 13px",gap:"8px"}}>
+                <input value=${cmtInput} onInput=${e=>setCmtInput(e.target.value)} onKeyDown=${e=>{if(e.key==="Enter"&&cmtInput.trim())addCmt(cmtOpen);}} placeholder="Say something warm… 🧡" style=${{flex:1,background:"none",border:"none",outline:"none",fontSize:px(14),color:"#3D2314"}}/>
+                <button onClick=${()=>addCmt(cmtOpen)} disabled=${!cmtInput.trim()} style=${{width:"32px",height:"32px",borderRadius:"50%",background:cmtInput.trim()?t.a:"#D4B8A8",border:"none",color:"white",fontSize:"16px",cursor:cmtInput.trim()?"pointer":"not-allowed",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>↑</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>`;
+    })()}
+
+    <!-- UPLOAD SHEET -->
+    ${upOpen&&(()=>{
+      const canPost=upType==="checkin"?upCi.trim().length>0:(upCap.trim().length>0||preview);
+      return html`
+      <div onClick=${()=>{if(upStep!==4)setUpOpen(false);}} style=${{position:"fixed",inset:0,background:"rgba(61,35,20,.5)",zIndex:70,display:"flex",alignItems:"flex-end",animation:"fadeIn .2s ease"}}>
+        <div onClick=${e=>e.stopPropagation()} style=${{width:"100%",maxWidth:"430px",margin:"0 auto",background:upStep===4?t.ad:"#FFF9F2",borderRadius:"24px 24px 0 0",animation:"slideUp .28s ease",maxHeight:"92vh",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+
+          ${upStep===4&&html`
+          <div style=${{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"48px 32px 64px",background:`linear-gradient(160deg,${t.ad} 0%,${t.a} 100%)`}}>
+            <div style=${{width:"90px",height:"90px",borderRadius:"50%",background:"rgba(255,255,255,.18)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"50px",marginBottom:"22px",border:"3px solid rgba(255,255,255,.4)"}}>✅</div>
+            <div style=${{fontFamily:"Lora,serif",fontSize:"24px",fontWeight:600,color:"white",textAlign:"center",marginBottom:"8px"}}>${upType==="checkin"?"Check-in posted!":"Photo shared!"}</div>
+            <div style=${{fontSize:"15px",color:"rgba(255,255,255,.75)",textAlign:"center"}}>Your family can see it now 🧡</div>
+          </div>`}
+
+          ${upStep===2&&upType==="photo"&&html`
+          <div style=${{padding:"15px 18px 12px",borderBottom:"1px solid #F5DDD1",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+            <button onClick=${()=>setUpOpen(false)} style=${{background:"#F5DDD1",border:"none",borderRadius:"50px",padding:"7px 14px",fontSize:"14px",fontWeight:700,color:"#6B4226",cursor:"pointer"}}>Cancel</button>
+            <div style=${{fontFamily:"Lora,serif",fontSize:"17px",fontWeight:600,color:"#C4714A"}}>Share a Photo</div>
+            <div style=${{fontSize:"12px",fontWeight:700,color:"#9B7B62",background:"#F5DDD1",padding:"5px 11px",borderRadius:"50px"}}>1 of 2</div>
+          </div>
+          <div class="scroll" style=${{flex:1,padding:"18px 18px 0"}}>
+            <div style=${{display:"flex",alignItems:"center",gap:"10px",background:t.ap,borderRadius:"12px",padding:"9px 13px",marginBottom:"16px"}}>
+              <span style=${{fontSize:"18px"}}>${ag.icon}</span>
+              <span style=${{fontSize:"14px",fontWeight:800,color:t.ad}}>${ag.label}</span>
+            </div>
+            <div onClick=${()=>fileRef.current?.click()} style=${{width:"100%",aspectRatio:"4/3",borderRadius:"20px",border:`2.5px dashed ${t.al}`,background:preview?"transparent":`linear-gradient(135deg,${t.ap},${t.sb})`,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",marginBottom:"16px",overflow:"hidden",position:"relative"}}>
+              ${preview?html`<img src=${preview} style=${{width:"100%",height:"100%",objectFit:"cover"}}/><div style=${{position:"absolute",bottom:"10px",right:"10px",background:"rgba(0,0,0,.55)",borderRadius:"50px",padding:"5px 13px",color:"white",fontSize:"13px",fontWeight:700}}>📷 Change</div>`:html`<div class="float" style=${{fontSize:"42px",marginBottom:"8px"}}>📷</div><div style=${{fontSize:"15px",fontWeight:700,color:t.ad,marginBottom:"4px"}}>Tap to add a photo</div><div style=${{fontSize:"13px",color:"#9B7B62"}}>from your camera roll</div>`}
+            </div>
+            <input ref=${fileRef} type="file" accept="image/*" style=${{display:"none"}} onChange=${e=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=ev=>setPreview(ev.target.result);r.readAsDataURL(f);}}/>
+            ${!preview&&html`
+            <div style=${{display:"flex",alignItems:"center",gap:"10px",marginBottom:"13px"}}><div style=${{flex:1,height:"1px",background:"#F5DDD1"}}></div><span style=${{fontSize:"13px",color:"#9B7B62",fontWeight:700}}>OR emoji</span><div style=${{flex:1,height:"1px",background:"#F5DDD1"}}></div></div>
+            <div style=${{display:"flex",flexWrap:"wrap",gap:"7px",marginBottom:"18px"}}>
+              ${PHOTO_EMOJIS.map(e=>html`<button onClick=${()=>setUpEmoji(e)} style=${{width:"42px",height:"42px",borderRadius:"11px",fontSize:"20px",background:upEmoji===e?t.ap:"#FFF9F2",border:`2px solid ${upEmoji===e?t.a:"rgba(107,66,38,.12)"}`,cursor:"pointer"}}>${e}</button>`)}
+            </div>`}
+          </div>
+          <div style=${{padding:"14px 18px 30px",flexShrink:0}}>
+            <button onClick=${()=>setUpStep(2.5)} style=${{width:"100%",padding:"15px",borderRadius:"50px",background:t.a,border:"none",color:"white",fontSize:"15px",fontWeight:800,cursor:"pointer"}}>Next: Add a Caption →</button>
+          </div>`}
+
+          ${upStep===2.5&&upType==="photo"&&html`
+          <div style=${{padding:"15px 18px 12px",borderBottom:"1px solid #F5DDD1",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+            <button onClick=${()=>setUpStep(2)} style=${{background:"#F5DDD1",border:"none",borderRadius:"50px",padding:"7px 14px",fontSize:"14px",fontWeight:700,color:"#6B4226",cursor:"pointer"}}>← Back</button>
+            <div style=${{fontFamily:"Lora,serif",fontSize:"17px",fontWeight:600,color:"#C4714A"}}>Add a Caption</div>
+            <div style=${{fontSize:"12px",fontWeight:700,color:"#9B7B62",background:"#F5DDD1",padding:"5px 11px",borderRadius:"50px"}}>2 of 2</div>
+          </div>
+          <div class="scroll" style=${{flex:1,padding:"18px"}}>
+            <div style=${{width:"100%",height:"140px",borderRadius:"15px",background:`linear-gradient(135deg,${t.ap},${t.sb})`,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:"16px",overflow:"hidden",border:`1.5px solid ${t.ap}`}}>
+              ${preview?html`<img src=${preview} style=${{width:"100%",height:"100%",objectFit:"cover"}}/>`:html`<span style=${{fontSize:"64px"}}>${upEmoji}</span>`}
+            </div>
+            <label style=${{fontSize:"13px",fontWeight:700,color:"#9B7B62",letterSpacing:".4px",textTransform:"uppercase",marginBottom:"8px",display:"block"}}>What would you like to say?</label>
+            <textarea autoFocus value=${upCap} onInput=${e=>setUpCap(e.target.value)} placeholder="Tell your family what's going on… 🧡" rows="4"
+              style=${{width:"100%",padding:"15px",borderRadius:"15px",border:`2px solid ${upCap.trim()?t.a:"#F5DDD1"}`,background:"#FAF6F0",fontSize:"16px",color:"#3D2314",outline:"none",resize:"none",lineHeight:1.6,marginBottom:"10px"}}></textarea>
+            <div style=${{display:"flex",flexWrap:"wrap",gap:"8px"}}>
+              ${["Thinking of you all! 💕","Beautiful day here ☀️","Missing you guys 🥰","Just had to share this!"].map(s=>html`
+              <button onClick=${()=>setUpCap(s)} style=${{padding:"7px 13px",borderRadius:"50px",fontSize:"13px",fontWeight:600,background:upCap===s?t.ap:"#FFF9F2",border:`1.5px solid ${upCap===s?t.a:"#F5DDD1"}`,color:upCap===s?t.ad:"#6B4C35",cursor:"pointer"}}>${s}</button>`)}
+            </div>
+          </div>
+          <div style=${{padding:"14px 18px 30px",flexShrink:0}}>
+            <button onClick=${submitPost} disabled=${!canPost} style=${{width:"100%",padding:"16px",borderRadius:"50px",background:canPost?t.a:"#D4B8A8",border:"none",color:"white",fontSize:"16px",fontWeight:800,cursor:canPost?"pointer":"not-allowed"}}>📸 Share with ${ag.label}</button>
+          </div>`}
+
+          ${upStep===3&&upType==="checkin"&&html`
+          <div style=${{padding:"15px 18px 12px",borderBottom:"1px solid #F5DDD1",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+            <button onClick=${()=>setUpOpen(false)} style=${{background:"#F5DDD1",border:"none",borderRadius:"50px",padding:"7px 14px",fontSize:"14px",fontWeight:700,color:"#6B4226",cursor:"pointer"}}>Cancel</button>
+            <div style=${{fontFamily:"Lora,serif",fontSize:"17px",fontWeight:600,color:"#C4714A"}}>Quick Check-in</div>
+            <div style=${{width:"60px"}}></div>
+          </div>
+          <div class="scroll" style=${{flex:1,padding:"18px"}}>
+            <div style=${{display:"flex",alignItems:"center",gap:"12px",background:t.ap,borderRadius:"15px",padding:"13px 15px",marginBottom:"18px"}}>
+              <div style=${{width:"42px",height:"42px",borderRadius:"50%",background:t.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"21px",flexShrink:0}}>${obAv}</div>
+              <div><div style=${{fontSize:"15px",fontWeight:700,color:t.ad}}>${obName||"You"}</div><div style=${{fontSize:"12px",color:t.a,marginTop:"2px"}}>→ ${ag.icon} ${ag.label}</div></div>
+            </div>
+            <textarea autoFocus value=${upCi} onInput=${e=>setUpCi(e.target.value)} placeholder="Let your family know how you're doing… 💬" rows="5"
+              style=${{width:"100%",padding:"15px",borderRadius:"15px",border:`2px solid ${upCi.trim()?t.a:"#F5DDD1"}`,background:"#FAF6F0",fontSize:"16px",color:"#3D2314",outline:"none",resize:"none",lineHeight:1.6,marginBottom:"14px"}}></textarea>
+            <div style=${{display:"flex",flexDirection:"column",gap:"8px"}}>
+              ${[{i:"☀️",t:"Good morning! Starting the day with…"},{i:"💭",t:"Been thinking about everyone. Miss you all!"},{i:"🎉",t:"Good news — "},{i:"🌧️",t:"Having a quiet day. Anyone want to video call?"}].map(p=>html`
+              <button onClick=${()=>setUpCi(p.t)} style=${{display:"flex",alignItems:"center",gap:"10px",padding:"11px 13px",borderRadius:"13px",textAlign:"left",background:upCi===p.t?t.ap:"#FFF9F2",border:`1.5px solid ${upCi===p.t?t.a:"#F5DDD1"}`,cursor:"pointer"}}>
+                <span style=${{fontSize:"18px",flexShrink:0}}>${p.i}</span>
+                <span style=${{fontSize:"13px",color:"#6B4C35",fontWeight:600}}>${p.t}</span>
+              </button>`)}
+            </div>
+          </div>
+          <div style=${{padding:"14px 18px 30px",flexShrink:0}}>
+            <button onClick=${submitPost} disabled=${!canPost} style=${{width:"100%",padding:"16px",borderRadius:"50px",background:canPost?t.a:"#D4B8A8",border:"none",color:"white",fontSize:"16px",fontWeight:800,cursor:canPost?"pointer":"not-allowed"}}>📍 Post Check-in</button>
+          </div>`}
+        </div>
+      </div>`;
+    })()}
+
+  </div>`;
 }
 
-function buildChat(t){
-  if(ST.openChat){
-    var isDm=ST.dms&&ST.dms.find(function(d){return d.id===ST.openChat;});
-    var grpForChat=isDm?ST.groups[0]:(ST.groups.find(function(g){return g.id===ST.openChat;})||ST.groups[0]);
-    var tForChat=isDm?{a:"#C4714A",al:"#E8956D",ap:"#F5DDD1",ad:"#6B4226",bg:"#FAF6F0",cb:"#FFF9F2"}:th(ST.openChat);
-    return buildChatView(tForChat,grpForChat);
-  }
-  var wrap=d({cls:"scr",css:{padding:"14px 14px 80px"}});
-  wrap.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"18px",fontWeight:600,color:"#3D2314",marginBottom:"14px"}},"Messages"));
-  ST.groups.forEach(function(g){
-    var gt=th(g.id);var msgs=ST.chatMsgs[g.id]||[];var last=msgs[msgs.length-1];
-    var row=d({css:{display:"flex",alignItems:"center",gap:"10px",padding:"11px 12px",borderRadius:"15px",background:gt.cb,border:"1.5px solid "+gt.ap,cursor:"pointer",marginBottom:"7px"}});
-    var ic=d({css:{width:"44px",height:"44px",borderRadius:"50%",background:gt.ap,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"22px",flexShrink:0,border:"2px solid "+gt.al}});ic.textContent=g.icon;row.appendChild(ic);
-    var gd=d({css:{flex:1,minWidth:0}});
-    var gtop=d({css:{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:"6px"}});
-    gtop.appendChild(d({css:{fontSize:"14px",fontWeight:700,color:"#3D2314"}},g.label));
-    if(last)gtop.appendChild(d({css:{fontSize:"10px",color:"#9B7B62",flexShrink:0}},last.time));
-    gd.appendChild(gtop);
-    if(last)gd.appendChild(d({css:{fontSize:"12px",color:"#9B7B62",marginTop:"2px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},last.name+": "+last.text));
-    else gd.appendChild(d({css:{fontSize:"12px",color:"#9B7B62",marginTop:"2px"}},"No messages yet"));
-    row.appendChild(gd);
-    row.appendChild(d({css:{fontSize:"18px",color:gt.al}},">"));
-    row.addEventListener("click",function(){ST.openChat=g.id;redraw();});
-    wrap.appendChild(row);
-  });
-
-  // DMs section
-  var dmhdr=d({css:{display:"flex",alignItems:"center",justifyContent:"space-between",margin:"16px 0 8px"}});
-  dmhdr.appendChild(d({css:{fontSize:"11px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".6px"}},"Direct Messages"));
-  var ndb=b({css:{padding:"5px 12px",borderRadius:"50px",background:t.a,border:"none",color:"white",fontSize:"12px",fontWeight:700,cursor:"pointer",fontFamily:"inherit"}},"+ New");
-  ndb.addEventListener("click",function(){ST.newDm=true;redraw();});
-  dmhdr.appendChild(ndb);wrap.appendChild(dmhdr);
-
-  if(!ST.dms||!ST.dms.length){
-    wrap.appendChild(d({css:{textAlign:"center",padding:"16px",background:"#FFF9F2",borderRadius:"14px",border:"1.5px solid #F5DDD1",fontSize:"13px",color:"#9B7B62"}},"No direct messages yet"));
-  } else {
-    ST.dms.forEach(function(dm){
-      var row=d({css:{display:"flex",alignItems:"center",gap:"10px",padding:"11px 12px",borderRadius:"15px",background:"#FFF9F2",border:"1.5px solid #F5DDD1",cursor:"pointer",marginBottom:"7px"}});
-      var av=d({css:{width:"44px",height:"44px",borderRadius:"50%",background:"#F5DDD1",border:"2px solid #E8956D",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"22px",flexShrink:0}});av.textContent=dm.members[0].av;row.appendChild(av);
-      var gd=d({css:{flex:1,minWidth:0}});
-      var gtop=d({css:{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:"6px"}});
-      gtop.appendChild(d({css:{fontSize:"14px",fontWeight:700,color:"#3D2314"}},dm.members.map(function(m){return m.name;}).join(", ")));
-      gtop.appendChild(d({css:{fontSize:"10px",color:"#9B7B62",flexShrink:0}},dm.lt));
-      gd.appendChild(gtop);
-      gd.appendChild(d({css:{fontSize:"12px",color:"#9B7B62",marginTop:"2px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},dm.last));
-      row.appendChild(gd);
-      row.appendChild(d({css:{fontSize:"18px",color:"#E8956D"}},">"));
-      row.addEventListener("click",function(){ST.openChat=dm.id;redraw();});
-      wrap.appendChild(row);
-    });
-  }
-  return wrap;
-}
-
-function buildChatView(t,grp){
-  var wrap=d({css:{display:"flex",flexDirection:"column",flex:1,overflow:"hidden",minHeight:0}});
-  var msgs=ST.chatMsgs[grp.id]||[];
-  var iv=ST.chatIn[grp.id]||"";
-
-  // Header
-  var hdr=d({css:{background:t.cb,padding:"10px 13px",display:"flex",alignItems:"center",gap:"10px",borderBottom:"1px solid "+t.ap,flexShrink:0}});
-  var bb=b({css:{background:t.ap,border:"none",borderRadius:"50px",padding:"7px 13px",fontSize:"13px",fontWeight:700,color:t.ad,cursor:"pointer",fontFamily:"inherit"}},"Back");
-  bb.addEventListener("click",function(){ST.openChat=null;redraw();});hdr.appendChild(bb);
-  var ic=d({css:{width:"34px",height:"34px",borderRadius:"50%",background:t.ap,border:"2px solid "+t.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"18px",flexShrink:0}});ic.textContent=chatIcon;hdr.appendChild(ic);
-  var hi=d({css:{flex:1}});
-  hi.appendChild(d({css:{fontSize:"15px",fontWeight:700,color:"#3D2314"}},chatName));
-  hi.appendChild(d({css:{fontSize:"11px",color:t.al}},chatSub));
-  hdr.appendChild(hi);wrap.appendChild(hdr);
-
-  // Messages
-  var list=d({cls:"scr",css:{padding:"12px 13px 8px",display:"flex",flexDirection:"column",gap:"8px",background:t.bg}});
-  if(!msgs.length){
-    var em=d({css:{textAlign:"center",padding:"40px 20px",color:"#9B7B62"}});
-    var ei=d({css:{fontSize:"40px",marginBottom:"8px"}});ei.textContent=grp.icon;em.appendChild(ei);
-    em.appendChild(d({css:{fontSize:"14px",fontWeight:700,color:"#6B4C35",marginBottom:"4px"}},"Start the conversation!"));
-    em.appendChild(d({css:{fontSize:"12px"}},"Say hello to "+chatName));
-    list.appendChild(em);
-  }
-  msgs.forEach(function(msg){
-    var iy=msg.you;
-    var row=d({css:{display:"flex",flexDirection:iy?"row-reverse":"row",alignItems:"flex-end",gap:"6px"}});
-    if(!iy){var ma=d({css:{width:"26px",height:"26px",borderRadius:"50%",background:t.ap,border:"1.5px solid "+t.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"13px",flexShrink:0}});ma.textContent=msg.av;row.appendChild(ma);}
-    var mb=d({css:{maxWidth:"72%"}});
-    if(!iy)mb.appendChild(d({css:{fontSize:"10px",fontWeight:700,color:t.ad,marginBottom:"2px",paddingLeft:"2px"}},msg.name));
-    var bubble=d({css:{padding:"9px 12px",borderRadius:iy?"16px 16px 3px 16px":"16px 16px 16px 3px",background:iy?t.a:"white",color:iy?"white":"#3D2314",fontSize:"13px",lineHeight:"1.55",boxShadow:"0 1px 5px rgba(0,0,0,.08)",border:iy?"none":"1px solid "+t.ap}},msg.text);
-    mb.appendChild(bubble);
-    mb.appendChild(d({css:{fontSize:"9px",color:"#9B7B62",marginTop:"2px",textAlign:iy?"right":"left"}},msg.time));
-    row.appendChild(mb);list.appendChild(row);
-  });
-  wrap.appendChild(list);
-
-  // Input bar
-  var inp=d({css:{padding:"8px 11px 22px",borderTop:"1px solid "+t.ap,background:t.cb,flexShrink:0,display:"flex",gap:"7px",alignItems:"flex-end"}});
-  var ci=el("input",{type:"text",placeholder:"Message "+grp.label+"...",css:{flex:1,padding:"10px 13px",borderRadius:"22px",border:"1.5px solid "+t.ap,background:t.bg,fontSize:"14px",color:"#3D2314",outline:"none",fontFamily:"inherit"}});
-  ci.value=iv;
-  ci.addEventListener("input",function(){if(!ST.chatIn)ST.chatIn={};ST.chatIn[grp.id]=this.value;});
-  ci.addEventListener("keydown",function(e){if(e.key==="Enter"&&this.value.trim())sendChat(grp.id);});
-  inp.appendChild(ci);
-  var sb=b({css:{width:"38px",height:"38px",borderRadius:"50%",background:t.a,border:"none",color:"white",fontSize:"18px",cursor:"pointer",flexShrink:0,fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center"}},"^");
-  sb.addEventListener("click",function(){sendChat(grp.id);});
-  inp.appendChild(sb);wrap.appendChild(inp);
-  return wrap;
-}
-
-function sendChat(gid){
-  var iv=ST.chatIn[gid]||"";if(!iv.trim())return;
-  var msg={id:Date.now(),av:ST.avatar,name:ST.name||"You",text:iv.trim(),time:"Just now",you:true};
-  var dm=ST.dms&&ST.dms.find(function(d){return d.id===gid;});
-  if(dm){dm.msgs.push(msg);dm.last=iv.trim();dm.lt="Just now";}
-  else{if(!ST.chatMsgs[gid])ST.chatMsgs[gid]=[];ST.chatMsgs[gid].push(msg);}
-  ST.chatIn[gid]="";redraw();
-  setTimeout(function(){var els=document.querySelectorAll(".scr");els.forEach(function(l){l.scrollTop=l.scrollHeight;});},50);
-}
-
-function buildCal(t){
-  var wrap=d({cls:"scr",css:{padding:"14px 14px 80px"}});
-  var hdr=d({css:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"16px"}});
-  hdr.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"18px",fontWeight:600,color:"#3D2314"}},"April 2026"));
-  var aeb=b({css:{padding:"8px 16px",borderRadius:"50px",background:t.a,border:"none",color:"white",fontSize:"13px",fontWeight:700,cursor:"pointer",fontFamily:"inherit"}},"+ Add Event");
-  aeb.addEventListener("click",function(){ST.addEv=true;redraw();});
-  hdr.appendChild(aeb);wrap.appendChild(hdr);
-
-  ST.groups.forEach(function(g){
-    var gt=th(g.id);
-    var gevs=ST.evs.filter(function(ev){return ev.groupId===g.id;});
-    if(!gevs.length)return;
-    var gl=d({css:{display:"flex",alignItems:"center",gap:"7px",marginBottom:"8px",marginTop:"4px"}});
-    var gi=d({css:{width:"22px",height:"22px",borderRadius:"50%",background:gt.ap,border:"1.5px solid "+gt.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"12px"}});gi.textContent=g.icon;gl.appendChild(gi);
-    gl.appendChild(d({css:{fontSize:"12px",fontWeight:800,color:gt.ad,textTransform:"uppercase",letterSpacing:".5px"}},g.label));
-    wrap.appendChild(gl);
-    gevs.forEach(function(ev){wrap.appendChild(buildEvCard(ev,gt));});
-  });
-  return wrap;
-}
-
-function buildEvCard(ev,gt){
-  var row=d({css:{background:gt.ap,border:"1.5px solid "+gt.al,borderRadius:"14px",padding:"11px 13px",marginBottom:"8px",display:"flex",alignItems:"center",gap:"10px"}});
-  var dt=d({css:{width:"44px",height:"44px",borderRadius:"11px",background:gt.a,color:"white",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",flexShrink:0}});
-  dt.appendChild(d({css:{fontSize:"7px",fontWeight:700,letterSpacing:"1px",textTransform:"uppercase"}},ev.month));
-  dt.appendChild(d({css:{fontSize:"17px",fontWeight:700,lineHeight:"1"}},String(ev.day)));
-  row.appendChild(dt);
-  var info=d({css:{flex:1}});
-  info.appendChild(d({css:{fontSize:"13px",fontWeight:700,color:"#3D2314"}},ev.title));
-  var sub=(ev.time||"")+(ev.loc?" - "+ev.loc:"");
-  if(sub)info.appendChild(d({css:{fontSize:"11px",color:"#9B7B62",marginTop:"2px"}},sub));
-  info.appendChild(d({css:{fontSize:"11px",color:gt.a,marginTop:"2px"}},ev.going+" going - "+ev.maybe+" maybe"));
-  row.appendChild(info);
-  var rb=b({css:{padding:"7px 12px",borderRadius:"50px",border:"2px solid "+gt.a,background:ST.rsvp[ev.id]?gt.a:"transparent",fontSize:"11px",fontWeight:700,color:ST.rsvp[ev.id]?"white":gt.a,cursor:"pointer",fontFamily:"inherit",flexShrink:0}},ST.rsvp[ev.id]?"Going!":"RSVP");
-  rb.addEventListener("click",function(){ST.rsvp[ev.id]=!ST.rsvp[ev.id];redraw();});
-  row.appendChild(rb);return row;
-}
-
-function buildProfile(t){
-  var wrap=d({cls:"scr",css:{padding:"0 0 80px"}});
-  var banner=d({css:{background:"linear-gradient(160deg,"+t.ad+","+t.a+")",padding:"36px 18px 52px",display:"flex",flexDirection:"column",alignItems:"center"}});
-  var av=d({css:{width:"80px",height:"80px",borderRadius:"50%",background:"rgba(255,255,255,.2)",border:"3px solid rgba(255,255,255,.5)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"38px",marginBottom:"10px"}});av.textContent=ST.avatar;banner.appendChild(av);
-  banner.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"22px",fontWeight:600,color:"white",marginBottom:"2px"}},ST.name||"Your Name"));
-  banner.appendChild(d({css:{fontSize:"13px",color:"rgba(255,255,255,.75)"}},"Keep Up member"));
-  wrap.appendChild(banner);
-  var body=d({css:{padding:"16px 16px 0",marginTop:"-22px"}});
-
-  var gc=d({css:{background:"#FFF9F2",borderRadius:"18px",overflow:"hidden",boxShadow:"0 2px 12px rgba(0,0,0,.08)",marginBottom:"12px"}});
-  gc.appendChild(d({css:{padding:"13px 15px 9px",fontSize:"12px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".5px",borderBottom:"1px solid #F5DDD1"}},"Your Groups"));
-  ST.groups.forEach(function(g){
-    var gt=th(g.id);var mems=ST.mems[g.id]||[];
-    var row=d({css:{display:"flex",alignItems:"center",gap:"10px",padding:"11px 15px",borderBottom:"1px solid #F5DDD1"}});
-    var ic=d({css:{width:"38px",height:"38px",borderRadius:"50%",background:gt.ap,border:"2px solid "+gt.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"19px",flexShrink:0}});ic.textContent=g.icon;row.appendChild(ic);
-    var info=d({css:{flex:1}});info.appendChild(d({css:{fontSize:"14px",fontWeight:700,color:"#3D2314"}},g.label));info.appendChild(d({css:{fontSize:"11px",color:"#9B7B62",marginTop:"1px"}},mems.length+" members"));row.appendChild(info);
-    row.appendChild(d({css:{background:gt.ap,color:gt.ad,fontSize:"11px",fontWeight:700,padding:"3px 10px",borderRadius:"50px"}},"Admin"));
-    gc.appendChild(row);
-  });
-  body.appendChild(gc);
-
-  var sc=d({css:{background:"#FFF9F2",borderRadius:"18px",padding:"16px",boxShadow:"0 2px 12px rgba(0,0,0,.08)",marginBottom:"12px",display:"flex"}});
-  [[String(ST.groups.length),"Groups"],[String(Object.values(ST.feed).reduce(function(a,b){return a+b.length;},0)),"Posts"],[String(ST.evs.length),"Events"]].forEach(function(s,i){
-    var stat=d({css:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",borderRight:i<2?"1px solid #F5DDD1":"none"}});
-    stat.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"24px",fontWeight:600,color:t.a}},s[0]));
-    stat.appendChild(d({css:{fontSize:"11px",color:"#9B7B62",fontWeight:700}},s[1]));
-    sc.appendChild(stat);
-  });
-  body.appendChild(sc);
-
-  var apc=d({css:{background:"#FFF9F2",borderRadius:"18px",overflow:"hidden",boxShadow:"0 2px 12px rgba(0,0,0,.08)"}});
-  apc.appendChild(d({css:{padding:"13px 15px 9px",fontSize:"12px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".5px",borderBottom:"1px solid #F5DDD1"}},"Change Your Avatar"));
-  var apg=d({css:{padding:"12px 15px",display:"flex",flexWrap:"wrap",gap:"8px"}});
-  ["\uD83D\uDC69","\uD83D\uDC68","\uD83D\uDC75","\uD83D\uDC74","\uD83D\uDC67","\uD83D\uDC66","\uD83E\uDDD2","\uD83E\uDDD1"].forEach(function(a){
-    var ab=b({css:{width:"42px",height:"42px",borderRadius:"12px",background:ST.avatar===a?t.ap:"#FAF6F0",border:"2px solid "+(ST.avatar===a?t.a:"rgba(107,66,38,.12)"),fontSize:"22px",cursor:"pointer",fontFamily:"inherit"}},a);
-    ab.addEventListener("click",function(){ST.avatar=a;redraw();});apg.appendChild(ab);
-  });
-  apc.appendChild(apg);body.appendChild(apc);
-  wrap.appendChild(body);return wrap;
-}
-
-function buildAddEvent(t){
-  var ov=d({cls:"overlay"});ov.addEventListener("click",function(){ST.addEv=false;redraw();});
-  var sh=d({cls:"sheet"});sh.addEventListener("click",function(e){e.stopPropagation();});
-  sh.appendChild(d({cls:"handle"}));
-  sh.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"18px",fontWeight:600,color:"#3D2314",marginBottom:"16px"}},"Add an Event"));
-
-  function fld(lbl,ph,key){
-    var w=d({css:{marginBottom:"12px"}});
-    w.appendChild(d({css:{fontSize:"11px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".4px",marginBottom:"5px"}},lbl));
-    var i=el("input",{type:"text",placeholder:ph,css:{width:"100%",padding:"11px 13px",borderRadius:"12px",border:"1.5px solid #F5DDD1",background:"#FAF6F0",fontSize:"14px",color:"#3D2314",outline:"none",fontFamily:"inherit"}});
-    i.value=ST.nEv[key]||"";i.addEventListener("input",function(){ST.nEv[key]=this.value;});w.appendChild(i);return w;
-  }
-  sh.appendChild(fld("Event Name","e.g. Easter Brunch","title"));
-
-  var row=d({css:{display:"flex",gap:"8px",marginBottom:"12px"}});
-  var ms=el("select",{css:{flex:1,padding:"11px 12px",borderRadius:"12px",border:"1.5px solid #F5DDD1",background:"#FAF6F0",fontSize:"13px",color:"#3D2314",outline:"none",fontFamily:"inherit"}});
-  ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"].forEach(function(m){var o=el("option");o.value=m;o.textContent=m;if(m===ST.nEv.month)o.selected=true;ms.appendChild(o);});
-  ms.addEventListener("change",function(){ST.nEv.month=this.value;});
-  var ds=el("input",{type:"number",placeholder:"Day",css:{flex:1,padding:"11px 12px",borderRadius:"12px",border:"1.5px solid #F5DDD1",background:"#FAF6F0",fontSize:"13px",color:"#3D2314",outline:"none",fontFamily:"inherit"}});
-  ds.value=ST.nEv.day||"";ds.addEventListener("input",function(){ST.nEv.day=this.value;});
-  row.appendChild(ms);row.appendChild(ds);sh.appendChild(row);
-  sh.appendChild(fld("Time","e.g. 10:00 AM","time"));
-  sh.appendChild(fld("Location","e.g. Grandma's house","loc"));
-
-  sh.appendChild(d({css:{fontSize:"11px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".4px",marginBottom:"8px"}},"Family Group"));
-  var gp=d({css:{display:"flex",gap:"6px",flexWrap:"wrap",marginBottom:"16px"}});
-  ST.groups.forEach(function(g){
-    var gt=th(g.id);var sel=ST.nEv.groupId===g.id;
-    var gb=b({css:{display:"flex",alignItems:"center",gap:"5px",padding:"7px 12px",borderRadius:"50px",background:sel?gt.ap:"#FAF6F0",border:"2px solid "+(sel?gt.a:"rgba(107,66,38,.12)"),fontSize:"12px",fontWeight:700,color:sel?gt.ad:"#6B4C35",cursor:"pointer",fontFamily:"inherit"}},g.icon+" "+g.label);
-    gb.addEventListener("click",function(){ST.nEv.groupId=g.id;ST.nEv.group=g.label;redraw();});gp.appendChild(gb);
-  });
-  sh.appendChild(gp);
-
-  var sub=b({css:{width:"100%",padding:"14px",borderRadius:"50px",background:t.a,border:"none",color:"white",fontSize:"15px",fontWeight:800,cursor:"pointer",fontFamily:"inherit"}},"Add to Calendar");
-  sub.addEventListener("click",function(){
-    if(!ST.nEv.title.trim()||!ST.nEv.day)return;
-    var gObj=ST.groups.find(function(g){return g.id===ST.nEv.groupId;})||ST.groups[0];
-    ST.evs.push({id:Date.now(),month:ST.nEv.month,day:parseInt(ST.nEv.day)||1,title:ST.nEv.title,group:gObj.label,groupId:ST.nEv.groupId,going:1,maybe:0,time:ST.nEv.time,loc:ST.nEv.loc});
-    ST.nEv={title:"",month:"APR",day:"",time:"",loc:"",groupId:"imm"};ST.addEv=false;redraw();
-  });
-  sh.appendChild(sub);
-  ov.appendChild(sh);return ov;
-}
-
-function buildCompose(t,grp){
-  var ov=d({cls:"overlay"});ov.addEventListener("click",function(){ST.compose=false;redraw();});
-  var sh=d({cls:"sheet"});sh.addEventListener("click",function(e){e.stopPropagation();});
-  sh.appendChild(d({cls:"handle"}));
-  sh.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"18px",fontWeight:600,color:"#3D2314",marginBottom:"14px"}},"Share with "+grp.icon+" "+grp.label));
-  [["&#128247;","Share a Photo","photo"],["&#128205;","Post a Check-in","checkin"]].forEach(function(opt){
-    var row=d({css:{display:"flex",alignItems:"center",gap:"10px",padding:"13px",borderRadius:"14px",background:t.bg,border:"2px solid "+t.ap,cursor:"pointer",marginBottom:"8px"}});
-    var ic=d({html:opt[0],css:{fontSize:"22px",width:"42px",height:"42px",borderRadius:"11px",background:"white",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}});row.appendChild(ic);
-    row.appendChild(d({css:{fontSize:"14px",fontWeight:700,color:"#3D2314"}},opt[1]));row.appendChild(d({css:{marginLeft:"auto",fontSize:"18px",color:t.al}},">"));
-    row.addEventListener("click",function(){ST.upType=opt[2];ST.upStep=opt[2]==="photo"?2:3;ST.upCap="";ST.upCi="";ST.upImg=null;ST.compose=false;ST.upOpen=true;redraw();});
-    sh.appendChild(row);
-  });
-  ov.appendChild(sh);return ov;
-}
-
-function buildUpload(t,grp){
-  var ov=d({css:{position:"fixed",inset:0,background:"rgba(61,35,20,.5)",zIndex:70,display:"flex",alignItems:"flex-end"}});
-  ov.addEventListener("click",function(){if(ST.upStep!==4){ST.upOpen=false;redraw();}});
-  var sh=d({css:{width:"100%",maxWidth:"430px",margin:"0 auto",background:ST.upStep===4?t.ad:"#FFF9F2",borderRadius:"24px 24px 0 0",maxHeight:"92vh",display:"flex",flexDirection:"column",overflow:"hidden",animation:"slideUp .25s ease"}});
-  sh.addEventListener("click",function(e){e.stopPropagation();});
-  if(ST.upStep===4){
-    var sc=d({css:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"40px 26px",background:"linear-gradient(160deg,"+t.ad+","+t.a+")"}});
-    var si=d({css:{fontSize:"56px",marginBottom:"16px"}});si.textContent="\u2705";sc.appendChild(si);
-    sc.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"22px",fontWeight:600,color:"white",textAlign:"center"}},ST.upType==="checkin"?"Check-in posted!":"Photo shared!"));
-    sc.appendChild(d({css:{fontSize:"14px",color:"rgba(255,255,255,.75)",textAlign:"center",marginTop:"6px"}},"Your family can see it now"));sh.appendChild(sc);
-  }
-  function upHdr(title,onBack){
-    var h=d({css:{padding:"13px 15px",borderBottom:"1px solid #F5DDD1",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}});
-    var bb=b({css:{background:"#F5DDD1",border:"none",borderRadius:"50px",padding:"6px 12px",fontSize:"13px",fontWeight:700,color:"#6B4226",cursor:"pointer",fontFamily:"inherit"}},onBack?"Back":"Cancel");
-    bb.addEventListener("click",onBack||function(){ST.upOpen=false;redraw();});
-    h.appendChild(bb);h.appendChild(d({css:{fontSize:"16px",fontWeight:700,color:"#C4714A"}},title));h.appendChild(d({css:{width:"60px"}}));return h;
-  }
-  if(ST.upStep===2){
-    sh.appendChild(upHdr("Add Photo",null));
-    var body=d({cls:"scr",css:{padding:"14px 15px"}});
-    var fi=el("input",{type:"file",accept:"image/*",css:{display:"none"}});
-    fi.addEventListener("change",function(){var f=this.files&&this.files[0];if(!f)return;var r=new FileReader();r.onload=function(e){ST.upImg=e.target.result;redraw();};r.readAsDataURL(f);});
-    var pa=d({css:{width:"100%",aspectRatio:"4/3",borderRadius:"16px",border:"2.5px dashed "+t.al,background:"linear-gradient(135deg,"+t.ap+","+t.sb+")",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",marginBottom:"12px",overflow:"hidden",position:"relative"}});
-    if(ST.upImg){var pi=el("img",{css:{width:"100%",height:"100%",objectFit:"cover"}});pi.src=ST.upImg;pa.appendChild(pi);}
-    else{var ico=d({css:{fontSize:"38px",marginBottom:"6px"}});ico.textContent="\uD83D\uDCF7";pa.appendChild(ico);pa.appendChild(d({css:{fontSize:"14px",fontWeight:700,color:t.ad}},"Tap to add a photo"));}
-    pa.addEventListener("click",function(){fi.click();});body.appendChild(pa);body.appendChild(fi);sh.appendChild(body);
-    var ft=d({css:{padding:"12px 15px 26px",flexShrink:0}});
-    var nb=b({css:{width:"100%",padding:"13px",borderRadius:"50px",background:t.a,border:"none",color:"white",fontSize:"14px",fontWeight:800,cursor:"pointer",fontFamily:"inherit"}},"Next: Add Caption");
-    nb.addEventListener("click",function(){ST.upStep=2.5;redraw();});ft.appendChild(nb);sh.appendChild(ft);
-  }
-  if(ST.upStep===2.5){
-    sh.appendChild(upHdr("Add Caption",function(){ST.upStep=2;redraw();}));
-    var body=d({cls:"scr",css:{padding:"14px 15px"}});
-    if(ST.upImg){var pi=el("img",{css:{width:"100%",height:"130px",objectFit:"cover",borderRadius:"13px",marginBottom:"12px",display:"block"}});pi.src=ST.upImg;body.appendChild(pi);}
-    var ta=el("textarea",{rows:4,placeholder:"Tell your family what's going on...",css:{width:"100%",padding:"12px",borderRadius:"13px",border:"2px solid #F5DDD1",background:"#FAF6F0",fontSize:"15px",color:"#3D2314",outline:"none",resize:"none",lineHeight:"1.6",fontFamily:"inherit"}});
-    ta.value=ST.upCap;ta.addEventListener("input",function(){ST.upCap=this.value;});body.appendChild(ta);sh.appendChild(body);
-    var ft=d({css:{padding:"12px 15px 26px",flexShrink:0}});
-    var sb=b({css:{width:"100%",padding:"13px",borderRadius:"50px",background:t.a,border:"none",color:"white",fontSize:"14px",fontWeight:800,cursor:"pointer",fontFamily:"inherit"}},"Share with "+grp.label);
-    sb.addEventListener("click",submitPost);ft.appendChild(sb);sh.appendChild(ft);
-  }
-  if(ST.upStep===3){
-    sh.appendChild(upHdr("Check-in",null));
-    var body=d({cls:"scr",css:{padding:"14px 15px"}});
-    var ta=el("textarea",{rows:5,placeholder:"Let your family know how you're doing...",css:{width:"100%",padding:"12px",borderRadius:"13px",border:"2px solid #F5DDD1",background:"#FAF6F0",fontSize:"15px",color:"#3D2314",outline:"none",resize:"none",lineHeight:"1.6",fontFamily:"inherit"}});
-    ta.value=ST.upCi;ta.addEventListener("input",function(){ST.upCi=this.value;});body.appendChild(ta);sh.appendChild(body);
-    var ft=d({css:{padding:"12px 15px 26px",flexShrink:0}});
-    var sb=b({css:{width:"100%",padding:"13px",borderRadius:"50px",background:t.a,border:"none",color:"white",fontSize:"14px",fontWeight:800,cursor:"pointer",fontFamily:"inherit"}},"Post Check-in");
-    sb.addEventListener("click",submitPost);ft.appendChild(sb);sh.appendChild(ft);
-  }
-  ov.appendChild(sh);return ov;
-}
-
-function buildComments(t){
-  var pc=ST.comments[ST.cmtOpen]||[];
-  var ov=d({cls:"overlay"});ov.addEventListener("click",function(){ST.cmtOpen=null;redraw();});
-  var sh=d({css:{width:"100%",maxWidth:"430px",margin:"0 auto",background:"#FFF9F2",borderRadius:"24px 24px 0 0",maxHeight:"80vh",display:"flex",flexDirection:"column",animation:"slideUp .25s ease"}});
-  sh.addEventListener("click",function(e){e.stopPropagation();});
-  var hdr=d({css:{padding:"16px 16px 10px",borderBottom:"1px solid "+t.ap,flexShrink:0}});
-  hdr.appendChild(d({cls:"handle"}));
-  var hr=d({css:{display:"flex",alignItems:"center",justifyContent:"space-between"}});
-  hr.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"16px",fontWeight:600,color:"#3D2314"}},"Comments"+(pc.length?" ("+pc.length+")":"")));
-  var cl=b({css:{background:t.ap,border:"none",borderRadius:"50px",padding:"4px 11px",fontSize:"12px",fontWeight:700,color:t.ad,cursor:"pointer",fontFamily:"inherit"}},"Close");
-  cl.addEventListener("click",function(){ST.cmtOpen=null;redraw();});hr.appendChild(cl);hdr.appendChild(hr);sh.appendChild(hdr);
-  var list=d({cls:"scr",css:{padding:"12px 14px",maxHeight:"40vh"}});
-  if(!pc.length)list.appendChild(d({css:{textAlign:"center",padding:"20px",color:"#9B7B62",fontSize:"13px"}},"No comments yet. Be first!"));
-  pc.forEach(function(c){
-    var row=d({css:{display:"flex",gap:"8px",marginBottom:"12px"}});
-    var av=d({css:{width:"30px",height:"30px",borderRadius:"50%",background:t.ap,border:"2px solid "+t.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"15px",flexShrink:0}});av.textContent=c.av;row.appendChild(av);
-    var cd=d({css:{flex:1}});var cb2=d({css:{background:t.bg,borderRadius:"5px 13px 13px 13px",padding:"8px 11px",border:"1px solid "+t.ap}});
-    cb2.appendChild(d({css:{fontSize:"11px",fontWeight:800,color:t.ad,marginBottom:"2px"}},c.name));cb2.appendChild(d({css:{fontSize:"13px",color:"#3D2314",lineHeight:"1.5"}},c.text));cd.appendChild(cb2);
-    cd.appendChild(d({css:{fontSize:"10px",color:"#9B7B62",marginTop:"2px"}},c.time));row.appendChild(cd);list.appendChild(row);
-  });
-  sh.appendChild(list);
-  var ft=d({css:{padding:"10px 14px 16px",borderTop:"1px solid "+t.ap,display:"flex",gap:"6px",alignItems:"center",flexShrink:0}});
-  var ci=el("input",{type:"text",placeholder:"Say something...",css:{flex:1,padding:"9px 12px",borderRadius:"20px",border:"2px solid "+t.ap,background:t.bg,fontSize:"13px",color:"#3D2314",outline:"none",fontFamily:"inherit"}});
-  ci.value=ST.cmtIn;ci.addEventListener("input",function(){ST.cmtIn=this.value;});
-  ci.addEventListener("keydown",function(e){if(e.key==="Enter"&&ST.cmtIn.trim())addComment();});
-  ft.appendChild(ci);
-  var sb=b({css:{width:"34px",height:"34px",borderRadius:"50%",background:t.a,border:"none",color:"white",fontSize:"16px",cursor:"pointer",flexShrink:0,fontFamily:"inherit"}},"^");
-  sb.addEventListener("click",addComment);ft.appendChild(sb);sh.appendChild(ft);
-  ov.appendChild(sh);return ov;
-}
-
-function buildNewDm(){
-  var t=th(ST.group);
-  var ov=d({cls:"overlay"});ov.addEventListener("click",function(){ST.newDm=false;ST.dmSel=[];redraw();});
-  var sh=d({cls:"sheet"});sh.addEventListener("click",function(e){e.stopPropagation();});
-  sh.appendChild(d({cls:"handle"}));
-  sh.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"18px",fontWeight:600,color:"#3D2314",marginBottom:"6px"}},"New Message"));
-  sh.appendChild(d({css:{fontSize:"13px",color:"#9B7B62",marginBottom:"14px"}},"Select family members to message"));
-
-  // Group picker
-  var gp=d({css:{display:"flex",gap:"6px",marginBottom:"12px",overflowX:"auto"}});
-  gp.style.scrollbarWidth="none";
-  ST.groups.forEach(function(g){
-    var gt=th(g.id);var sel=ST.dmGrp===g.id;
-    var gb=b({css:{flexShrink:0,display:"flex",alignItems:"center",gap:"5px",padding:"6px 11px",borderRadius:"50px",background:sel?gt.ap:"#FAF6F0",border:"2px solid "+(sel?gt.a:"rgba(107,66,38,.12)"),fontSize:"12px",fontWeight:700,color:sel?gt.ad:"#6B4C35",cursor:"pointer",fontFamily:"inherit"}},g.icon+" "+g.label);
-    gb.addEventListener("click",function(){ST.dmGrp=g.id;ST.dmSel=[];redraw();});gp.appendChild(gb);
-  });
-  sh.appendChild(gp);
-
-  sh.appendChild(d({css:{fontSize:"11px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".4px",marginBottom:"8px"}},"Select people:"));
-  var mems=(ST.mems[ST.dmGrp]||[]).filter(function(m){return!m.you;});
-  mems.forEach(function(mem){
-    var gt=th(ST.dmGrp);var sel=ST.dmSel.includes(mem.av+mem.name);
-    var row=d({css:{display:"flex",alignItems:"center",gap:"10px",padding:"10px 12px",borderRadius:"13px",background:sel?gt.ap:"#FAF6F0",border:"2px solid "+(sel?gt.a:"rgba(107,66,38,.1)"),cursor:"pointer",marginBottom:"6px"}});
-    var av=d({css:{width:"36px",height:"36px",borderRadius:"50%",background:sel?gt.al:gt.ap,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"18px",flexShrink:0}});av.textContent=mem.av;row.appendChild(av);
-    row.appendChild(d({css:{flex:1,fontSize:"14px",fontWeight:700,color:"#3D2314"}},mem.name));
-    var ck=d({css:{width:"20px",height:"20px",borderRadius:"50%",background:sel?gt.a:"white",border:"2px solid "+(sel?gt.a:"rgba(107,66,38,.2)"),display:"flex",alignItems:"center",justifyContent:"center",fontSize:"11px",color:"white",fontWeight:700}},sel?"v":"");
-    row.appendChild(ck);
-    row.addEventListener("click",function(){
-      var key=mem.av+mem.name;
-      if(ST.dmSel.includes(key))ST.dmSel=ST.dmSel.filter(function(x){return x!==key;});
-      else ST.dmSel.push(key);
-      redraw();
-    });
-    sh.appendChild(row);
-  });
-
-  var sub=b({css:{width:"100%",padding:"14px",borderRadius:"50px",background:ST.dmSel.length?t.a:"#D4B8A8",border:"none",color:"white",fontSize:"15px",fontWeight:800,cursor:ST.dmSel.length?"pointer":"not-allowed",fontFamily:"inherit",marginTop:"8px"}},ST.dmSel.length?"Start Chat":"Select someone first");
-  sub.addEventListener("click",function(){
-    if(!ST.dmSel.length)return;
-    var selMems=(ST.mems[ST.dmGrp]||[]).filter(function(m){return ST.dmSel.includes(m.av+m.name);});
-    var nid="dm-"+Date.now();
-    if(!ST.dms)ST.dms=[];
-    ST.dms.unshift({id:nid,members:selMems,last:"",lt:"Now",msgs:[]});
-    ST.dmSel=[];ST.newDm=false;ST.openChat=nid;redraw();
-  });
-  sh.appendChild(sub);
-  ov.appendChild(sh);return ov;
-}
-
-function submitPost(){
-  var p;
-  if(ST.upType==="checkin"){if(!ST.upCi.trim())return;p={id:Date.now(),type:"checkin",av:ST.avatar,name:ST.name||"You",time:"Just now",status:ST.upCi};}
-  else{p={id:Date.now(),type:"photo",av:ST.avatar,name:ST.name||"You",time:"Just now",emoji:"\uD83C\uDF3B",imgUrl:ST.upImg,cap:ST.upCap};}
-  if(!ST.feed[ST.group])ST.feed[ST.group]=[];
-  ST.feed[ST.group].unshift(p);ST.upStep=4;redraw();
-  setTimeout(function(){ST.upOpen=false;ST.upStep=1;redraw();},2200);
-}
-function addComment(){
-  if(!ST.cmtIn.trim())return;var pid=ST.cmtOpen;
-  if(!ST.comments[pid])ST.comments[pid]=[];
-  ST.comments[pid].push({id:Date.now(),av:ST.avatar,name:ST.name||"You",text:ST.cmtIn.trim(),time:"Just now"});
-  ST.cmtIn="";redraw();
-}
-
-redraw();
+render(h(App,null), document.getElementById('app'));
 </script>
 </body>
 </html>
