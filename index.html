@@ -204,7 +204,7 @@ function buildOnboarding(){
   // BIG button
   function obBtn(label,onClick,disabled){
     var bb=b({css:{width:"100%",padding:"15px",borderRadius:"50px",background:disabled?"#D4B8A8":"#C4714A",border:"none",color:"white",fontSize:"17px",fontWeight:800,cursor:disabled?"not-allowed":"pointer",fontFamily:"inherit",boxShadow:disabled?"none":"0 6px 20px rgba(196,113,74,.35)"}},label);
-    if(!disabled)bb.addEventListener("click",onClick);
+    bb.addEventListener("click",function(){if(onClick&&!bb.disabled)onClick();});
     return bb;
   }
 
@@ -239,7 +239,7 @@ function buildOnboarding(){
     inp2.addEventListener("keydown",function(e){if(e.key==="Enter"&&ST.obName.trim()){ST.obStep=2;redraw();}});
     body.appendChild(inp2);
     body.appendChild(d({cls:"ob-spacer"}));
-    var cnBtn=obBtn("Continue \u2192",function(){if(!ST.obName.trim())return;ST.obStep=2;redraw();},!ST.obName.trim());
+    var cnBtn=obBtn("Continue \u2192",function(){if(!ST.obName.trim())return;ST.obStep=2;redraw();},false);
     cnBtn.className+=" ob-continue-btn";
     body.appendChild(cnBtn);
     scr.appendChild(body);
