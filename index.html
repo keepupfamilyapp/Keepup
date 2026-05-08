@@ -819,18 +819,8 @@ function addComment(){
   ST.cmtIn="";redraw();
 }
 
-// Restore from localStorage if previously onboarded
-try{
-  if(localStorage.getItem("ku_ob")==="1"){
-    ST.boarded=true;
-    if(localStorage.getItem("ku_name"))ST.name=localStorage.getItem("ku_name");
-    if(localStorage.getItem("ku_av"))ST.avatar=localStorage.getItem("ku_av");
-    if(localStorage.getItem("ku_grp")){
-      var g=JSON.parse(localStorage.getItem("ku_grp"));
-      ST.groups[0].label=g.label;ST.groups[0].icon=g.icon;
-    }
-  }
-}catch(e){}
+// TESTING: always show onboarding
+try{localStorage.removeItem("ku_ob");}catch(e){}
 redraw();
 </script>
 </body>
