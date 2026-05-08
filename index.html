@@ -54,6 +54,12 @@ var TH={
 function th(id){return TH[id]||TH.imm;}
 
 var ST={
+  boarded:false,
+  obStep:0,
+  obName:"",
+  obAvatar:"\uD83D\uDC69",
+  obGrpName:"",
+  obGrpEmoji:"\u2764\uFE0F",
   tab:"feed",group:"imm",name:"Sean",
   avatar:"\uD83D\uDC68",
   openChat:null,
@@ -411,10 +417,15 @@ function buildItem(item,t){
 
 function buildChat(t){
   if(ST.openChat){
-    var isDm=ST.dms&&ST.dms.find(function(d){return d.id===ST.openChat;});
-    var grpForChat=isDm?ST.groups[0]:(ST.groups.find(function(g){return g.id===ST.openChat;})||ST.groups[0]);
-    var tForChat=isDm?{a:"#C4714A",al:"#E8956D",ap:"#F5DDD1",ad:"#6B4226",bg:"#FAF6F0",cb:"#FFF9F2"}:th(ST.openChat);
-    return buildChatView(tForChat,grpForChat);
+    var isDm=ST.dms&&ST.dms.find(function(dm2){return dm2.id===ST.openChat;});
+    if(isDm){
+      return buildChatView(
+        {a:"#C4714A",al:"#E8956D",ap:"#F5DDD1",ad:"#6B4226",bg:"#FAF6F0",cb:"#FFF9F2",sb:"#FFF3E8"},
+        {id:ST.openChat,label:isDm.members.map(function(m){return m.name;}).join(", "),icon:isDm.members[0].av}
+      );
+    }
+    var grpForChat=ST.groups.find(function(g){return g.id===ST.openChat;})||ST.groups[0];
+    return buildChatView(th(ST.openChat),grpForChat);
   }
   var wrap=d({cls:"scr",css:{padding:"14px 14px 80px",overflowX:"hidden"}});
   wrap.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"18px",fontWeight:600,color:"#3D2314",marginBottom:"14px"}},"Messages"));
