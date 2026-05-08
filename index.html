@@ -58,6 +58,7 @@ var ST={
   obStep:0,
   obName:"",
   obAvatar:"\uD83D\uDC69",
+  obPhoto:null,
   obGrpName:"",
   obGrpEmoji:"\u2764\uFE0F",
   tab:"feed",group:"imm",name:"Sean",
@@ -245,15 +246,46 @@ function buildOnboarding(){
     var scr=d({cls:"ob-screen",css:{position:"relative"}});
     scr.appendChild(backBtn());scr.appendChild(dots(2));
     var body=d({cls:"ob-body"});
-    body.appendChild(d({cls:"ob-title"},"Pick your picture, "+(ST.obName||"friend")+" \uD83D\uDC4B"));
-    var preview=d({css:{display:"flex",alignItems:"center",gap:"12px",background:"#FFF9F2",borderRadius:"14px",padding:"13px",marginBottom:"20px",border:"1.5px solid #F5DDD1"}});
-    var pav=d({css:{width:"48px",height:"48px",borderRadius:"50%",background:"#F5DDD1",border:"2px solid #E8956D",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"26px",flexShrink:0}});pav.textContent=ST.obAvatar;preview.appendChild(pav);
-    var pname=d({css:{fontSize:"16px",fontWeight:700,color:"#3D2314"}},ST.obName||"Your Name");preview.appendChild(pname);
+    body.appendChild(d({cls:"ob-title"},"Pick your picture \uD83D\uDC4B"));
+    body.appendChild(d({cls:"ob-sub"},"Upload a photo or pick an emoji avatar."));
+
+    // Preview circle
+    var preview=d({css:{display:"flex",flexDirection:"column",alignItems:"center",gap:"10px",marginBottom:"18px"}});
+    var pav=d({css:{width:"90px",height:"90px",borderRadius:"50%",background:"#F5DDD1",border:"3px solid #E8956D",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"44px",flexShrink:0,overflow:"hidden",cursor:"pointer",position:"relative"}});
+    if(ST.obPhoto){
+      var pi=el("img",{css:{width:"100%",height:"100%",objectFit:"cover",display:"block"}});
+      pi.src=ST.obPhoto;pav.appendChild(pi);
+    } else {
+      pav.textContent=ST.obAvatar;
+    }
+    preview.appendChild(pav);
+    preview.appendChild(d({css:{fontSize:"13px",color:"#9B7B62"}},"Tap to upload a photo"));
     body.appendChild(preview);
+
+    // Hidden file input
+    var fi=el("input",{type:"file",accept:"image/*",css:{display:"none"}});
+    fi.addEventListener("change",function(){
+      var f=this.files&&this.files[0];
+      if(!f)return;
+      var r=new FileReader();
+      r.onload=function(e){ST.obPhoto=e.target.result;ST.obAvatar="\uD83D\uDC69";redraw();};
+      r.readAsDataURL(f);
+    });
+    pav.addEventListener("click",function(){fi.click();});
+    body.appendChild(fi);
+
+    // Divider
+    var divRow=d({css:{display:"flex",alignItems:"center",gap:"10px",marginBottom:"12px"}});
+    divRow.appendChild(d({css:{flex:1,height:"1px",background:"#F5DDD1"}}));
+    divRow.appendChild(d({css:{fontSize:"12px",color:"#9B7B62",fontWeight:700}},"OR choose an emoji"));
+    divRow.appendChild(d({css:{flex:1,height:"1px",background:"#F5DDD1"}}));
+    body.appendChild(divRow);
+
+    // Emoji grid
     var grid=d({cls:"ob-grid"});
     ["\uD83D\uDC69","\uD83D\uDC68","\uD83D\uDC75","\uD83D\uDC74","\uD83D\uDC67","\uD83D\uDC66","\uD83E\uDDD2","\uD83E\uDDD1","\uD83D\uDC69\u200D\uD83E\uDDB1","\uD83D\uDC68\u200D\uD83E\uDDB3"].forEach(function(a){
-      var ab=b({cls:"ob-emoji-btn"+(ST.obAvatar===a?" sel":"")},a);
-      ab.addEventListener("click",function(){ST.obAvatar=a;redraw();});grid.appendChild(ab);
+      var ab=b({cls:"ob-emoji-btn"+(ST.obAvatar===a&&!ST.obPhoto?" sel":"")},a);
+      ab.addEventListener("click",function(){ST.obAvatar=a;ST.obPhoto=null;redraw();});grid.appendChild(ab);
     });
     body.appendChild(grid);
     body.appendChild(d({cls:"ob-spacer"}));
@@ -297,7 +329,7 @@ function buildOnboarding(){
     body.appendChild(obBtn("Take me to Keep Up \uD83C\uDFE1",function(){
       // Apply onboarding data to app state
       ST.name=ST.obName;
-      ST.avatar=ST.obAvatar;
+      ST.avatar=ST.obPhoto||ST.obAvatar;
       ST.groups=[{id:"imm",label:ST.obGrpName,icon:ST.obGrpEmoji}];
       ST.group="imm";
       ST.feed={imm:[]};
@@ -323,7 +355,10 @@ function buildApp(){
 
   var bar=d({css:{background:t.cb,padding:"11px 14px 9px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:"1px solid "+t.ap,flexShrink:0}});
   bar.appendChild(d({html:"keep <em>up</em>",css:{fontFamily:"Lora,serif",fontSize:"20px",fontWeight:600,color:t.a}}));
-  var av=d({css:{width:"30px",height:"30px",borderRadius:"50%",background:t.ap,border:"2px solid "+t.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"15px"}});av.textContent=ST.avatar;bar.appendChild(av);
+  var av=d({css:{width:"30px",height:"30px",borderRadius:"50%",background:t.ap,border:"2px solid "+t.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"15px",overflow:"hidden"}});
+  if(ST.avatar&&ST.avatar.startsWith("data:")){var avImg2=el("img",{css:{width:"100%",height:"100%",objectFit:"cover",display:"block"}});avImg2.src=ST.avatar;av.appendChild(avImg2);}
+  else av.textContent=ST.avatar;
+  bar.appendChild(av);
   wrap.appendChild(bar);
 
   if(ST.tab==="feed"){
