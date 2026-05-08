@@ -61,6 +61,7 @@ var ST={
   obPhoto:null,
   obGrpName:"",
   obGrpEmoji:"\u2764\uFE0F",
+  obGrpPhoto:null,
   tab:"feed",group:"imm",name:"Sean",
   avatar:"\uD83D\uDC68",
   openChat:null,
@@ -305,10 +306,30 @@ function buildOnboarding(){
     gi.addEventListener("input",function(){ST.obGrpName=this.value;});
     body.appendChild(gi);
     body.appendChild(d({css:{fontSize:"12px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".5px",marginBottom:"10px"}},"Group Icon"));
-    var egrid=d({css:{display:"flex",flexWrap:"wrap",gap:"8px",marginBottom:"20px"}});
+
+    // Group photo upload
+    var gpRow=d({css:{display:"flex",alignItems:"center",gap:"14px",marginBottom:"16px"}});
+    var gpCircle=d({css:{width:"64px",height:"64px",borderRadius:"50%",background:"#F5DDD1",border:"2px solid #E8956D",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"28px",flexShrink:0,overflow:"hidden",cursor:"pointer"}});
+    if(ST.obGrpPhoto){var gpImg=el("img",{css:{width:"100%",height:"100%",objectFit:"cover",display:"block"}});gpImg.src=ST.obGrpPhoto;gpCircle.appendChild(gpImg);}
+    else{gpCircle.textContent=ST.obGrpEmoji;}
+    var gpFi=el("input",{type:"file",accept:"image/*",css:{display:"none"}});
+    gpFi.addEventListener("change",function(){var f=this.files&&this.files[0];if(!f)return;var r=new FileReader();r.onload=function(e){ST.obGrpPhoto=e.target.result;redraw();};r.readAsDataURL(f);});
+    gpCircle.addEventListener("click",function(){gpFi.click();});
+    var gpUpBtn=b({css:{flex:1,padding:"12px",borderRadius:"13px",background:"#FFF9F2",border:"1.5px dashed #E8956D",fontSize:"13px",fontWeight:700,color:"#C4714A",cursor:"pointer",fontFamily:"inherit",textAlign:"left"}},"\uD83D\uDCF7 Upload a group photo");
+    gpUpBtn.addEventListener("click",function(){gpFi.click();});
+    gpRow.appendChild(gpCircle);gpRow.appendChild(gpUpBtn);gpRow.appendChild(gpFi);
+    body.appendChild(gpRow);
+
+    var divRow=d({css:{display:"flex",alignItems:"center",gap:"10px",marginBottom:"10px"}});
+    divRow.appendChild(d({css:{flex:1,height:"1px",background:"#F5DDD1"}}));
+    divRow.appendChild(d({css:{fontSize:"12px",color:"#9B7B62",fontWeight:700}},"OR pick an emoji"));
+    divRow.appendChild(d({css:{flex:1,height:"1px",background:"#F5DDD1"}}));
+    body.appendChild(divRow);
+
+    var egrid=d({css:{display:"flex",flexWrap:"wrap",gap:"8px",marginBottom:"16px"}});
     ["\u2764\uFE0F","\uD83C\uDF38","\uD83C\uDF32","\u2B50","\uD83C\uDFE0","\uD83C\uDF89","\uD83C\uDF3B","\uD83E\uDD8B","\uD83C\uDF0A","\uD83C\uDF42","\uD83C\uDFB6","\uD83C\uDF19"].forEach(function(e){
-      var eb=b({css:{width:"44px",height:"44px",borderRadius:"11px",background:ST.obGrpEmoji===e?"#F5DDD1":"#FFF9F2",border:"2px solid "+(ST.obGrpEmoji===e?"#C4714A":"rgba(107,66,38,.12)"),fontSize:"21px",cursor:"pointer",fontFamily:"inherit"}},e);
-      eb.addEventListener("click",function(){ST.obGrpEmoji=e;redraw();});egrid.appendChild(eb);
+      var eb=b({css:{width:"44px",height:"44px",borderRadius:"11px",background:ST.obGrpEmoji===e&&!ST.obGrpPhoto?"#F5DDD1":"#FFF9F2",border:"2px solid "+(ST.obGrpEmoji===e&&!ST.obGrpPhoto?"#C4714A":"rgba(107,66,38,.12)"),fontSize:"21px",cursor:"pointer",fontFamily:"inherit"}},e);
+      eb.addEventListener("click",function(){ST.obGrpEmoji=e;ST.obGrpPhoto=null;redraw();});egrid.appendChild(eb);
     });
     body.appendChild(egrid);
     body.appendChild(d({cls:"ob-spacer"}));
@@ -330,11 +351,14 @@ function buildOnboarding(){
       // Apply onboarding data to app state
       ST.name=ST.obName;
       ST.avatar=ST.obPhoto||ST.obAvatar;
-      ST.groups=[{id:"imm",label:ST.obGrpName,icon:ST.obGrpEmoji}];
-      ST.group="imm";
-      ST.feed={imm:[]};
+      var grpId="imm";
+      ST.groups=[{id:grpId,label:ST.obGrpName,icon:ST.obGrpEmoji,photo:ST.obGrpPhoto}];
+      ST.group=grpId;
+      ST.feed={imm:[
+        {id:1,type:"checkin",av:"\uD83C\uDFE1",name:"Keep Up",time:"Just now",status:"Welcome to Keep Up, "+ST.obName+"! Invite your family to get started. Tap the + button to share your first post \uD83C\uDF89"}
+      ]};
       ST.chatMsgs={imm:[]};
-      ST.mems={imm:[{av:ST.obAvatar,name:ST.obName,role:"Admin",you:true}]};
+      ST.mems={imm:[{av:ST.obPhoto||ST.obAvatar,name:ST.obName,role:"Admin",you:true}]};
       ST.evs=[];ST.dms=[];
       ST.boarded=true;
       try{localStorage.setItem("ku_ob","1");localStorage.setItem("ku_name",ST.obName);localStorage.setItem("ku_av",ST.obAvatar);localStorage.setItem("ku_grp",JSON.stringify({label:ST.obGrpName,icon:ST.obGrpEmoji}));}catch(e){}
@@ -366,8 +390,11 @@ function buildApp(){
     pb.style.scrollbarWidth="none";pb.style.maxWidth="100%";
     ST.groups.forEach(function(g){
       var gt=th(g.id);var ia=ST.group===g.id;
-      var p=b({cls:"pill"+(ia?" active":""),css:{background:ia?gt.ap:t.bg,borderColor:ia?gt.a:"rgba(107,66,38,.12)",color:ia?gt.ad:"#6B4C35"}});
-      p.textContent=g.icon+" "+g.label;
+      var p=b({cls:"pill"+(ia?" active":""),css:{background:ia?gt.ap:t.bg,borderColor:ia?gt.a:"rgba(107,66,38,.12)",color:ia?gt.ad:"#6B4C35",display:"flex",alignItems:"center",gap:"5px"}});
+      var piccEl=d({css:{width:"20px",height:"20px",borderRadius:"50%",overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"12px",flexShrink:0}});
+      if(g.photo){var piccImg=el("img",{css:{width:"100%",height:"100%",objectFit:"cover"}});piccImg.src=g.photo;piccEl.appendChild(piccImg);}
+      else piccEl.textContent=g.icon;
+      p.appendChild(piccEl);p.appendChild(document.createTextNode(g.label));
       p.addEventListener("click",function(){ST.group=g.id;redraw();});pb.appendChild(p);
     });
     wrap.appendChild(pb);
@@ -648,14 +675,41 @@ function buildProfile(t){
   });
   body.appendChild(sc);
 
-  var apc=d({css:{background:"#FFF9F2",borderRadius:"18px",overflow:"hidden",boxShadow:"0 2px 12px rgba(0,0,0,.08)"}});
-  apc.appendChild(d({css:{padding:"13px 15px 9px",fontSize:"12px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".5px",borderBottom:"1px solid #F5DDD1"}},"Change Your Avatar"));
-  var apg=d({css:{padding:"12px 15px",display:"flex",flexWrap:"wrap",gap:"8px"}});
+  // Edit name
+  var enc=d({css:{background:"#FFF9F2",borderRadius:"18px",overflow:"hidden",boxShadow:"0 2px 12px rgba(0,0,0,.08)",marginBottom:"12px"}});
+  enc.appendChild(d({css:{padding:"13px 15px 9px",fontSize:"12px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".5px",borderBottom:"1px solid #F5DDD1"}},"Your Name"));
+  var enp=d({css:{padding:"10px 15px"}});
+  var eni=el("input",{type:"text",css:{width:"100%",padding:"10px 13px",borderRadius:"12px",border:"1.5px solid #F5DDD1",background:"#FAF6F0",fontSize:"15px",color:"#3D2314",outline:"none",fontFamily:"inherit"}});
+  eni.value=ST.name;eni.addEventListener("input",function(){ST.name=this.value;});
+  eni.addEventListener("change",function(){try{localStorage.setItem("ku_name",ST.name);}catch(e){}redraw();});
+  enp.appendChild(eni);enc.appendChild(enp);body.appendChild(enc);
+
+  // Change avatar
+  var apc=d({css:{background:"#FFF9F2",borderRadius:"18px",overflow:"hidden",boxShadow:"0 2px 12px rgba(0,0,0,.08)",marginBottom:"12px"}});
+  apc.appendChild(d({css:{padding:"13px 15px 9px",fontSize:"12px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".5px",borderBottom:"1px solid #F5DDD1"}},"Your Avatar"));
+  var apBody=d({css:{padding:"12px 15px"}});
+
+  // Photo upload row
+  var apRow=d({css:{display:"flex",alignItems:"center",gap:"12px",marginBottom:"12px"}});
+  var apCircle=d({css:{width:"56px",height:"56px",borderRadius:"50%",background:"#F5DDD1",border:"2px solid #E8956D",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"26px",overflow:"hidden",cursor:"pointer",flexShrink:0}});
+  if(ST.avatar&&ST.avatar.startsWith("data:")){var apImg=el("img",{css:{width:"100%",height:"100%",objectFit:"cover",display:"block"}});apImg.src=ST.avatar;apCircle.appendChild(apImg);}
+  else apCircle.textContent=ST.avatar;
+  var apFi=el("input",{type:"file",accept:"image/*",css:{display:"none"}});
+  apFi.addEventListener("change",function(){var f=this.files&&this.files[0];if(!f)return;var r=new FileReader();r.onload=function(e){ST.avatar=e.target.result;try{localStorage.setItem("ku_av",ST.avatar);}catch(e2){}redraw();};r.readAsDataURL(f);});
+  apCircle.addEventListener("click",function(){apFi.click();});
+  var apUpBtn=b({css:{flex:1,padding:"10px",borderRadius:"12px",background:"#FAF6F0",border:"1.5px dashed #E8956D",fontSize:"13px",fontWeight:700,color:"#C4714A",cursor:"pointer",fontFamily:"inherit"}},"\uD83D\uDCF7 Upload new photo");
+  apUpBtn.addEventListener("click",function(){apFi.click();});
+  apRow.appendChild(apCircle);apRow.appendChild(apUpBtn);apRow.appendChild(apFi);
+  apBody.appendChild(apRow);
+
+  // Emoji options
+  var apg=d({css:{display:"flex",flexWrap:"wrap",gap:"8px"}});
   ["\uD83D\uDC69","\uD83D\uDC68","\uD83D\uDC75","\uD83D\uDC74","\uD83D\uDC67","\uD83D\uDC66","\uD83E\uDDD2","\uD83E\uDDD1"].forEach(function(a){
-    var ab=b({css:{width:"42px",height:"42px",borderRadius:"12px",background:ST.avatar===a?t.ap:"#FAF6F0",border:"2px solid "+(ST.avatar===a?t.a:"rgba(107,66,38,.12)"),fontSize:"22px",cursor:"pointer",fontFamily:"inherit"}},a);
-    ab.addEventListener("click",function(){ST.avatar=a;redraw();});apg.appendChild(ab);
+    var isSelected=ST.avatar===a;
+    var ab=b({css:{width:"42px",height:"42px",borderRadius:"12px",background:isSelected?t.ap:"#FAF6F0",border:"2px solid "+(isSelected?t.a:"rgba(107,66,38,.12)"),fontSize:"22px",cursor:"pointer",fontFamily:"inherit"}},a);
+    ab.addEventListener("click",function(){ST.avatar=a;try{localStorage.setItem("ku_av",a);}catch(e){}redraw();});apg.appendChild(ab);
   });
-  apc.appendChild(apg);body.appendChild(apc);
+  apBody.appendChild(apg);apc.appendChild(apBody);body.appendChild(apc);
   wrap.appendChild(body);return wrap;
 }
 
