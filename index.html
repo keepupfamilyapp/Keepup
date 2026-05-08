@@ -165,7 +165,17 @@ function el(tag,attrs,children){
 function d(a,c){return el("div",a,c);}
 function b(a,c){return el("button",a,c);}
 
-function redraw(){var old=document.getElementById("app");var next=buildApp();old.replaceWith(next);}
+function redraw(){
+  try{
+    var old=document.getElementById("app");
+    var next=buildApp();
+    if(old)old.replaceWith(next);
+    else document.body.appendChild(next);
+  }catch(err){
+    var el=document.getElementById("app");
+    if(el)el.innerHTML='<div style="padding:40px;font-family:sans-serif;color:#C4714A;font-size:14px;"><b>Error:</b><br>'+err.message+'<br><br><small>'+err.stack+'</small></div>';
+  }
+}
 
 function buildOnboarding(){
   var wrap=d({id:"app"});
@@ -306,6 +316,7 @@ function buildOnboarding(){
 
 function buildApp(){
   if(!ST.boarded) return buildOnboarding();
+  // boarded - continue to main app
   var t=th(ST.group);
   var grp=ST.groups.find(function(g){return g.id===ST.group;})||ST.groups[0];
   var wrap=d({id:"app",css:{background:t.bg}});
