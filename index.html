@@ -361,7 +361,18 @@ function buildFeed(t,grp){
   cb.appendChild(d({css:{fontSize:"13px",color:"#9B7B62",fontWeight:600}},"Share something with your family..."));
   cb.addEventListener("click",function(){ST.compose=true;redraw();});wrap.appendChild(cb);
   var list=d({cls:"scr",css:{padding:"9px 12px 80px",display:"flex",flexDirection:"column",gap:"10px"}});
-  (ST.feed[ST.group]||[]).forEach(function(item){list.appendChild(buildItem(item,t));});
+  var feedItems=ST.feed[ST.group]||[];
+  if(!feedItems.length){
+    var empty=d({css:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"50px 24px",textAlign:"center"}});
+    var eicon=d({css:{fontSize:"52px",marginBottom:"14px",animation:"float 3s ease-in-out infinite"}});eicon.textContent=grp.icon;empty.appendChild(eicon);
+    empty.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"20px",fontWeight:600,color:"#3D2314",marginBottom:"8px"}},grp.label+" is quiet..."));
+    empty.appendChild(d({css:{fontSize:"14px",color:"#9B7B62",lineHeight:1.65,marginBottom:"24px",maxWidth:"260px"}},"Be the first to post! Share a photo, check in, or add an event."));
+    var ep=b({css:{padding:"12px 26px",borderRadius:"50px",background:t.a,border:"none",color:"white",fontSize:"14px",fontWeight:800,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 4px 16px "+t.a+"66"}},"Post Something");
+    ep.addEventListener("click",function(){ST.compose=true;redraw();});empty.appendChild(ep);
+    list.appendChild(empty);
+  } else {
+    feedItems.forEach(function(item){list.appendChild(buildItem(item,t));});
+  }
   wrap.appendChild(list);
   var fab=b({css:{position:"fixed",bottom:"76px",right:"20px",width:"48px",height:"48px",borderRadius:"50%",background:t.a,border:"none",color:"white",fontSize:"22px",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 18px "+t.a+"88",cursor:"pointer",zIndex:40,fontFamily:"inherit"}},"+");
   fab.addEventListener("click",function(){ST.compose=true;redraw();});wrap.appendChild(fab);
