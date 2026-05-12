@@ -355,7 +355,9 @@ function buildFeed(t,grp){
   injectBirthdays();
   var wrap=d({css:{display:"flex",flexDirection:"column",flex:1,overflow:"hidden",minHeight:0}});
   var cb=b({css:{margin:"8px 12px 0",padding:"10px 13px",borderRadius:"13px",background:t.cb,border:"2px dashed "+t.al,display:"flex",alignItems:"center",gap:"8px",cursor:"pointer",textAlign:"left",flexShrink:0,fontFamily:"inherit",alignSelf:"stretch"}});
-  var cav=d({css:{width:"28px",height:"28px",borderRadius:"50%",background:t.ap,border:"2px solid "+t.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"14px",flexShrink:0}});cav.textContent=ST.avatar;cb.appendChild(cav);
+  var cav=d({css:{width:"28px",height:"28px",borderRadius:"50%",background:t.ap,border:"2px solid "+t.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"14px",flexShrink:0,overflow:"hidden"}});
+  if(ST.avatar&&ST.avatar.startsWith("data:")){var cavImg=el("img",{css:{width:"100%",height:"100%",objectFit:"cover",display:"block"}});cavImg.src=ST.avatar;cav.appendChild(cavImg);}
+  else cav.textContent=ST.avatar;cb.appendChild(cav);
   cb.appendChild(d({css:{fontSize:"13px",color:"#9B7B62",fontWeight:600}},"Share something with your family..."));
   cb.addEventListener("click",function(){ST.compose=true;redraw();});wrap.appendChild(cb);
   var list=d({cls:"scr",css:{padding:"9px 12px 80px",display:"flex",flexDirection:"column",gap:"10px"}});
@@ -765,12 +767,17 @@ function buildUpload(t,grp){
     var fi=el("input",{type:"file",accept:"image/*",css:{display:"none"}});
     fi.addEventListener("change",function(){var f=this.files&&this.files[0];if(!f)return;var r=new FileReader();r.onload=function(e){ST.upImg=e.target.result;redraw();};r.readAsDataURL(f);});
     var pa=d({css:{width:"100%",aspectRatio:"4/3",borderRadius:"16px",border:"2.5px dashed "+t.al,background:"linear-gradient(135deg,"+t.ap+","+t.sb+")",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",marginBottom:"12px",overflow:"hidden",position:"relative"}});
-    if(ST.upImg){var pi=el("img",{css:{width:"100%",height:"100%",objectFit:"cover"}});pi.src=ST.upImg;pa.appendChild(pi);}
-    else{var ico=d({css:{fontSize:"38px",marginBottom:"6px"}});ico.textContent="\uD83D\uDCF7";pa.appendChild(ico);pa.appendChild(d({css:{fontSize:"14px",fontWeight:700,color:t.ad}},"Tap to add a photo"));}
+    if(ST.upImg){var pi=el("img",{css:{width:"100%",height:"100%",objectFit:"cover"}});pi.src=ST.upImg;pa.appendChild(pi);var changeBtn=b({css:{position:"absolute",bottom:"10px",right:"10px",padding:"6px 12px",borderRadius:"50px",background:"rgba(0,0,0,.55)",border:"none",color:"white",fontSize:"12px",fontWeight:700,cursor:"pointer",fontFamily:"inherit"}},"Change");changeBtn.addEventListener("click",function(e){e.stopPropagation();fi.click();});pa.appendChild(changeBtn);}
+    else{var ico=d({css:{fontSize:"38px",marginBottom:"6px"}});ico.textContent="\uD83D\uDCF7";pa.appendChild(ico);pa.appendChild(d({css:{fontSize:"14px",fontWeight:700,color:t.ad}},"Tap to add a photo"));
+    var tapBtn=b({css:{marginTop:"10px",padding:"9px 22px",borderRadius:"50px",background:t.a,border:"none",color:"white",fontSize:"13px",fontWeight:700,cursor:"pointer",fontFamily:"inherit"}},"Choose Photo");
+    tapBtn.addEventListener("click",function(e){e.stopPropagation();fi.click();});pa.appendChild(tapBtn);}
     pa.addEventListener("click",function(){fi.click();});body.appendChild(pa);body.appendChild(fi);sh.appendChild(body);
     var ft=d({css:{padding:"12px 15px 26px",flexShrink:0}});
-    var nb=b({css:{width:"100%",padding:"13px",borderRadius:"50px",background:t.a,border:"none",color:"white",fontSize:"14px",fontWeight:800,cursor:"pointer",fontFamily:"inherit"}},"Next: Add Caption");
-    nb.addEventListener("click",function(){ST.upStep=2.5;redraw();});ft.appendChild(nb);sh.appendChild(ft);
+    var nb=b({css:{width:"100%",padding:"13px",borderRadius:"50px",background:t.a,border:"none",color:"white",fontSize:"14px",fontWeight:800,cursor:"pointer",fontFamily:"inherit"}},ST.upImg?"Next: Add Caption":"Tap photo above to add");
+    nb.addEventListener("click",function(){
+      if(!ST.upImg){pa.style.border="2.5px solid #C4714A";pa.style.animation="none";setTimeout(function(){pa.style.border="2.5px dashed "+t.al;},800);return;}
+      ST.upStep=2.5;redraw();
+    });ft.appendChild(nb);sh.appendChild(ft);
   }
   if(ST.upStep===2.5){
     sh.appendChild(upHdr("Add Caption",function(){ST.upStep=2;redraw();}));
