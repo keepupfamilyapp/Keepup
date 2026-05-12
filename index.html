@@ -636,6 +636,35 @@ function buildProfile(t){
     stat.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"24px",fontWeight:600,color:t.a}},s[0]));
     stat.appendChild(d({css:{fontSize:"11px",color:"#9B7B62",fontWeight:700}},s[1]));sc.appendChild(stat);
   });body.appendChild(sc);
+
+  // Invite card
+  var inv=d({css:{background:"#FFF9F2",borderRadius:"18px",overflow:"hidden",boxShadow:"0 2px 12px rgba(0,0,0,.08)",marginBottom:"12px"}});
+  inv.appendChild(d({css:{padding:"13px 15px 9px",fontSize:"12px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".5px",borderBottom:"1px solid #F5DDD1"}},"Invite Family"));
+  var invBody=d({css:{padding:"12px 15px"}});
+  ST.groups.forEach(function(g){
+    var gt=th(g.id);
+    var row=d({css:{display:"flex",alignItems:"center",gap:"10px",marginBottom:"10px"}});
+    var ic=d({css:{width:"34px",height:"34px",borderRadius:"50%",background:gt.ap,border:"1.5px solid "+gt.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"17px",flexShrink:0}});ic.textContent=g.icon;row.appendChild(ic);
+    var info=d({css:{flex:1,minWidth:0}});
+    info.appendChild(d({css:{fontSize:"13px",fontWeight:700,color:"#3D2314"}},g.label));
+    info.appendChild(d({css:{fontSize:"11px",color:"#9B7B62",marginTop:"1px"}},"keepupfamilyapp.github.io/Keepup"));
+    row.appendChild(info);
+    var copyBtn=b({css:{padding:"7px 13px",borderRadius:"50px",background:gt.a,border:"none",color:"white",fontSize:"12px",fontWeight:700,cursor:"pointer",fontFamily:"inherit",flexShrink:0}},"Copy Link");
+    (function(grpObj,btn,gtc){
+      btn.addEventListener("click",function(){
+        var link="https://keepupfamilyapp.github.io/Keepup?join="+encodeURIComponent(grpObj.label)+"&icon="+encodeURIComponent(grpObj.icon);
+        if(navigator.clipboard&&navigator.clipboard.writeText){
+          navigator.clipboard.writeText(link).then(function(){
+            btn.textContent="\u2713 Copied!";btn.style.background="#4A7C59";
+            setTimeout(function(){btn.textContent="Copy Link";btn.style.background=gtc.a;},2500);
+          }).catch(function(){fallbackCopy(link,btn,gtc.a);});
+        } else {fallbackCopy(link,btn,gtc.a);}
+      });
+    })(g,copyBtn,gt);
+    row.appendChild(copyBtn);invBody.appendChild(row);
+  });
+  inv.appendChild(invBody);body.appendChild(inv);
+
   var enc=d({css:{background:"#FFF9F2",borderRadius:"18px",overflow:"hidden",boxShadow:"0 2px 12px rgba(0,0,0,.08)",marginBottom:"12px"}});
   enc.appendChild(d({css:{padding:"13px 15px 9px",fontSize:"12px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".5px",borderBottom:"1px solid #F5DDD1"}},"Your Name"));
   var enp=d({css:{padding:"10px 15px"}});
@@ -825,6 +854,14 @@ function buildNewDm(){
     ST.dms.unshift({id:nid,members:selMems,last:"",lt:"Now",msgs:[]});
     ST.dmSel=[];ST.newDm=false;ST.openChat=nid;redraw();
   });sh.appendChild(sub);ov.appendChild(sh);return ov;
+}
+
+function fallbackCopy(text,btn,origColor){
+  var ta=document.createElement("textarea");ta.value=text;ta.style.cssText="position:fixed;left:-9999px;top:-9999px;";
+  document.body.appendChild(ta);ta.focus();ta.select();
+  try{document.execCommand("copy");btn.textContent="\u2713 Copied!";btn.style.background="#4A7C59";setTimeout(function(){btn.textContent="Copy Link";if(origColor)btn.style.background=origColor;},2500);}
+  catch(e){btn.textContent="Long-press to copy";setTimeout(function(){btn.textContent="Copy Link";},3000);}
+  document.body.removeChild(ta);
 }
 
 function submitPost(){
