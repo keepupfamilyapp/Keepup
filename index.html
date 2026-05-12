@@ -366,7 +366,6 @@ function buildFeed(t,grp){
     var empty=d({css:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"50px 24px",textAlign:"center"}});
     var eicon=d({css:{fontSize:"52px",marginBottom:"14px",animation:"float 3s ease-in-out infinite"}});eicon.textContent=grp.icon;empty.appendChild(eicon);
     empty.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"20px",fontWeight:600,color:"#3D2314",marginBottom:"8px"}},grp.label+" is quiet..."));
-    empty.appendChild(d({css:{fontSize:"14px",color:"#9B7B62",lineHeight:1.65,marginBottom:"24px",maxWidth:"260px"}},"Be the first to post! Share a photo, check in, or add an event."));
     var ep=b({css:{padding:"12px 26px",borderRadius:"50px",background:t.a,border:"none",color:"white",fontSize:"14px",fontWeight:800,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 4px 16px "+t.a+"66"}},"Post Something");
     ep.addEventListener("click",function(){ST.compose=true;redraw();});empty.appendChild(ep);
     list.appendChild(empty);
@@ -704,6 +703,16 @@ function buildProfile(t){
     ab.addEventListener("click",function(){ST.avatar=a;try{localStorage.setItem("ku_av",a);}catch(e){}redraw();});apg.appendChild(ab);
   });
   apBody.appendChild(apg);apc.appendChild(apBody);body.appendChild(apc);
+
+  // Sign out
+  var so=b({css:{width:"100%",padding:"13px",borderRadius:"50px",background:"transparent",border:"2px solid #F5DDD1",color:"#9B7B62",fontSize:"14px",fontWeight:700,cursor:"pointer",fontFamily:"inherit",marginTop:"4px"}},"Sign Out");
+  so.addEventListener("click",function(){
+    try{localStorage.clear();}catch(e){}
+    ST.boarded=false;ST.obStep=0;ST.obName="";ST.obPhoto=null;ST.obAvatar="\uD83D\uDC69";
+    ST.obGrpName="";ST.obGrpEmoji="\u2764\uFE0F";ST.obGrpPhoto=null;
+    redraw();
+  });
+  body.appendChild(so);
   wrap.appendChild(body);return wrap;
 }
 
