@@ -63,13 +63,12 @@ function syncOn(){
 
   // Listen to feed posts for current group
   function watchFeed(gid){
-    var unsub=db.collection("feed").where("groupId","==",gid).orderBy("createdAt","desc").limit(30)
+    var unsub=db.collection("feed").where("groupId","==",gid)
       .onSnapshot(function(snap){
         if(!ST.feed[gid])ST.feed[gid]=[];
         snap.docChanges().forEach(function(change){
           var data=Object.assign({},change.doc.data(),{id:change.doc.id});
           if(change.type==="added"){
-            // Only add if not already in feed
             if(!ST.feed[gid].find(function(x){return x.id===data.id;})){
               ST.feed[gid].unshift(data);
             }
@@ -77,6 +76,12 @@ function syncOn(){
           if(change.type==="removed"){
             ST.feed[gid]=ST.feed[gid].filter(function(x){return x.id!==data.id;});
           }
+        });
+        // Sort by createdAt descending after each update
+        ST.feed[gid].sort(function(a,b){
+          var ta=a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():0;
+          var tb=b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():0;
+          return tb-ta;
         });
         if(ST.tab==="feed")redraw();
       });
@@ -88,7 +93,7 @@ function syncOn(){
 
   // Listen to chat messages for current group
   function watchChat(gid){
-    var unsub=db.collection("chat").where("groupId","==",gid).orderBy("createdAt","asc").limit(100)
+    var unsub=db.collection("chat").where("groupId","==",gid)
       .onSnapshot(function(snap){
         if(!ST.chatMsgs[gid])ST.chatMsgs[gid]=[];
         snap.docChanges().forEach(function(change){
@@ -96,6 +101,12 @@ function syncOn(){
           if(change.type==="added"&&!ST.chatMsgs[gid].find(function(x){return x.id===data.id;})){
             ST.chatMsgs[gid].push(data);
           }
+        });
+        // Sort by time
+        ST.chatMsgs[gid].sort(function(a,b){
+          var ta=a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():0;
+          var tb=b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():0;
+          return ta-tb;
         });
         if(ST.tab==="chat")redraw();
       });
@@ -105,7 +116,7 @@ function syncOn(){
 
   // Listen to DM messages
   function watchDm(dmId){
-    var unsub=db.collection("dms").doc(dmId).collection("msgs").orderBy("createdAt","asc").limit(100)
+    var unsub=db.collection("dms").doc(dmId).collection("msgs")
       .onSnapshot(function(snap){
         var dm=ST.dms.find(function(x){return x.id===dmId;});
         if(!dm)return;
@@ -122,7 +133,7 @@ function syncOn(){
   ST.dms.forEach(function(dm){watchDm(dm.id);});
 
   // Listen to events
-  var evUnsub=db.collection("events").orderBy("createdAt","desc").limit(50)
+  var evUnsub=db.collection("events")
     .onSnapshot(function(snap){
       snap.docChanges().forEach(function(change){
         var data=Object.assign({},change.doc.data(),{id:change.doc.id});
