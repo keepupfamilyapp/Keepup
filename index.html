@@ -39,10 +39,127 @@ html,body{height:100%;background:#FAF6F0;font-family:Nunito,sans-serif;overflow:
 .ob-dot.active{width:24px;background:#C4714A;}
 .ob-dot.inactive{width:7px;}
 </style>
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 </head>
 <body>
 <div id="app"></div>
 <script>
+// Firebase init
+firebase.initializeApp({
+    apiKey: "AIzaSyBLUsaETkcXh_1f2KOayMAkhM9jPb1XE9Y",
+    authDomain: "keep-up-f9d1c.firebaseapp.com",
+    projectId: "keep-up-f9d1c",
+    storageBucket: "keep-up-f9d1c.firebasestorage.app",
+    messagingSenderId: "216417089419",
+    appId: "1:216417089419:web:0f736931c79dbe4ed8618e"
+});
+var db=firebase.firestore();
+var unsubscribers=[];
+
+function syncOn(){
+  unsubscribers.forEach(function(u){u();});unsubscribers=[];
+
+  // Listen to feed posts for current group
+  function watchFeed(gid){
+    var unsub=db.collection("feed").where("groupId","==",gid).orderBy("createdAt","desc").limit(30)
+      .onSnapshot(function(snap){
+        if(!ST.feed[gid])ST.feed[gid]=[];
+        snap.docChanges().forEach(function(change){
+          var data=Object.assign({},change.doc.data(),{id:change.doc.id});
+          if(change.type==="added"){
+            // Only add if not already in feed
+            if(!ST.feed[gid].find(function(x){return x.id===data.id;})){
+              ST.feed[gid].unshift(data);
+            }
+          }
+          if(change.type==="removed"){
+            ST.feed[gid]=ST.feed[gid].filter(function(x){return x.id!==data.id;});
+          }
+        });
+        if(ST.tab==="feed")redraw();
+      });
+    unsubscribers.push(unsub);
+  }
+
+  // Watch all groups
+  ST.groups.forEach(function(g){watchFeed(g.id);});
+
+  // Listen to chat messages for current group
+  function watchChat(gid){
+    var unsub=db.collection("chat").where("groupId","==",gid).orderBy("createdAt","asc").limit(100)
+      .onSnapshot(function(snap){
+        if(!ST.chatMsgs[gid])ST.chatMsgs[gid]=[];
+        snap.docChanges().forEach(function(change){
+          var data=Object.assign({},change.doc.data(),{id:change.doc.id});
+          if(change.type==="added"&&!ST.chatMsgs[gid].find(function(x){return x.id===data.id;})){
+            ST.chatMsgs[gid].push(data);
+          }
+        });
+        if(ST.tab==="chat")redraw();
+      });
+    unsubscribers.push(unsub);
+  }
+  ST.groups.forEach(function(g){watchChat(g.id);});
+
+  // Listen to DM messages
+  function watchDm(dmId){
+    var unsub=db.collection("dms").doc(dmId).collection("msgs").orderBy("createdAt","asc").limit(100)
+      .onSnapshot(function(snap){
+        var dm=ST.dms.find(function(x){return x.id===dmId;});
+        if(!dm)return;
+        snap.docChanges().forEach(function(change){
+          var data=Object.assign({},change.doc.data(),{id:change.doc.id});
+          if(change.type==="added"&&!dm.msgs.find(function(x){return x.id===data.id;})){
+            dm.msgs.push(data);dm.last=data.text;dm.lt="Just now";
+          }
+        });
+        if(ST.tab==="chat")redraw();
+      });
+    unsubscribers.push(unsub);
+  }
+  ST.dms.forEach(function(dm){watchDm(dm.id);});
+
+  // Listen to events
+  var evUnsub=db.collection("events").orderBy("createdAt","desc").limit(50)
+    .onSnapshot(function(snap){
+      snap.docChanges().forEach(function(change){
+        var data=Object.assign({},change.doc.data(),{id:change.doc.id});
+        if(change.type==="added"&&!ST.evs.find(function(x){return x.id===data.id;})){
+          ST.evs.push(data);
+        }
+        if(change.type==="removed"){ST.evs=ST.evs.filter(function(x){return x.id!==data.id;});}
+      });
+      if(ST.tab==="calendar")redraw();
+    });
+  unsubscribers.push(evUnsub);
+}
+
+function postToFeed(item){
+  return db.collection("feed").add(Object.assign({},item,{
+    createdAt:firebase.firestore.FieldValue.serverTimestamp()
+  }));
+}
+
+function postToChat(gid,msg){
+  return db.collection("chat").add(Object.assign({},msg,{
+    groupId:gid,createdAt:firebase.firestore.FieldValue.serverTimestamp()
+  }));
+}
+
+function postToDm(dmId,msg){
+  return db.collection("dms").doc(dmId).collection("msgs").add(Object.assign({},msg,{
+    createdAt:firebase.firestore.FieldValue.serverTimestamp()
+  }));
+}
+
+function postEvent(ev){
+  return db.collection("events").add(Object.assign({},ev,{
+    createdAt:firebase.firestore.FieldValue.serverTimestamp()
+  }));
+}
+
 var TH={
   imm:{a:"#C4714A",al:"#E8956D",ap:"#F5DDD1",ad:"#6B4226",bg:"#FAF6F0",cb:"#FFF9F2",sb:"#FFF3E8"},
   moms:{a:"#B5699A",al:"#D48DBB",ap:"#F5E0EF",ad:"#6B3355",bg:"#FDF6FB",cb:"#FFF9FD",sb:"#F9EDF6"},
@@ -281,7 +398,7 @@ function buildOnboarding(){
       ST.chatMsgs={imm:[]};ST.mems={imm:[{av:ST.obPhoto||ST.obAvatar,name:ST.obName,role:"Admin",you:true}]};
       ST.birthdays=[];ST.evs=[];ST.dms=[];ST.boarded=true;
       try{localStorage.setItem("ku_ob","1");localStorage.setItem("ku_name",ST.obName);localStorage.setItem("ku_av",ST.obAvatar);localStorage.setItem("ku_grp",JSON.stringify({label:ST.obGrpName,icon:ST.obGrpEmoji}));}catch(e){}
-      redraw();
+      syncOn();redraw();
     }));
     scr.appendChild(body);wrap.appendChild(scr);return wrap;
   }
@@ -526,11 +643,19 @@ function buildChatView(t,grp){
 
 function sendChat(gid){
   var iv=ST.chatIn[gid]||"";if(!iv.trim())return;
-  var msg={id:Date.now(),av:ST.avatar,name:ST.name||"You",text:iv.trim(),time:"Just now",you:true};
-  var dm=ST.dms&&ST.dms.find(function(x){return x.id===gid;});
-  if(dm){dm.msgs.push(msg);dm.last=iv.trim();dm.lt="Just now";}
-  else{if(!ST.chatMsgs[gid])ST.chatMsgs[gid]=[];ST.chatMsgs[gid].push(msg);}
+  var msg={av:ST.avatar,name:ST.name||"You",text:iv.trim(),time:"Just now",you:true};
   ST.chatIn[gid]="";redraw();
+  var dm=ST.dms&&ST.dms.find(function(x){return x.id===gid;});
+  if(dm){
+    postToDm(gid,Object.assign({},msg,{you:false})).catch(function(){
+      dm.msgs.push(Object.assign({},msg,{id:Date.now()}));dm.last=msg.text;dm.lt="Just now";redraw();
+    });
+  } else {
+    postToChat(gid,msg).catch(function(){
+      if(!ST.chatMsgs[gid])ST.chatMsgs[gid]=[];
+      ST.chatMsgs[gid].push(Object.assign({},msg,{id:Date.now()}));redraw();
+    });
+  }
   setTimeout(function(){var els=document.querySelectorAll(".scr");els.forEach(function(l){l.scrollTop=l.scrollHeight;});},50);
 }
 
@@ -893,11 +1018,17 @@ function fallbackCopy(text,btn,origColor){
 
 function submitPost(){
   var p;
-  if(ST.upType==="checkin"){if(!ST.upCi.trim())return;p={id:Date.now(),type:"checkin",av:ST.avatar,name:ST.name||"You",time:"Just now",status:ST.upCi};}
-  else{p={id:Date.now(),type:"photo",av:ST.avatar,name:ST.name||"You",time:"Just now",emoji:"\uD83C\uDF3B",imgUrl:ST.upImg,cap:ST.upCap};}
-  if(!ST.feed[ST.group])ST.feed[ST.group]=[];
-  ST.feed[ST.group].unshift(p);ST.upStep=4;redraw();
-  setTimeout(function(){ST.upOpen=false;ST.upStep=1;redraw();},2200);
+  if(ST.upType==="checkin"){if(!ST.upCi.trim())return;p={type:"checkin",av:ST.avatar,name:ST.name||"You",time:"Just now",status:ST.upCi,groupId:ST.group};}
+  else{p={type:"photo",av:ST.avatar,name:ST.name||"You",time:"Just now",emoji:"\uD83C\uDF3B",imgUrl:ST.upImg||null,cap:ST.upCap,groupId:ST.group};}
+  ST.upStep=4;redraw();
+  postToFeed(p).then(function(){
+    ST.upCi="";ST.upCap="";ST.upImg=null;
+    setTimeout(function(){ST.upOpen=false;ST.upStep=1;redraw();},2200);
+  }).catch(function(){
+    // Fallback: add locally if offline
+    p.id=Date.now();if(!ST.feed[ST.group])ST.feed[ST.group]=[];ST.feed[ST.group].unshift(p);
+    setTimeout(function(){ST.upOpen=false;ST.upStep=1;redraw();},2200);
+  });
 }
 function addComment(){
   if(!ST.cmtIn.trim())return;var pid=ST.cmtOpen;
@@ -915,6 +1046,7 @@ try{
   }
 }catch(e){}
 redraw();
+if(ST.boarded)syncOn();
 </script>
 </body>
 </html>
