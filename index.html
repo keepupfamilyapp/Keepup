@@ -182,7 +182,7 @@ function th(id){return TH[id]||TH.imm;}
 
 var ST={
   boarded:false,obStep:0,obName:"",obAvatar:"\uD83D\uDC69",obPhoto:null,
-  obGrpName:"",obGrpEmoji:"\u2764\uFE0F",obGrpPhoto:null,
+  obGrpName:"",obGrpEmoji:"\u2764\uFE0F",obGrpPhoto:null,joinInvite:false,
   tab:"feed",group:"imm",name:"Sean",avatar:"\uD83D\uDC68",
   openChat:null,
   chatMsgs:{imm:[],moms:[],dads:[],cousins:[]},
@@ -269,9 +269,18 @@ function buildOnboarding(){
     var hero=d({cls:"ob-hero"});var icon=d({css:{fontSize:"72px",animation:"float 3s ease-in-out infinite"}});icon.textContent="\uD83C\uDFE1";hero.appendChild(icon);scr.appendChild(hero);
     var body=d({cls:"ob-body",css:{alignItems:"center",justifyContent:"center",textAlign:"center"}});
     body.appendChild(d({html:"keep <em>up</em>",css:{fontFamily:"Lora,serif",fontSize:"32px",fontWeight:600,color:"#C4714A",marginBottom:"10px"}}));
-    body.appendChild(d({css:{fontSize:"16px",color:"#6B4C35",lineHeight:1.65,marginBottom:"6px"}},"Stay close to the people who matter most."));
-    body.appendChild(d({css:{fontSize:"13px",color:"#9B7B62",lineHeight:1.6,marginBottom:"32px"}},"No ads. No algorithms. Just your family."));
-    body.appendChild(makeBtn("Get Started",function(){ST.obStep=1;redraw();}));
+    if(ST.joinInvite&&ST.obGrpName){
+      var invBanner=d({css:{background:"#F5DDD1",borderRadius:"16px",padding:"14px 16px",marginBottom:"24px",textAlign:"center",border:"2px solid #E8956D"}});
+      invBanner.appendChild(d({css:{fontSize:"28px",marginBottom:"6px"}},ST.obGrpEmoji||"\uD83C\uDFE1"));
+      invBanner.appendChild(d({css:{fontSize:"13px",fontWeight:700,color:"#9B7B62",marginBottom:"4px"}},"You've been invited to"));
+      invBanner.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"20px",fontWeight:600,color:"#3D2314"}},ST.obGrpName));
+      body.appendChild(invBanner);
+      body.appendChild(makeBtn("Accept Invite",function(){ST.obStep=1;redraw();}));
+    } else {
+      body.appendChild(d({css:{fontSize:"16px",color:"#6B4C35",lineHeight:1.65,marginBottom:"6px"}},"Stay close to the people who matter most."));
+      body.appendChild(d({css:{fontSize:"13px",color:"#9B7B62",lineHeight:1.6,marginBottom:"32px"}},"No ads. No algorithms. Just your family."));
+      body.appendChild(makeBtn("Get Started",function(){ST.obStep=1;redraw();}));
+    }
     scr.appendChild(body);wrap.appendChild(scr);return wrap;
   }
   if(step===1){
@@ -315,33 +324,58 @@ function buildOnboarding(){
   if(step===3){
     var scr=d({cls:"ob-screen",css:{position:"relative"}});scr.appendChild(backBtn());scr.appendChild(dots(3));
     var body=d({cls:"ob-body"});
-    body.appendChild(d({cls:"ob-title"},"Create your first family group"));
-    body.appendChild(d({cls:"ob-sub"},"Give it a name your family will recognise."));
-    var gi=el("input",{type:"text",cls:"ob-input",placeholder:"e.g. The Johnsons, Immediate Family..."});
-    gi.value=ST.obGrpName;gi.addEventListener("input",function(){ST.obGrpName=this.value;});body.appendChild(gi);
-    body.appendChild(d({css:{fontSize:"12px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".5px",marginBottom:"10px"}},"Group Icon"));
-    var gpRow=d({css:{display:"flex",alignItems:"center",gap:"14px",marginBottom:"16px"}});
-    var gpC=d({css:{width:"64px",height:"64px",borderRadius:"50%",background:"#F5DDD1",border:"2px solid #E8956D",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"28px",flexShrink:0,overflow:"hidden",cursor:"pointer"}});
-    if(ST.obGrpPhoto){var gpImg=el("img",{css:{width:"100%",height:"100%",objectFit:"cover",display:"block"}});gpImg.src=ST.obGrpPhoto;gpC.appendChild(gpImg);}
-    else gpC.textContent=ST.obGrpEmoji;
-    var gpFi=el("input",{type:"file",accept:"image/*",css:{display:"none"}});
-    gpFi.addEventListener("change",function(){var f=this.files&&this.files[0];if(!f)return;var r=new FileReader();r.onload=function(e){ST.obGrpPhoto=e.target.result;redraw();};r.readAsDataURL(f);});
-    gpC.addEventListener("click",function(){gpFi.click();});
-    var gpUp=b({css:{flex:1,padding:"12px",borderRadius:"13px",background:"#FFF9F2",border:"1.5px dashed #E8956D",fontSize:"13px",fontWeight:700,color:"#C4714A",cursor:"pointer",fontFamily:"inherit",textAlign:"left"}},"\uD83D\uDCF7 Upload a group photo");
-    gpUp.addEventListener("click",function(){gpFi.click();});
-    gpRow.appendChild(gpC);gpRow.appendChild(gpUp);gpRow.appendChild(gpFi);body.appendChild(gpRow);
-    var divR2=d({css:{display:"flex",alignItems:"center",gap:"10px",marginBottom:"10px"}});
-    divR2.appendChild(d({css:{flex:1,height:"1px",background:"#F5DDD1"}}));divR2.appendChild(d({css:{fontSize:"12px",color:"#9B7B62",fontWeight:700}},"OR pick an emoji"));divR2.appendChild(d({css:{flex:1,height:"1px",background:"#F5DDD1"}}));body.appendChild(divR2);
-    var egrid=d({css:{display:"flex",flexWrap:"wrap",gap:"8px",marginBottom:"16px"}});
-    ["\u2764\uFE0F","\uD83C\uDF38","\uD83C\uDF32","\u2B50","\uD83C\uDFE0","\uD83C\uDF89","\uD83C\uDF3B","\uD83E\uDD8B","\uD83C\uDF0A","\uD83C\uDF42","\uD83C\uDFB6","\uD83C\uDF19"].forEach(function(e){
-      var eb=b({css:{width:"44px",height:"44px",borderRadius:"11px",background:ST.obGrpEmoji===e&&!ST.obGrpPhoto?"#F5DDD1":"#FFF9F2",border:"2px solid "+(ST.obGrpEmoji===e&&!ST.obGrpPhoto?"#C4714A":"rgba(107,66,38,.12)"),fontSize:"21px",cursor:"pointer",fontFamily:"inherit"}},e);
-      eb.addEventListener("click",function(){ST.obGrpEmoji=e;ST.obGrpPhoto=null;redraw();});egrid.appendChild(eb);
-    });
-    body.appendChild(egrid);body.appendChild(d({cls:"ob-spacer"}));
-    body.appendChild(makeBtn("Create Group",function(){
-      if(!ST.obGrpName.trim()){gi.focus();gi.style.borderColor="#C4714A";return;}
-      ST.obStep=4;redraw();
-    }));
+    // If joining via invite, group is pre-filled - show confirmation instead
+    if(ST.joinInvite&&ST.obGrpName){
+      body.appendChild(d({cls:"ob-title"},"Joining "+ST.obGrpName));
+      body.appendChild(d({cls:"ob-sub"},"You're joining an existing family group."));
+      var joinConfirm=d({css:{background:"#F5DDD1",borderRadius:"16px",padding:"16px",textAlign:"center",marginBottom:"16px",border:"1.5px solid #E8956D"}});
+      joinConfirm.appendChild(d({css:{fontSize:"32px",marginBottom:"8px"}},ST.obGrpEmoji||"\uD83C\uDFE1"));
+      joinConfirm.appendChild(d({css:{fontSize:"18px",fontWeight:800,color:"#C4714A"}},ST.obGrpName));
+      body.appendChild(joinConfirm);
+      body.appendChild(d({cls:"ob-spacer"}));
+      body.appendChild(makeBtn("Join this group",function(){ST.obStep=4;redraw();}));
+      scr.appendChild(body);wrap.appendChild(scr);return wrap;
+    }
+    if(ST.joinInvite&&ST.obGrpName){
+      // Joining via invite - show the group they're joining
+      body.appendChild(d({cls:"ob-title"},"You're joining"));
+      var jcard=d({css:{background:"#F5DDD1",borderRadius:"18px",padding:"20px",textAlign:"center",marginBottom:"20px",border:"2px solid #E8956D"}});
+      var jicon=d({css:{fontSize:"40px",marginBottom:"8px"}});jicon.textContent=ST.obGrpEmoji||"\uD83C\uDFE1";jcard.appendChild(jicon);
+      jcard.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"22px",fontWeight:600,color:"#3D2314",marginBottom:"4px"}},ST.obGrpName));
+      jcard.appendChild(d({css:{fontSize:"13px",color:"#9B7B62"}},"Family group"));
+      body.appendChild(jcard);
+      body.appendChild(d({cls:"ob-spacer"}));
+      body.appendChild(makeBtn("Join "+ST.obGrpName,function(){ST.obStep=4;redraw();}));
+    } else {
+      // Creating a new group
+      body.appendChild(d({cls:"ob-title"},"Create your first family group"));
+      body.appendChild(d({cls:"ob-sub"},"Give it a name your family will recognise."));
+      var gi=el("input",{type:"text",cls:"ob-input",placeholder:"e.g. The Johnsons, Immediate Family..."});
+      gi.value=ST.obGrpName;gi.addEventListener("input",function(){ST.obGrpName=this.value;});body.appendChild(gi);
+      body.appendChild(d({css:{fontSize:"12px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".5px",marginBottom:"10px"}},"Group Icon"));
+      var gpRow=d({css:{display:"flex",alignItems:"center",gap:"14px",marginBottom:"16px"}});
+      var gpC=d({css:{width:"64px",height:"64px",borderRadius:"50%",background:"#F5DDD1",border:"2px solid #E8956D",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"28px",flexShrink:0,overflow:"hidden",cursor:"pointer"}});
+      if(ST.obGrpPhoto){var gpImg=el("img",{css:{width:"100%",height:"100%",objectFit:"cover",display:"block"}});gpImg.src=ST.obGrpPhoto;gpC.appendChild(gpImg);}
+      else gpC.textContent=ST.obGrpEmoji;
+      var gpFi=el("input",{type:"file",accept:"image/*",css:{display:"none"}});
+      gpFi.addEventListener("change",function(){var f=this.files&&this.files[0];if(!f)return;var r=new FileReader();r.onload=function(e){ST.obGrpPhoto=e.target.result;redraw();};r.readAsDataURL(f);});
+      gpC.addEventListener("click",function(){gpFi.click();});
+      var gpUp=b({css:{flex:1,padding:"12px",borderRadius:"13px",background:"#FFF9F2",border:"1.5px dashed #E8956D",fontSize:"13px",fontWeight:700,color:"#C4714A",cursor:"pointer",fontFamily:"inherit",textAlign:"left"}},"\uD83D\uDCF7 Upload a group photo");
+      gpUp.addEventListener("click",function(){gpFi.click();});
+      gpRow.appendChild(gpC);gpRow.appendChild(gpUp);gpRow.appendChild(gpFi);body.appendChild(gpRow);
+      var divR2=d({css:{display:"flex",alignItems:"center",gap:"10px",marginBottom:"10px"}});
+      divR2.appendChild(d({css:{flex:1,height:"1px",background:"#F5DDD1"}}));divR2.appendChild(d({css:{fontSize:"12px",color:"#9B7B62",fontWeight:700}},"OR pick an emoji"));divR2.appendChild(d({css:{flex:1,height:"1px",background:"#F5DDD1"}}));body.appendChild(divR2);
+      var egrid=d({css:{display:"flex",flexWrap:"wrap",gap:"8px",marginBottom:"16px"}});
+      ["\u2764\uFE0F","\uD83C\uDF38","\uD83C\uDF32","\u2B50","\uD83C\uDFE0","\uD83C\uDF89","\uD83C\uDF3B","\uD83E\uDD8B","\uD83C\uDF0A","\uD83C\uDF42","\uD83C\uDFB6","\uD83C\uDF19"].forEach(function(e){
+        var eb=b({css:{width:"44px",height:"44px",borderRadius:"11px",background:ST.obGrpEmoji===e&&!ST.obGrpPhoto?"#F5DDD1":"#FFF9F2",border:"2px solid "+(ST.obGrpEmoji===e&&!ST.obGrpPhoto?"#C4714A":"rgba(107,66,38,.12)"),fontSize:"21px",cursor:"pointer",fontFamily:"inherit"}},e);
+        eb.addEventListener("click",function(){ST.obGrpEmoji=e;ST.obGrpPhoto=null;redraw();});egrid.appendChild(eb);
+      });
+      body.appendChild(egrid);body.appendChild(d({cls:"ob-spacer"}));
+      body.appendChild(makeBtn("Create Group",function(){
+        if(!ST.obGrpName.trim()){gi.focus();gi.style.borderColor="#C4714A";return;}
+        ST.obStep=4;redraw();
+      }));
+    }
     scr.appendChild(body);wrap.appendChild(scr);return wrap;
   }
   if(step===4){
@@ -349,7 +383,8 @@ function buildOnboarding(){
     var body=d({cls:"ob-body",css:{alignItems:"center",justifyContent:"center",textAlign:"center"}});
     var ei=d({css:{fontSize:"68px",marginBottom:"18px",animation:"float 3s ease-in-out infinite"}});ei.textContent="\uD83C\uDF89";body.appendChild(ei);
     body.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"28px",fontWeight:600,color:"#3D2314",marginBottom:"10px"}},"You're all set, "+(ST.obName||"friend")+"!"));
-    body.appendChild(d({css:{fontSize:"14px",color:"#6B4C35",lineHeight:1.7,marginBottom:"28px"}},ST.obGrpEmoji+" "+ST.obGrpName+" is ready. Now invite your family!"));
+    var doneMsg=ST.joinInvite?"Welcome to "+ST.obGrpName+"! You can now see and share with the group.":ST.obGrpEmoji+" "+ST.obGrpName+" is ready. Now invite your family!";
+    body.appendChild(d({css:{fontSize:"14px",color:"#6B4C35",lineHeight:1.7,marginBottom:"28px"}},doneMsg));
     body.appendChild(makeBtn("Take me to Keep Up",function(){
       ST.name=ST.obName;ST.avatar=ST.obPhoto||ST.obAvatar;
       ST.groups=[{id:"imm",label:ST.obGrpName,icon:ST.obGrpEmoji,photo:ST.obGrpPhoto}];
@@ -1000,6 +1035,22 @@ function addComment(){
   ST.comments[pid].push({id:Date.now(),av:ST.avatar,name:ST.name||"You",text:ST.cmtIn.trim(),time:"Just now"});
   ST.cmtIn="";redraw();
 }
+
+// Check for invite link ?join=GroupName&icon=emoji
+(function(){
+  var params=new URLSearchParams(window.location.search);
+  var joinGroup=params.get("join");
+  var joinIcon=params.get("icon");
+  if(joinGroup){
+    // Pre-fill onboarding with the group from the invite
+    ST.obGrpName=joinGroup;
+    if(joinIcon)ST.obGrpEmoji=joinIcon;
+    // Show a join banner on the welcome screen
+    ST.joinInvite=true;
+    // Clean URL so refreshing doesn't re-trigger
+    window.history.replaceState({},"",window.location.pathname);
+  }
+})();
 
 try{
   if(localStorage.getItem("ku_ob")==="1"){
