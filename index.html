@@ -4,6 +4,11 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"/>
 <meta name="theme-color" content="#C4714A"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="default"/>
+<meta name="apple-mobile-web-app-title" content="Keep Up"/>
+<link rel="manifest" href="/Keepup/manifest.json"/>
+<link rel="apple-touch-icon" href="/Keepup/icon.svg"/>
 <title>Keep Up</title>
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Lora:ital,wght@0,600;1,400&display=swap" rel="stylesheet"/>
 <style>
@@ -59,6 +64,13 @@ firebase.initializeApp({
     appId: "1:216417089419:web:0f736931c79dbe4ed8618e"
 });
 var db=firebase.firestore();
+// Enable offline persistence so app works without internet
+db.enablePersistence({synchronizeTabs:true}).catch(function(err){
+  if(err.code==="failed-precondition"){
+    // Multiple tabs open - persistence only works in one
+    db.enablePersistence().catch(function(){});
+  }
+});
 var storage=firebase.storage();
 var messaging=firebase.messaging();
 var unsubscribers=[];
@@ -206,6 +218,30 @@ function syncOn(){
     unsubscribers.push(unsub);
   }
   ST.dms.forEach(function(dm){watchDm(dm.id);});
+
+  // Listen for notifications triggered by other users
+  var notifUnsub=db.collection("notifications")
+    .orderBy("sentAt","desc").limit(1)
+    .onSnapshot(function(snap){
+      snap.docChanges().forEach(function(change){
+        if(change.type==="added"){
+          var n=change.doc.data();
+          // Don't show if we just posted it (within 3s)
+          var age=n.sentAt?Date.now()-n.sentAt.toMillis():9999;
+          if(age>3000&&age<30000){
+            // Show browser notification if permission granted
+            if(Notification.permission==="granted"){
+              new Notification(n.title||"Keep Up",{
+                body:n.body||"New activity in your family",
+                icon:"/Keepup/icon.svg"
+              });
+            }
+            showInAppNotif(n.title||"Keep Up",n.body||"New activity");
+          }
+        }
+      });
+    });
+  unsubscribers.push(notifUnsub);
 
   // Listen to members
   var memUnsub=db.collection("members").onSnapshot(function(snap){
@@ -545,9 +581,13 @@ function buildApp(){
   if(ST.avatar&&ST.avatar.startsWith("data:")){var avImg=el("img",{css:{width:"100%",height:"100%",objectFit:"cover",display:"block"}});avImg.src=ST.avatar;av.appendChild(avImg);}
   else av.textContent=ST.avatar;
   bar.appendChild(av);
-  // Sync status dot
-  var syncDot=d({css:{width:"7px",height:"7px",borderRadius:"50%",background:"#4A7C59",position:"absolute",top:"10px",right:"52px",display:"none"}});
-  syncDot.id="sync-dot";bar.appendChild(syncDot);
+  // Online/offline indicator
+  var offlineBadge=d({css:{fontSize:"10px",fontWeight:700,color:"#9B7B62",background:"#F5DDD1",padding:"3px 8px",borderRadius:"50px",display:navigator.onLine?"none":"flex",alignItems:"center",gap:"4px"}});
+  offlineBadge.id="offline-badge";
+  offlineBadge.textContent="Offline";
+  bar.appendChild(offlineBadge);
+  window.addEventListener("online",function(){var b=document.getElementById("offline-badge");if(b)b.style.display="none";syncOn();});
+  window.addEventListener("offline",function(){var b=document.getElementById("offline-badge");if(b)b.style.display="flex";});
   wrap.appendChild(bar);
   if(ST.tab==="feed"){
     var pb=d({css:{background:t.sb,borderBottom:"1px solid "+t.ap,flexShrink:0,display:"flex",padding:"5px 12px 8px",gap:"6px",overflowX:"scroll",WebkitOverflowScrolling:"touch"}});
