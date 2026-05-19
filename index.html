@@ -23,6 +23,7 @@ html,body{height:100%;background:#FAF6F0;font-family:Nunito,sans-serif;overflow:
 @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
 @keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+@keyframes slideDown{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:translateY(0)}}
 .ob-screen{position:fixed;inset:0;background:#FAF6F0;display:flex;flex-direction:column;z-index:100;}
 .ob-hero{flex:0 0 42%;background:linear-gradient(170deg,#F5DDD1,#FAF0E6 60%,#E8F2E9);display:flex;align-items:center;justify-content:center;}
 .ob-body{flex:1;display:flex;flex-direction:column;padding:24px 26px 32px;animation:fadeUp .4s ease both;}
@@ -42,6 +43,7 @@ html,body{height:100%;background:#FAF6F0;font-family:Nunito,sans-serif;overflow:
 <!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js"></script>
 </head>
 <body>
 <div id="app"></div>
@@ -56,7 +58,59 @@ firebase.initializeApp({
     appId: "1:216417089419:web:0f736931c79dbe4ed8618e"
 });
 var db=firebase.firestore();
+var messaging=firebase.messaging();
 var unsubscribers=[];
+var VAPID_KEY="BJOij4wvBLe4ZgNbMuhHSVarzr9k65tSbnbF5oeSjsvOg_rTJN-ffZmCsLfz1iX_UGq5aPmTyWwRRb-fdAHJ7O4";
+
+// Register service worker and request notification permission
+function initNotifications(){
+  if(!("serviceWorker" in navigator)||!("Notification" in window))return;
+  navigator.serviceWorker.register("/Keepup/firebase-messaging-sw.js")
+    .then(function(reg){
+      console.log("SW registered");
+      return messaging.getToken({vapidKey:VAPID_KEY,serviceWorkerRegistration:reg});
+    })
+    .then(function(token){
+      if(token){
+        // Save token to Firestore so we can send notifications later
+        var uid=localStorage.getItem("ku_uid");
+        if(uid){
+          db.collection("fcmTokens").doc(uid).set({
+            token:token,uid:uid,name:ST.name,
+            updatedAt:firebase.firestore.FieldValue.serverTimestamp()
+          }).catch(function(e){console.log("token save failed",e);});
+        }
+        console.log("FCM token saved");
+      }
+    })
+    .catch(function(e){console.log("Notification setup failed:",e);});
+
+  // Handle foreground messages
+  messaging.onMessage(function(payload){
+    var title=payload.notification&&payload.notification.title||"Keep Up";
+    var body=payload.notification&&payload.notification.body||"New activity in your family";
+    // Show in-app notification banner
+    showInAppNotif(title,body);
+  });
+}
+
+function showInAppNotif(title,body){
+  var banner=document.createElement("div");
+  banner.style.cssText="position:fixed;top:12px;left:12px;right:12px;background:#3D2314;color:white;padding:12px 16px;border-radius:14px;z-index:999;box-shadow:0 4px 20px rgba(0,0,0,.3);font-family:Nunito,sans-serif;animation:slideDown .3s ease;";
+  banner.innerHTML="<div style='font-size:13px;font-weight:800;margin-bottom:2px'>"+title+"</div><div style='font-size:12px;opacity:.8'>"+body+"</div>";
+  document.body.appendChild(banner);
+  setTimeout(function(){banner.remove();},4000);
+}
+
+// Send notification to all group members via Firestore trigger
+// (We store a "notification" doc that a Cloud Function would pick up,
+//  but for now we use Firestore to broadcast to other open tabs)
+function broadcastNotif(title,body,groupId){
+  db.collection("notifications").add({
+    title:title,body:body,groupId:groupId,
+    sentAt:firebase.firestore.FieldValue.serverTimestamp()
+  }).catch(function(e){});
+}
 
 function syncOn(){
   unsubscribers.forEach(function(u){u();});unsubscribers=[];
@@ -419,7 +473,14 @@ function buildOnboarding(){
         groupId:"imm",groupLabel:ST.obGrpName,
         joinedAt:firebase.firestore.FieldValue.serverTimestamp()
       }).catch(function(e){console.log("member write failed",e);});
-      syncOn();redraw();
+      syncOn();
+      if(Notification.permission==="granted")initNotifications();
+      else if(Notification.permission!=="denied"){
+        Notification.requestPermission().then(function(perm){
+          if(perm==="granted")initNotifications();
+        });
+      }
+      redraw();
     }));
     scr.appendChild(body);wrap.appendChild(scr);return wrap;
   }
@@ -672,6 +733,9 @@ function sendChat(gid){
   ST.chatIn[gid]="";redraw();
   var dm=ST.dms&&ST.dms.find(function(x){return x.id===gid;});
   if(dm){
+    postToDm(gid,Object.assign({},msg,{you:false})).then(function(){
+      broadcastNotif(ST.name+" (DM)",msg.text.substring(0,80),gid);
+    }).catch(function(){});
     postToDm(gid,Object.assign({},msg,{you:false})).catch(function(){
       dm.msgs.push(Object.assign({},msg,{id:Date.now()}));dm.last=msg.text;dm.lt="Just now";redraw();
     });
@@ -1065,7 +1129,9 @@ function submitPost(){
   if(ST.upType==="checkin"){if(!ST.upCi.trim())return;p={type:"checkin",av:ST.avatar,name:ST.name||"You",time:"Just now",status:ST.upCi,groupId:ST.group};}
   else{p={type:"photo",av:ST.avatar,name:ST.name||"You",time:"Just now",emoji:"\uD83C\uDF3B",imgUrl:ST.upImg||null,cap:ST.upCap,groupId:ST.group};}
   ST.upStep=4;redraw();
+  var notifBody=ST.upType==="checkin"?ST.name+" checked in: "+p.status.substring(0,60):ST.name+" shared a photo";
   postToFeed(p).then(function(){
+    broadcastNotif(ST.name+" posted",notifBody,"imm");
     ST.upCi="";ST.upCap="";ST.upImg=null;
     setTimeout(function(){ST.upOpen=false;ST.upStep=1;redraw();},2200);
   }).catch(function(){
@@ -1106,7 +1172,10 @@ try{
   }
 }catch(e){}
 redraw();
-if(ST.boarded)syncOn();
+if(ST.boarded){
+  syncOn();
+  if(Notification.permission==="granted")initNotifications();
+}
 </script>
 </body>
 </html>
