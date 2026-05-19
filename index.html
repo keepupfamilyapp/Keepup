@@ -44,6 +44,7 @@ html,body{height:100%;background:#FAF6F0;font-family:Nunito,sans-serif;overflow:
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
 </head>
 <body>
 <div id="app"></div>
@@ -58,6 +59,7 @@ firebase.initializeApp({
     appId: "1:216417089419:web:0f736931c79dbe4ed8618e"
 });
 var db=firebase.firestore();
+var storage=firebase.storage();
 var messaging=firebase.messaging();
 var unsubscribers=[];
 var VAPID_KEY="BJOij4wvBLe4ZgNbMuhHSVarzr9k65tSbnbF5oeSjsvOg_rTJN-ffZmCsLfz1iX_UGq5aPmTyWwRRb-fdAHJ7O4";
@@ -105,6 +107,21 @@ function showInAppNotif(title,body){
 // Send notification to all group members via Firestore trigger
 // (We store a "notification" doc that a Cloud Function would pick up,
 //  but for now we use Firestore to broadcast to other open tabs)
+function uploadPhoto(dataUrl){
+  return new Promise(function(resolve,reject){
+    if(!dataUrl||!dataUrl.startsWith("data:"))return resolve(dataUrl);
+    var uid=localStorage.getItem("ku_uid")||"anon";
+    var ref=storage.ref("photos/"+uid+"/"+Date.now()+".jpg");
+    ref.putString(dataUrl,"data_url",{contentType:"image/jpeg"})
+      .then(function(snap){return snap.ref.getDownloadURL();})
+      .then(function(url){resolve(url);})
+      .catch(function(e){
+        console.log("Storage upload failed, using base64",e);
+        resolve(dataUrl); // fallback to base64
+      });
+  });
+}
+
 function broadcastNotif(title,body,groupId){
   db.collection("notifications").add({
     title:title,body:body,groupId:groupId,
@@ -204,6 +221,24 @@ function syncOn(){
     if(ST.tab==="profile")redraw();
   });
   unsubscribers.push(memUnsub);
+
+  // Listen to comments
+  var cmtUnsub=db.collection("comments").onSnapshot(function(snap){
+    snap.docChanges().forEach(function(change){
+      var data=Object.assign({},change.doc.data(),{id:change.doc.id});
+      var pid=data.postId;
+      if(!pid)return;
+      if(!ST.comments[pid])ST.comments[pid]=[];
+      if(change.type==="added"||change.type==="modified"){
+        var ci=ST.comments[pid].findIndex(function(x){return x.id===data.id||x.id==="local-"+data.id;});
+        if(ci>=0)ST.comments[pid][ci]=data;
+        else ST.comments[pid].push(data);
+      }
+      if(change.type==="removed"){ST.comments[pid]=ST.comments[pid].filter(function(x){return x.id!==data.id;});}
+    });
+    if(ST.cmtOpen!==null)redraw();
+  });
+  unsubscribers.push(cmtUnsub);
 
   // Listen to events
   var evUnsub=db.collection("events")
@@ -309,6 +344,18 @@ function el(tag,attrs,children){
 }
 function d(a,c){return el("div",a,c);}
 function b(a,c){return el("button",a,c);}
+
+function timeAgo(ts){
+  if(!ts)return"Just now";
+  var ms=ts.toMillis?ts.toMillis():typeof ts==="number"?ts:Date.now();
+  var diff=Math.floor((Date.now()-ms)/1000);
+  if(diff<10)return"Just now";
+  if(diff<60)return diff+"s ago";
+  if(diff<3600)return Math.floor(diff/60)+"m ago";
+  if(diff<86400)return Math.floor(diff/3600)+"h ago";
+  if(diff<604800)return Math.floor(diff/86400)+"d ago";
+  var d=new Date(ms);return(d.getMonth()+1)+"/"+d.getDate();
+}
 
 function redraw(){
   try{
@@ -601,7 +648,7 @@ function buildItem(item,t){
     var card=d({cls:"card"});
     var hdr=d({css:{display:"flex",alignItems:"center",gap:"8px",padding:"10px 12px 7px"}});
     var av=d({css:{width:"36px",height:"36px",borderRadius:"50%",background:t.ap,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"18px",flexShrink:0}});av.textContent=item.av;hdr.appendChild(av);
-    var nm=d();nm.appendChild(d({css:{fontSize:"14px",fontWeight:700,color:"#3D2314"}},item.name));nm.appendChild(d({css:{fontSize:"11px",color:"#9B7B62"}},item.time));hdr.appendChild(nm);card.appendChild(hdr);
+    var nm=d();nm.appendChild(d({css:{fontSize:"14px",fontWeight:700,color:"#3D2314"}},item.name));nm.appendChild(d({css:{fontSize:"11px",color:"#9B7B62"}},item.createdAt?timeAgo(item.createdAt):item.time));hdr.appendChild(nm);card.appendChild(hdr);
     if(item.imgUrl){var img=el("img",{css:{width:"100%",aspectRatio:"4/3",objectFit:"cover",display:"block"}});img.src=item.imgUrl;card.appendChild(img);}
     else{var ph=d({css:{width:"100%",aspectRatio:"4/3",background:"linear-gradient(135deg,"+t.ap+","+t.sb+")",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"56px"}});ph.textContent=item.emoji;card.appendChild(ph);}
     var body=d({css:{padding:"10px 12px"}});
@@ -625,7 +672,7 @@ function buildItem(item,t){
   if(item.type==="checkin"){
     var card=d({css:{background:t.ap,border:"2px solid "+t.al,borderRadius:"16px",padding:"13px",display:"flex",gap:"10px"}});
     var av=d({css:{width:"40px",height:"40px",borderRadius:"50%",background:t.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"20px",flexShrink:0}});av.textContent=item.av;card.appendChild(av);
-    var bd=d({css:{flex:1}});bd.appendChild(d({css:{fontSize:"12px",fontWeight:700,color:t.ad}},item.name+" checked in"));bd.appendChild(d({css:{fontSize:"13px",color:"#3D2314",marginTop:"4px",lineHeight:"1.5"}},item.status));bd.appendChild(d({css:{fontSize:"11px",color:"#9B7B62",marginTop:"4px"}},item.time));card.appendChild(bd);wrap.appendChild(card);
+    var bd=d({css:{flex:1}});bd.appendChild(d({css:{fontSize:"12px",fontWeight:700,color:t.ad}},item.name+" checked in"));bd.appendChild(d({css:{fontSize:"13px",color:"#3D2314",marginTop:"4px",lineHeight:"1.5"}},item.status));bd.appendChild(d({css:{fontSize:"11px",color:"#9B7B62",marginTop:"4px"}},item.createdAt?timeAgo(item.createdAt):item.time));card.appendChild(bd);wrap.appendChild(card);
   }
   if(item.type==="event"){
     var card=d({css:{background:"#FBF0D9",border:"2px solid #E8C878",borderRadius:"16px",padding:"13px"}});
@@ -713,7 +760,7 @@ function buildChatView(t,grp){
     var mb=d({css:{maxWidth:"72%"}});
     if(!iy)mb.appendChild(d({css:{fontSize:"10px",fontWeight:700,color:t.ad,marginBottom:"2px",paddingLeft:"2px"}},msg.name));
     var bubble=d({css:{padding:"9px 12px",borderRadius:iy?"16px 16px 3px 16px":"16px 16px 16px 3px",background:iy?t.a:"white",color:iy?"white":"#3D2314",fontSize:"13px",lineHeight:"1.55",boxShadow:"0 1px 5px rgba(0,0,0,.08)",border:iy?"none":"1px solid "+t.ap}},msg.text);
-    mb.appendChild(bubble);mb.appendChild(d({css:{fontSize:"9px",color:"#9B7B62",marginTop:"2px",textAlign:iy?"right":"left"}},msg.time));
+    mb.appendChild(bubble);mb.appendChild(d({css:{fontSize:"9px",color:"#9B7B62",marginTop:"2px",textAlign:iy?"right":"left"}},msg.createdAt?timeAgo(msg.createdAt):msg.time));
     row.appendChild(mb);list.appendChild(row);
   });
   wrap.appendChild(list);
@@ -937,6 +984,14 @@ function buildProfile(t){
   });
   apBody.appendChild(apg);apc.appendChild(apBody);body.appendChild(apc);
 
+  // Multiple groups note
+  var mgNote=d({css:{background:"#FFF9F2",borderRadius:"18px",overflow:"hidden",boxShadow:"0 2px 12px rgba(0,0,0,.08)",marginBottom:"12px"}});
+  mgNote.appendChild(d({css:{padding:"13px 15px 9px",fontSize:"12px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".5px",borderBottom:"1px solid #F5DDD1"}},"Join Another Group"));
+  var mgBody=d({css:{padding:"12px 15px"}});
+  mgBody.appendChild(d({css:{fontSize:"13px",color:"#9B7B62",marginBottom:"10px"}},"Have an invite link from another family group? Open it in your browser to join."));
+  var mgBtn=b({css:{width:"100%",padding:"11px",borderRadius:"50px",background:"#F5DDD1",border:"none",color:"#6B4226",fontSize:"13px",fontWeight:700,cursor:"pointer",fontFamily:"inherit"}},"\uD83D\uDCCB Copy my invite links above to share");
+  mgBody.appendChild(mgBtn);mgNote.appendChild(mgBody);body.appendChild(mgNote);
+
   // Sign out
   var so=b({css:{width:"100%",padding:"13px",borderRadius:"50px",background:"transparent",border:"2px solid #F5DDD1",color:"#9B7B62",fontSize:"14px",fontWeight:700,cursor:"pointer",fontFamily:"inherit",marginTop:"4px"}},"Sign Out");
   so.addEventListener("click",function(){
@@ -1130,21 +1185,31 @@ function submitPost(){
   else{p={type:"photo",av:ST.avatar,name:ST.name||"You",time:"Just now",emoji:"\uD83C\uDF3B",imgUrl:ST.upImg||null,cap:ST.upCap,groupId:ST.group};}
   ST.upStep=4;redraw();
   var notifBody=ST.upType==="checkin"?ST.name+" checked in: "+p.status.substring(0,60):ST.name+" shared a photo";
-  postToFeed(p).then(function(){
+  uploadPhoto(ST.upImg).then(function(photoUrl){
+    if(photoUrl)p.imgUrl=photoUrl;
+    return postToFeed(p);
+  }).then(function(){
     broadcastNotif(ST.name+" posted",notifBody,"imm");
     ST.upCi="";ST.upCap="";ST.upImg=null;
     setTimeout(function(){ST.upOpen=false;ST.upStep=1;redraw();},2200);
-  }).catch(function(){
-    // Fallback: add locally if offline
+  }).catch(function(e){
+    console.log("post failed",e);
     p.id=Date.now();if(!ST.feed[ST.group])ST.feed[ST.group]=[];ST.feed[ST.group].unshift(p);
     setTimeout(function(){ST.upOpen=false;ST.upStep=1;redraw();},2200);
   });
 }
 function addComment(){
   if(!ST.cmtIn.trim())return;var pid=ST.cmtOpen;
+  var cmt={av:ST.avatar,name:ST.name||"You",text:ST.cmtIn.trim(),time:"Just now",postId:String(pid)};
+  ST.cmtIn="";
+  // Optimistic local add
   if(!ST.comments[pid])ST.comments[pid]=[];
-  ST.comments[pid].push({id:Date.now(),av:ST.avatar,name:ST.name||"You",text:ST.cmtIn.trim(),time:"Just now"});
-  ST.cmtIn="";redraw();
+  var localCmt=Object.assign({id:"local-"+Date.now()},cmt);
+  ST.comments[pid].push(localCmt);redraw();
+  // Sync to Firebase
+  db.collection("comments").add(Object.assign({},cmt,{
+    createdAt:firebase.firestore.FieldValue.serverTimestamp()
+  })).catch(function(e){console.log("comment sync failed",e);});
 }
 
 // Check for invite link ?join=GroupName&icon=emoji
@@ -1171,6 +1236,40 @@ try{
     if(localStorage.getItem("ku_grp")){var sg=JSON.parse(localStorage.getItem("ku_grp"));ST.groups[0].label=sg.label;ST.groups[0].icon=sg.icon;}
   }
 }catch(e){}
+// Capture install prompt
+var deferredInstallPrompt=null;
+window.addEventListener("beforeinstallprompt",function(e){
+  e.preventDefault();
+  deferredInstallPrompt=e;
+  // Show install banner after 3 seconds if not already installed
+  setTimeout(function(){
+    if(deferredInstallPrompt&&!window.matchMedia("(display-mode: standalone)").matches){
+      showInstallBanner();
+    }
+  },3000);
+});
+
+function showInstallBanner(){
+  if(document.getElementById("install-banner"))return;
+  var banner=document.createElement("div");
+  banner.id="install-banner";
+  banner.style.cssText="position:fixed;bottom:80px;left:12px;right:12px;background:#3D2314;color:white;padding:14px 16px;border-radius:16px;z-index:999;box-shadow:0 4px 20px rgba(0,0,0,.4);font-family:Nunito,sans-serif;display:flex;align-items:center;gap:12px;animation:slideUp .3s ease;";
+  var txt=document.createElement("div");txt.style.flex="1";
+  txt.innerHTML="<div style='font-size:13px;font-weight:800;margin-bottom:2px'>Add Keep Up to your home screen</div><div style='font-size:11px;opacity:.75'>Works like a real app, offline too</div>";
+  var addBtn=document.createElement("button");
+  addBtn.textContent="Add";
+  addBtn.style.cssText="padding:8px 16px;border-radius:50px;background:#C4714A;border:none;color:white;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;flex-shrink:0;";
+  addBtn.onclick=function(){
+    if(deferredInstallPrompt){deferredInstallPrompt.prompt();deferredInstallPrompt.userChoice.then(function(){deferredInstallPrompt=null;banner.remove();});}
+  };
+  var closeBtn=document.createElement("button");
+  closeBtn.textContent="X";
+  closeBtn.style.cssText="padding:6px 10px;border-radius:50%;background:rgba(255,255,255,.15);border:none;color:white;font-size:12px;cursor:pointer;font-family:inherit;flex-shrink:0;";
+  closeBtn.onclick=function(){banner.remove();};
+  banner.appendChild(txt);banner.appendChild(addBtn);banner.appendChild(closeBtn);
+  document.body.appendChild(banner);
+}
+
 redraw();
 if(ST.boarded){
   syncOn();
