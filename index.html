@@ -123,14 +123,21 @@ function uploadPhoto(dataUrl){
   return new Promise(function(resolve,reject){
     if(!dataUrl||!dataUrl.startsWith("data:"))return resolve(dataUrl);
     var uid=localStorage.getItem("ku_uid")||"anon";
-    var ref=storage.ref("photos/"+uid+"/"+Date.now()+".jpg");
-    ref.putString(dataUrl,"data_url",{contentType:"image/jpeg"})
-      .then(function(snap){return snap.ref.getDownloadURL();})
-      .then(function(url){resolve(url);})
-      .catch(function(e){
-        console.log("Storage upload failed, using base64",e);
-        resolve(dataUrl); // fallback to base64
-      });
+    var isVid=ST.upIsVideo&&ST.upVideoFile;
+    if(isVid){
+      // Upload video file directly
+      var ref=storage.ref("videos/"+uid+"/"+Date.now()+"."+ST.upVideoFile.name.split(".").pop());
+      ref.put(ST.upVideoFile)
+        .then(function(snap){return snap.ref.getDownloadURL();})
+        .then(function(url){resolve(url);})
+        .catch(function(e){console.log("Video upload failed",e);resolve(null);});
+    } else {
+      var ref=storage.ref("photos/"+uid+"/"+Date.now()+".jpg");
+      ref.putString(dataUrl,"data_url",{contentType:"image/jpeg"})
+        .then(function(snap){return snap.ref.getDownloadURL();})
+        .then(function(url){resolve(url);})
+        .catch(function(e){console.log("Storage upload failed, using base64",e);resolve(dataUrl);});
+    }
   });
 }
 
@@ -751,8 +758,15 @@ function buildItem(item,t){
       hdr.appendChild(delBtn);
     }
     card.appendChild(hdr);
-    if(item.imgUrl){var img=el("img",{css:{width:"100%",aspectRatio:"4/3",objectFit:"cover",display:"block"}});img.src=item.imgUrl;card.appendChild(img);}
-    else{var ph=d({css:{width:"100%",aspectRatio:"4/3",background:"linear-gradient(135deg,"+t.ap+","+t.sb+")",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"56px"}});ph.textContent=item.emoji;card.appendChild(ph);}
+    if(item.imgUrl&&item.type==="video"){
+      var vidEl=document.createElement("video");vidEl.src=item.imgUrl;
+      vidEl.style.cssText="width:100%;aspect-ratio:4/3;object-fit:cover;display:block;background:#000;";
+      vidEl.controls=true;vidEl.playsInline=true;vidEl.preload="metadata";card.appendChild(vidEl);
+    } else if(item.imgUrl){
+      var img=el("img",{css:{width:"100%",aspectRatio:"4/3",objectFit:"cover",display:"block"}});img.src=item.imgUrl;card.appendChild(img);
+    } else {
+      var ph=d({css:{width:"100%",aspectRatio:"4/3",background:"linear-gradient(135deg,"+t.ap+","+t.sb+")",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"56px"}});ph.textContent=item.emoji;card.appendChild(ph);
+    }
     var body=d({css:{padding:"10px 12px"}});
     body.appendChild(d({css:{fontSize:"13px",lineHeight:"1.6",color:"#3D2314",marginBottom:"8px"}},item.cap));
     var acts=d({css:{display:"flex",gap:"6px",flexWrap:"wrap",alignItems:"center"}});
@@ -1229,16 +1243,30 @@ function buildUpload(t,grp){
   if(ST.upStep===2){
     sh.appendChild(upHdr("Add Photo",null));
     var body=d({cls:"scr",css:{padding:"14px 15px"}});
-    var fi=el("input",{type:"file",accept:"image/*",css:{display:"none"}});
-    fi.addEventListener("change",function(){var f=this.files&&this.files[0];if(!f)return;var r=new FileReader();r.onload=function(e){ST.upImg=e.target.result;redraw();};r.readAsDataURL(f);});
+    var fi=el("input",{type:"file",accept:"image/*,video/*",css:{display:"none"}});
+    fi.addEventListener("change",function(){
+      var f=this.files&&this.files[0];if(!f)return;
+      ST.upIsVideo=f.type.startsWith("video/");
+      ST.upVideoFile=f;
+      // Warn if video is over 50MB
+      if(ST.upIsVideo&&f.size>50*1024*1024){
+        alert("That video is quite large ("+Math.round(f.size/1024/1024)+"MB). For the best experience, try to keep videos under 30 seconds. You can still upload it but it may take a while.");
+      }
+      var r=new FileReader();
+      r.onload=function(e){ST.upImg=e.target.result;redraw();};
+      r.readAsDataURL(f);
+    });
     var pa=d({css:{width:"100%",aspectRatio:"4/3",borderRadius:"16px",border:"2.5px dashed "+t.al,background:"linear-gradient(135deg,"+t.ap+","+t.sb+")",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",marginBottom:"12px",overflow:"hidden",position:"relative"}});
     if(ST.upImg){var pi=el("img",{css:{width:"100%",height:"100%",objectFit:"cover"}});pi.src=ST.upImg;pa.appendChild(pi);var changeBtn=b({css:{position:"absolute",bottom:"10px",right:"10px",padding:"6px 12px",borderRadius:"50px",background:"rgba(0,0,0,.55)",border:"none",color:"white",fontSize:"12px",fontWeight:700,cursor:"pointer",fontFamily:"inherit"}},"Change");changeBtn.addEventListener("click",function(e){e.stopPropagation();fi.click();});pa.appendChild(changeBtn);}
     else{var ico=d({css:{fontSize:"38px",marginBottom:"6px"}});ico.textContent="\uD83D\uDCF7";pa.appendChild(ico);pa.appendChild(d({css:{fontSize:"14px",fontWeight:700,color:t.ad}},"Tap to add a photo"));
     var tapBtn=b({css:{marginTop:"10px",padding:"9px 22px",borderRadius:"50px",background:t.a,border:"none",color:"white",fontSize:"13px",fontWeight:700,cursor:"pointer",fontFamily:"inherit"}},"Choose Photo");
     tapBtn.addEventListener("click",function(e){e.stopPropagation();fi.click();});pa.appendChild(tapBtn);}
-    pa.addEventListener("click",function(){fi.click();});body.appendChild(pa);body.appendChild(fi);sh.appendChild(body);
+    pa.addEventListener("click",function(){fi.click();});body.appendChild(pa);body.appendChild(fi);
+    if(ST.upIsVideo&&ST.upImg){
+      body.appendChild(d({css:{fontSize:"12px",color:"#9B7B62",textAlign:"center",marginBottom:"8px"}},"\uD83D\uDCA1 Tip: Short clips under 30 seconds upload fastest"));
+    }sh.appendChild(body);
     var ft=d({css:{padding:"12px 15px 26px",flexShrink:0}});
-    var nb=b({css:{width:"100%",padding:"13px",borderRadius:"50px",background:t.a,border:"none",color:"white",fontSize:"14px",fontWeight:800,cursor:"pointer",fontFamily:"inherit"}},ST.upImg?"Next: Add Caption":"Tap photo above to add");
+    var nb=b({css:{width:"100%",padding:"13px",borderRadius:"50px",background:t.a,border:"none",color:"white",fontSize:"14px",fontWeight:800,cursor:"pointer",fontFamily:"inherit"}},ST.upImg?(ST.upIsVideo?"Next: Add Caption":"Next: Add Caption"):"Tap photo or video above");
     nb.addEventListener("click",function(){
       if(!ST.upImg){pa.style.border="2.5px solid #C4714A";pa.style.animation="none";setTimeout(function(){pa.style.border="2.5px dashed "+t.al;},800);return;}
       ST.upStep=2.5;redraw();
@@ -1247,7 +1275,11 @@ function buildUpload(t,grp){
   if(ST.upStep===2.5){
     sh.appendChild(upHdr("Add Caption",function(){ST.upStep=2;redraw();}));
     var body=d({cls:"scr",css:{padding:"14px 15px"}});
-    if(ST.upImg){var pi=el("img",{css:{width:"100%",height:"130px",objectFit:"cover",borderRadius:"13px",marginBottom:"12px",display:"block"}});pi.src=ST.upImg;body.appendChild(pi);}
+    if(ST.upImg&&ST.upIsVideo){
+      var capVid=document.createElement("video");capVid.src=ST.upImg;capVid.style.cssText="width:100%;height:130px;object-fit:cover;border-radius:13px;margin-bottom:12px;display:block;";capVid.controls=true;capVid.playsInline=true;body.appendChild(capVid);
+    } else if(ST.upImg){
+      var pi=el("img",{css:{width:"100%",height:"130px",objectFit:"cover",borderRadius:"13px",marginBottom:"12px",display:"block"}});pi.src=ST.upImg;body.appendChild(pi);
+    }
     var ta=el("textarea",{rows:4,placeholder:"Tell your family what's going on...",css:{width:"100%",padding:"12px",borderRadius:"13px",border:"2px solid #F5DDD1",background:"#FAF6F0",fontSize:"15px",color:"#3D2314",outline:"none",resize:"none",lineHeight:"1.6",fontFamily:"inherit"}});
     ta.value=ST.upCap;ta.addEventListener("input",function(){ST.upCap=this.value;});body.appendChild(ta);sh.appendChild(body);
     var ft=d({css:{padding:"12px 15px 26px",flexShrink:0}});
@@ -1467,7 +1499,7 @@ function syncRsvp(evId,going){
 function submitPost(){
   var p;
   if(ST.upType==="checkin"){if(!ST.upCi.trim())return;p={type:"checkin",av:ST.avatar,name:ST.name||"You",time:"Just now",status:ST.upCi,groupId:ST.group};}
-  else{p={type:"photo",av:ST.avatar,name:ST.name||"You",time:"Just now",emoji:"\uD83C\uDF3B",imgUrl:ST.upImg||null,cap:ST.upCap,groupId:ST.group};}
+  else{p={type:ST.upIsVideo?"video":"photo",av:ST.avatar,name:ST.name||"You",time:"Just now",emoji:"\uD83C\uDF3B",imgUrl:ST.upImg||null,cap:ST.upCap,groupId:ST.group};}
   ST.upStep=4;redraw();
   var notifBody=ST.upType==="checkin"?ST.name+" checked in: "+p.status.substring(0,60):ST.name+" shared a photo";
   uploadPhoto(ST.upImg).then(function(photoUrl){
@@ -1475,7 +1507,7 @@ function submitPost(){
     return postToFeed(p);
   }).then(function(){
     broadcastNotif(ST.name+" posted",notifBody,"imm");
-    ST.upCi="";ST.upCap="";ST.upImg=null;
+    ST.upCi="";ST.upCap="";ST.upImg=null;ST.upIsVideo=false;ST.upVideoFile=null;
     setTimeout(function(){ST.upOpen=false;ST.upStep=1;redraw();},2200);
   }).catch(function(e){
     console.log("post failed",e);
