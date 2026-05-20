@@ -391,6 +391,10 @@ function el(tag,attrs,children){
 function d(a,c){return el("div",a,c);}
 function b(a,c){return el("button",a,c);}
 
+function isAdmin(){
+  try{return localStorage.getItem("ku_admin")!=="0";}catch(e){return true;}
+}
+
 function timeAgo(ts){
   if(!ts)return"Just now";
   var ms=ts.toMillis?ts.toMillis():typeof ts==="number"?ts:Date.now();
@@ -557,7 +561,8 @@ function buildOnboarding(){
       ST.feed={imm:[{id:1,type:"checkin",av:"\uD83C\uDFE1",name:"Keep Up",time:"Just now",status:"Welcome to Keep Up, "+ST.obName+"! Tap + to share your first post \uD83C\uDF89"}]};
       ST.chatMsgs={imm:[]};ST.mems={imm:[{av:ST.obPhoto||ST.obAvatar,name:ST.obName,role:"Admin",you:true}]};
       ST.birthdays=[];ST.evs=[];ST.dms=[];ST.boarded=true;
-      try{localStorage.setItem("ku_ob","1");localStorage.setItem("ku_name",ST.obName);localStorage.setItem("ku_av",ST.obAvatar);localStorage.setItem("ku_grp",JSON.stringify({label:ST.obGrpName,icon:ST.obGrpEmoji}));}catch(e){}
+      var isCreator=!ST.joinInvite;
+      try{localStorage.setItem("ku_ob","1");localStorage.setItem("ku_name",ST.obName);localStorage.setItem("ku_av",ST.obAvatar);localStorage.setItem("ku_grp",JSON.stringify({label:ST.obGrpName,icon:ST.obGrpEmoji}));localStorage.setItem("ku_admin",isCreator?"1":"0");}catch(e){}
       // Write this member to Firestore so others can see them
       var uid=localStorage.getItem("ku_uid")||("u"+Date.now());
       localStorage.setItem("ku_uid",uid);
@@ -1017,11 +1022,13 @@ function buildProfile(t){
     var memCount=Math.max(mems.length,fbMems.length);
     info.appendChild(d({css:{fontSize:"11px",color:"#9B7B62",marginTop:"1px"}},memCount+" member"+(memCount!==1?"s":"")));
     row.appendChild(info);
-    var editGrpBtn=b({css:{background:gt.ap,color:gt.ad,fontSize:"11px",fontWeight:700,padding:"3px 10px",borderRadius:"50px",border:"none",cursor:"pointer",fontFamily:"inherit"}},"Edit");
-    (function(grpObj){
-      editGrpBtn.addEventListener("click",function(){ST.editingGroup=grpObj.id;redraw();});
-    })(g);
-    row.appendChild(editGrpBtn);
+    if(isAdmin()){
+      var editGrpBtn=b({css:{background:gt.ap,color:gt.ad,fontSize:"11px",fontWeight:700,padding:"3px 10px",borderRadius:"50px",border:"none",cursor:"pointer",fontFamily:"inherit"}},"Edit");
+      (function(grpObj){editGrpBtn.addEventListener("click",function(){ST.editingGroup=grpObj.id;redraw();});})(g);
+      row.appendChild(editGrpBtn);
+    } else {
+      row.appendChild(d({css:{background:gt.ap,color:gt.ad,fontSize:"11px",fontWeight:700,padding:"3px 10px",borderRadius:"50px"}},"Member"));
+    }
     // Show Firebase members with admin remove option
     var fbMems2=(ST.fbMembers&&ST.fbMembers[g.id])||[];
     fbMems2.forEach(function(m){
@@ -1069,7 +1076,7 @@ function buildProfile(t){
     var ic=d({css:{width:"34px",height:"34px",borderRadius:"50%",background:gt.ap,border:"1.5px solid "+gt.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"17px",flexShrink:0}});ic.textContent=g.icon;row.appendChild(ic);
     var info=d({css:{flex:1,minWidth:0}});
     info.appendChild(d({css:{fontSize:"13px",fontWeight:700,color:"#3D2314"}},g.label));
-    info.appendChild(d({css:{fontSize:"11px",color:"#9B7B62",marginTop:"1px"}},"keepupfamilyapp.github.io/Keepup"));
+    info.appendChild(d({css:{fontSize:"11px",color:"#9B7B62",marginTop:"1px"}},isAdmin()?"Tap to copy invite link":"Share this link to invite family"));
     row.appendChild(info);
     var copyBtn=b({css:{padding:"7px 13px",borderRadius:"50px",background:gt.a,border:"none",color:"white",fontSize:"12px",fontWeight:700,cursor:"pointer",fontFamily:"inherit",flexShrink:0}},"Copy Link");
     (function(grpObj,btn,gtc){
@@ -1512,6 +1519,7 @@ try{
     if(localStorage.getItem("ku_name"))ST.name=localStorage.getItem("ku_name");
     if(localStorage.getItem("ku_av"))ST.avatar=localStorage.getItem("ku_av");
     if(localStorage.getItem("ku_grp")){var sg=JSON.parse(localStorage.getItem("ku_grp"));ST.groups[0].label=sg.label;ST.groups[0].icon=sg.icon;}
+    // ku_admin defaults to true for existing users
   }
 }catch(e){}
 // Capture install prompt
