@@ -276,6 +276,15 @@ function syncOn(){
   });
   unsubscribers.push(cmtUnsub);
 
+  // Listen to RSVPs
+  var rsvpUnsub=db.collection("rsvps").onSnapshot(function(snap){
+    snap.forEach(function(doc){
+      var r=doc.data();
+      if(r.evId)ST.rsvp[r.evId]=r.going;
+    });
+  });
+  unsubscribers.push(rsvpUnsub);
+
   // Listen to events
   var evUnsub=db.collection("events")
     .onSnapshot(function(snap){
@@ -326,6 +335,7 @@ function th(id){return TH[id]||TH.imm;}
 var ST={
   boarded:false,obStep:0,obName:"",obAvatar:"\uD83D\uDC69",obPhoto:null,
   obGrpName:"",obGrpEmoji:"\u2764\uFE0F",obGrpPhoto:null,joinInvite:false,fbMembers:{},
+  editingGroup:null,editingBirthdays:false,
   tab:"feed",group:"imm",name:"Sean",avatar:"\uD83D\uDC68",
   openChat:null,
   chatMsgs:{imm:[],moms:[],dads:[],cousins:[]},
@@ -618,6 +628,8 @@ function buildApp(){
     nb.addEventListener("click",function(){ST.tab=n[0];if(n[0]!=="chat")ST.openChat=null;redraw();});nav.appendChild(nb);
   });
   wrap.appendChild(nav);
+  if(ST.editingGroup)wrap.appendChild(buildEditGroup(ST.editingGroup));
+  if(ST.editingBirthdays)wrap.appendChild(buildEditBirthdays());
   if(ST.newDm)wrap.appendChild(buildNewDm());
   if(ST.addEv)wrap.appendChild(buildAddEvent(t));
   if(ST.compose)wrap.appendChild(buildCompose(t,grp));
@@ -783,7 +795,7 @@ function buildItem(item,t){
     hdr.appendChild(dt);var inf=d();inf.appendChild(d({css:{fontSize:"14px",fontWeight:700,color:"#3D2314"}},item.title));inf.appendChild(d({css:{fontSize:"11px",color:"#9B7B62",marginTop:"2px"}},item.who));hdr.appendChild(inf);card.appendChild(hdr);
     var acts=d({css:{display:"flex",gap:"8px"}});
     var gb=b({css:{flex:1,padding:"8px",borderRadius:"50px",border:"2px solid #D4922A",background:ST.rsvp[item.id]?"#D4922A":"transparent",fontSize:"12px",fontWeight:700,color:ST.rsvp[item.id]?"white":"#D4922A",cursor:"pointer",fontFamily:"inherit"}},ST.rsvp[item.id]?"Going!":"I'll Be There");
-    gb.addEventListener("click",function(){ST.rsvp[item.id]=!ST.rsvp[item.id];redraw();});acts.appendChild(gb);
+    gb.addEventListener("click",function(){ST.rsvp[item.id]=!ST.rsvp[item.id];syncRsvp(item.id,ST.rsvp[item.id]);redraw();});acts.appendChild(gb);
     acts.appendChild(b({css:{flex:1,padding:"8px",borderRadius:"50px",border:"2px solid #D4922A",background:"transparent",fontSize:"12px",fontWeight:700,color:"#D4922A",cursor:"pointer",fontFamily:"inherit"}},"Maybe"));
     card.appendChild(acts);wrap.appendChild(card);
   }
@@ -979,7 +991,7 @@ function buildEvCard(ev,gt){
   info.appendChild(d({css:{fontSize:"11px",color:gt.a,marginTop:"2px"}},ev.going+" going - "+ev.maybe+" maybe"));
   row.appendChild(info);
   var rb=b({css:{padding:"7px 12px",borderRadius:"50px",border:"2px solid "+gt.a,background:ST.rsvp[ev.id]?gt.a:"transparent",fontSize:"11px",fontWeight:700,color:ST.rsvp[ev.id]?"white":gt.a,cursor:"pointer",fontFamily:"inherit",flexShrink:0}},ST.rsvp[ev.id]?"Going!":"RSVP");
-  rb.addEventListener("click",function(){ST.rsvp[ev.id]=!ST.rsvp[ev.id];redraw();});
+  rb.addEventListener("click",function(){ST.rsvp[ev.id]=!ST.rsvp[ev.id];syncRsvp(ev.id,ST.rsvp[ev.id]);redraw();});
   row.appendChild(rb);return row;
 }
 
@@ -1005,7 +1017,11 @@ function buildProfile(t){
     var memCount=Math.max(mems.length,fbMems.length);
     info.appendChild(d({css:{fontSize:"11px",color:"#9B7B62",marginTop:"1px"}},memCount+" member"+(memCount!==1?"s":"")));
     row.appendChild(info);
-    row.appendChild(d({css:{background:gt.ap,color:gt.ad,fontSize:"11px",fontWeight:700,padding:"3px 10px",borderRadius:"50px"}},"Admin"));
+    var editGrpBtn=b({css:{background:gt.ap,color:gt.ad,fontSize:"11px",fontWeight:700,padding:"3px 10px",borderRadius:"50px",border:"none",cursor:"pointer",fontFamily:"inherit"}},"Edit");
+    (function(grpObj){
+      editGrpBtn.addEventListener("click",function(){ST.editingGroup=grpObj.id;redraw();});
+    })(g);
+    row.appendChild(editGrpBtn);
     // Show Firebase members with admin remove option
     var fbMems2=(ST.fbMembers&&ST.fbMembers[g.id])||[];
     fbMems2.forEach(function(m){
@@ -1097,6 +1113,26 @@ function buildProfile(t){
     ab.addEventListener("click",function(){ST.avatar=a;try{localStorage.setItem("ku_av",a);}catch(e){}redraw();});apg.appendChild(ab);
   });
   apBody.appendChild(apg);apc.appendChild(apBody);body.appendChild(apc);
+
+  // Birthday management button
+  var bdCard=d({css:{background:"#FFF9F2",borderRadius:"18px",overflow:"hidden",boxShadow:"0 2px 12px rgba(0,0,0,.08)",marginBottom:"12px"}});
+  bdCard.appendChild(d({css:{padding:"13px 15px 9px",fontSize:"12px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".5px",borderBottom:"1px solid #F5DDD1"}},"Family Birthdays"));
+  var bdBody=d({css:{padding:"12px 15px"}});
+  if(ST.birthdays&&ST.birthdays.length){
+    var months=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    ST.birthdays.forEach(function(bk){
+      var brow=d({css:{display:"flex",alignItems:"center",gap:"8px",marginBottom:"8px"}});
+      var bav=d({css:{width:"28px",height:"28px",borderRadius:"50%",background:t.ap,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"15px",flexShrink:0}});bav.textContent=bk.av;brow.appendChild(bav);
+      brow.appendChild(d({css:{flex:1,fontSize:"13px",fontWeight:700,color:"#3D2314"}},bk.name));
+      brow.appendChild(d({css:{fontSize:"12px",color:"#9B7B62"}},months[bk.month-1]+" "+bk.day));
+      bdBody.appendChild(brow);
+    });
+  } else {
+    bdBody.appendChild(d({css:{fontSize:"13px",color:"#9B7B62",marginBottom:"10px"}},"No birthdays added yet."));
+  }
+  var bdBtn=b({css:{width:"100%",padding:"10px",borderRadius:"50px",background:t.ap,border:"none",color:t.ad,fontSize:"13px",fontWeight:700,cursor:"pointer",fontFamily:"inherit",marginTop:"4px"}},"\uD83C\uDF82 Manage Birthdays");
+  bdBtn.addEventListener("click",function(){ST.editingBirthdays=true;redraw();});
+  bdBody.appendChild(bdBtn);bdCard.appendChild(bdBody);body.appendChild(bdCard);
 
   // Multiple groups note
   var mgNote=d({css:{background:"#FFF9F2",borderRadius:"18px",overflow:"hidden",boxShadow:"0 2px 12px rgba(0,0,0,.08)",marginBottom:"12px"}});
@@ -1252,6 +1288,102 @@ function buildComments(t){
   sb.addEventListener("click",addComment);ft.appendChild(sb);sh.appendChild(ft);ov.appendChild(sh);return ov;
 }
 
+function buildEditGroup(gid){
+  var g=ST.groups.find(function(x){return x.id===gid;})||ST.groups[0];
+  var gt=th(gid);
+  var ov=d({cls:"overlay"});ov.addEventListener("click",function(){ST.editingGroup=null;redraw();});
+  var sh=d({cls:"sheet"});sh.addEventListener("click",function(e){e.stopPropagation();});
+  sh.appendChild(d({cls:"handle"}));
+  sh.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"18px",fontWeight:600,color:"#3D2314",marginBottom:"16px"}},"Edit Group"));
+
+  // Name input
+  sh.appendChild(d({css:{fontSize:"11px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".4px",marginBottom:"6px"}},"Group Name"));
+  var ni=document.createElement("input");ni.type="text";ni.value=g.label;
+  ni.style.cssText="width:100%;padding:12px 14px;border-radius:12px;border:1.5px solid #F5DDD1;background:#FAF6F0;font-size:15px;color:#3D2314;outline:none;font-family:inherit;margin-bottom:14px;";
+  ni.addEventListener("input",function(){g.label=this.value;});
+  sh.appendChild(ni);
+
+  // Emoji picker
+  sh.appendChild(d({css:{fontSize:"11px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".4px",marginBottom:"8px"}},"Group Icon"));
+  var egrid=d({css:{display:"flex",flexWrap:"wrap",gap:"8px",marginBottom:"16px"}});
+  ["\u2764\uFE0F","\uD83C\uDF38","\uD83C\uDF32","\u2B50","\uD83C\uDFE0","\uD83C\uDF89","\uD83C\uDF3B","\uD83E\uDD8B","\uD83C\uDF0A","\uD83C\uDF42","\uD83C\uDFB6","\uD83C\uDF19"].forEach(function(e){
+    var eb=b({css:{width:"44px",height:"44px",borderRadius:"11px",background:g.icon===e?"#F5DDD1":"#FAF6F0",border:"2px solid "+(g.icon===e?gt.a:"rgba(107,66,38,.12)"),fontSize:"21px",cursor:"pointer",fontFamily:"inherit"}},e);
+    eb.addEventListener("click",function(){g.icon=e;redraw();});egrid.appendChild(eb);
+  });
+  sh.appendChild(egrid);
+
+  var saveBtn=b({css:{width:"100%",padding:"14px",borderRadius:"50px",background:gt.a,border:"none",color:"white",fontSize:"15px",fontWeight:800,cursor:"pointer",fontFamily:"inherit"}},"Save Changes");
+  saveBtn.addEventListener("click",function(){
+    if(!ni.value.trim())return;
+    g.label=ni.value.trim();
+    try{localStorage.setItem("ku_grp",JSON.stringify({label:g.label,icon:g.icon}));}catch(e){}
+    ST.editingGroup=null;redraw();
+  });
+  sh.appendChild(saveBtn);
+  ov.appendChild(sh);return ov;
+}
+
+// ============================================================
+// BIRTHDAY MANAGEMENT
+// ============================================================
+function buildEditBirthdays(){
+  var t=th(ST.group);
+  var ov=d({cls:"overlay"});ov.addEventListener("click",function(){ST.editingBirthdays=false;redraw();});
+  var sh=d({cls:"sheet"});sh.addEventListener("click",function(e){e.stopPropagation();});
+  sh.appendChild(d({cls:"handle"}));
+  sh.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"18px",fontWeight:600,color:"#3D2314",marginBottom:"4px"}},"Family Birthdays \uD83C\uDF82"));
+  sh.appendChild(d({css:{fontSize:"13px",color:"#9B7B62",marginBottom:"16px"}},"Add birthdays to get reminders in the feed."));
+
+  // List existing
+  ST.birthdays.forEach(function(bk,idx){
+    var row=d({css:{display:"flex",alignItems:"center",gap:"10px",padding:"10px 0",borderBottom:"1px solid #F5DDD1"}});
+    var av=d({css:{width:"32px",height:"32px",borderRadius:"50%",background:t.ap,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"18px",flexShrink:0}});av.textContent=bk.av;row.appendChild(av);
+    var info=d({css:{flex:1}});
+    info.appendChild(d({css:{fontSize:"14px",fontWeight:700,color:"#3D2314"}},bk.name));
+    var months=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    info.appendChild(d({css:{fontSize:"12px",color:"#9B7B62"}},months[bk.month-1]+" "+bk.day));
+    row.appendChild(info);
+    var delB=b({css:{padding:"5px 10px",borderRadius:"50px",background:"transparent",border:"1.5px solid #F5DDD1",fontSize:"12px",color:"#9B7B62",cursor:"pointer",fontFamily:"inherit"}},"Remove");
+    (function(i){delB.addEventListener("click",function(){ST.birthdays.splice(i,1);redraw();});})(idx);
+    row.appendChild(delB);sh.appendChild(row);
+  });
+
+  // Add new birthday form
+  sh.appendChild(d({css:{fontSize:"12px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".4px",marginTop:"16px",marginBottom:"10px"}},"Add Birthday"));
+  var nameIn=document.createElement("input");nameIn.type="text";nameIn.placeholder="Name...";
+  nameIn.style.cssText="width:100%;padding:11px 13px;border-radius:12px;border:1.5px solid #F5DDD1;background:#FAF6F0;font-size:14px;color:#3D2314;outline:none;font-family:inherit;margin-bottom:8px;";
+  sh.appendChild(nameIn);
+
+  var dateRow=d({css:{display:"flex",gap:"8px",marginBottom:"8px"}});
+  var monthSel=document.createElement("select");
+  monthSel.style.cssText="flex:1;padding:11px 12px;border-radius:12px;border:1.5px solid #F5DDD1;background:#FAF6F0;font-size:13px;color:#3D2314;outline:none;font-family:inherit;";
+  ["January","February","March","April","May","June","July","August","September","October","November","December"].forEach(function(m,i){
+    var o=document.createElement("option");o.value=i+1;o.textContent=m;monthSel.appendChild(o);
+  });
+  var dayIn=document.createElement("input");dayIn.type="number";dayIn.placeholder="Day";dayIn.min="1";dayIn.max="31";
+  dayIn.style.cssText="width:90px;padding:11px 12px;border-radius:12px;border:1.5px solid #F5DDD1;background:#FAF6F0;font-size:13px;color:#3D2314;outline:none;font-family:inherit;";
+  dateRow.appendChild(monthSel);dateRow.appendChild(dayIn);sh.appendChild(dateRow);
+
+  // Avatar picker row
+  var avRow=d({css:{display:"flex",gap:"6px",flexWrap:"wrap",marginBottom:"12px"}});
+  var selAv=["\uD83D\uDC69"];
+  ["\uD83D\uDC69","\uD83D\uDC68","\uD83D\uDC75","\uD83D\uDC74","\uD83D\uDC67","\uD83D\uDC66","\uD83E\uDDD2","\uD83E\uDDD1"].forEach(function(a){
+    var ab=b({css:{width:"40px",height:"40px",borderRadius:"10px",background:selAv[0]===a?t.ap:"#FAF6F0",border:"2px solid "+(selAv[0]===a?t.a:"rgba(107,66,38,.12)"),fontSize:"20px",cursor:"pointer",fontFamily:"inherit"}},a);
+    ab.addEventListener("click",function(){selAv[0]=a;avRow.querySelectorAll("button").forEach(function(btn){btn.style.background="#FAF6F0";btn.style.borderColor="rgba(107,66,38,.12)";});ab.style.background=t.ap;ab.style.borderColor=t.a;});
+    avRow.appendChild(ab);
+  });
+  sh.appendChild(avRow);
+
+  var addBtn=b({css:{width:"100%",padding:"13px",borderRadius:"50px",background:t.a,border:"none",color:"white",fontSize:"14px",fontWeight:800,cursor:"pointer",fontFamily:"inherit"}},"Add Birthday");
+  addBtn.addEventListener("click",function(){
+    if(!nameIn.value.trim()||!dayIn.value)return;
+    ST.birthdays.push({id:"b"+Date.now(),name:nameIn.value.trim(),av:selAv[0],month:parseInt(monthSel.value),day:parseInt(dayIn.value),groupId:ST.group});
+    nameIn.value="";dayIn.value="";redraw();
+  });
+  sh.appendChild(addBtn);
+  ov.appendChild(sh);return ov;
+}
+
 function buildNewDm(){
   var t=th(ST.group);
   var ov=d({cls:"overlay"});ov.addEventListener("click",function(){ST.newDm=false;ST.dmSel=[];redraw();});
@@ -1291,6 +1423,14 @@ function fallbackCopy(text,btn,origColor){
   try{document.execCommand("copy");btn.textContent="\u2713 Copied!";btn.style.background="#4A7C59";setTimeout(function(){btn.textContent="Copy Link";if(origColor)btn.style.background=origColor;},2500);}
   catch(e){btn.textContent="Long-press to copy";setTimeout(function(){btn.textContent="Copy Link";},3000);}
   document.body.removeChild(ta);
+}
+
+function syncRsvp(evId,going){
+  var uid=localStorage.getItem("ku_uid")||"anon";
+  db.collection("rsvps").doc(evId+"_"+uid).set({
+    evId:String(evId),uid:uid,name:ST.name,going:going,
+    updatedAt:firebase.firestore.FieldValue.serverTimestamp()
+  }).catch(function(e){console.log("rsvp sync failed",e);});
 }
 
 function submitPost(){
