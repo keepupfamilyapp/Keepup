@@ -170,11 +170,13 @@ function syncOn(){
   doSync();
 }
 function doSync(){
+  console.log("doSync called, user:",currentUser&&currentUser.uid,"groups:",ST.groups.map(function(g){return g.id;}));
 
   // Listen to feed posts for current group
   function watchFeed(gid){
     var unsub=db.collection("feed").where("groupId","==",gid)
       .onSnapshot(function(snap){
+        console.log("Feed snapshot for",gid,"changes:",snap.docChanges().length,"total:",snap.size);
         if(!ST.feed[gid])ST.feed[gid]=[];
         snap.docChanges().forEach(function(change){
           var data=Object.assign({},change.doc.data(),{id:change.doc.id});
@@ -327,9 +329,10 @@ function doSync(){
 } // end doSync
 
 function postToFeed(item){
+  console.log("Posting to feed:",item.type,"groupId:",item.groupId,"user:",currentUser&&currentUser.uid);
   return db.collection("feed").add(Object.assign({},item,{
     createdAt:firebase.firestore.FieldValue.serverTimestamp()
-  }));
+  })).then(function(ref){console.log("Post written:",ref.id);return ref;});
 }
 
 function postToChat(gid,msg){
