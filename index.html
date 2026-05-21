@@ -50,6 +50,7 @@ html,body{height:100%;background:#FAF6F0;font-family:Nunito,sans-serif;overflow:
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 </head>
 <body>
 <div id="app"></div>
@@ -72,7 +73,20 @@ db.enablePersistence({synchronizeTabs:true}).catch(function(err){
   }
 });
 var storage=firebase.storage();
+var auth=firebase.auth();
 var messaging=firebase.messaging();
+
+// Track auth state
+var currentUser=null;
+auth.onAuthStateChanged(function(user){
+  currentUser=user;
+  if(user){
+    // User is signed in - store uid
+    localStorage.setItem("ku_uid",user.uid);
+    // If they've completed onboarding, sync
+    if(ST.boarded){syncOn();}
+  }
+});
 var unsubscribers=[];
 var VAPID_KEY="BJOij4wvBLe4ZgNbMuhHSVarzr9k65tSbnbF5oeSjsvOg_rTJN-ffZmCsLfz1iX_UGq5aPmTyWwRRb-fdAHJ7O4";
 
@@ -451,13 +465,86 @@ function buildOnboarding(){
       invBanner.appendChild(d({css:{fontSize:"13px",fontWeight:700,color:"#9B7B62",marginBottom:"4px"}},"You've been invited to"));
       invBanner.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"20px",fontWeight:600,color:"#3D2314"}},ST.obGrpName));
       body.appendChild(invBanner);
-      body.appendChild(makeBtn("Accept Invite",function(){ST.obStep=1;redraw();}));
+      body.appendChild(makeBtn("Accept Invite",function(){ST.obStep=0.5;redraw();}));
     } else {
       body.appendChild(d({css:{fontSize:"16px",color:"#6B4C35",lineHeight:1.65,marginBottom:"6px"}},"Stay close to the people who matter most."));
       body.appendChild(d({css:{fontSize:"13px",color:"#9B7B62",lineHeight:1.6,marginBottom:"32px"}},"No ads. No algorithms. Just your family."));
-      body.appendChild(makeBtn("Get Started",function(){ST.obStep=1;redraw();}));
+      body.appendChild(makeBtn("Get Started",function(){ST.obStep=0.5;redraw();}));
     }
     scr.appendChild(body);wrap.appendChild(scr);return wrap;
+  }
+
+  // STEP 0.5: Phone number
+  if(step===0.5){
+    var scr=d({cls:"ob-screen",css:{position:"relative"}});
+    var body=d({cls:"ob-body"});
+    body.appendChild(d({cls:"ob-title"},"Your phone number"));
+    body.appendChild(d({cls:"ob-sub"},"We'll send a verification code. Your number is never shared with anyone."));
+    var phoneIn=document.createElement("input");phoneIn.type="tel";phoneIn.placeholder="+1 555 000 0000";
+    phoneIn.style.cssText="width:100%;padding:14px 16px;border-radius:14px;border:2px solid #E8956D;background:#FFF9F2;font-size:17px;color:#3D2314;outline:none;font-family:inherit;margin-bottom:12px;";
+    body.appendChild(phoneIn);
+    // reCAPTCHA container
+    var rcDiv=document.createElement("div");rcDiv.id="recaptcha-container";body.appendChild(rcDiv);
+    body.appendChild(d({cls:"ob-spacer"}));
+    var sendBtn=makeBtn("Send Code",function(){
+      var phone=phoneIn.value.trim();
+      if(!phone){phoneIn.style.borderColor="#C4714A";return;}
+      sendBtn.textContent="Sending...";sendBtn.style.background="#D4B8A8";
+      // Init reCAPTCHA
+      if(!window.recaptchaVerifier){
+        window.recaptchaVerifier=new firebase.auth.RecaptchaVerifier("recaptcha-container",{size:"invisible"});
+      }
+      auth.signInWithPhoneNumber(phone,window.recaptchaVerifier)
+        .then(function(confirmResult){
+          window.confirmationResult=confirmResult;
+          ST.obStep=0.7;redraw();
+        })
+        .catch(function(e){
+          sendBtn.textContent="Send Code";sendBtn.style.background="#C4714A";
+          alert("Error: "+e.message+"
+
+Make sure you include your country code, e.g. +1 for US.");
+          if(window.recaptchaVerifier){window.recaptchaVerifier.clear();window.recaptchaVerifier=null;}
+        });
+    });
+    body.appendChild(sendBtn);
+    scr.appendChild(body);wrap.appendChild(scr);
+    setTimeout(function(){phoneIn.focus();},80);
+    return wrap;
+  }
+
+  // STEP 0.7: Verify code
+  if(step===0.7){
+    var scr=d({cls:"ob-screen",css:{position:"relative"}});
+    var body=d({cls:"ob-body"});
+    body.appendChild(d({cls:"ob-title"},"Enter the code"));
+    body.appendChild(d({cls:"ob-sub"},"Check your texts for a 6-digit verification code."));
+    var codeIn=document.createElement("input");codeIn.type="number";codeIn.placeholder="123456";
+    codeIn.style.cssText="width:100%;padding:14px 16px;border-radius:14px;border:2px solid #E8956D;background:#FFF9F2;font-size:24px;color:#3D2314;outline:none;font-family:inherit;margin-bottom:12px;text-align:center;letter-spacing:8px;";
+    body.appendChild(codeIn);
+    body.appendChild(d({cls:"ob-spacer"}));
+    var verifyBtn=makeBtn("Verify",function(){
+      var code=codeIn.value.trim();
+      if(!code){return;}
+      verifyBtn.textContent="Verifying...";verifyBtn.style.background="#D4B8A8";
+      window.confirmationResult.confirm(code)
+        .then(function(result){
+          currentUser=result.user;
+          localStorage.setItem("ku_uid",result.user.uid);
+          ST.obStep=1;redraw();
+        })
+        .catch(function(e){
+          verifyBtn.textContent="Verify";verifyBtn.style.background="#C4714A";
+          alert("Invalid code. Please try again.");
+        });
+    });
+    body.appendChild(verifyBtn);
+    var resendBtn=b({css:{width:"100%",padding:"12px",borderRadius:"50px",background:"transparent",border:"none",color:"#9B7B62",fontSize:"14px",cursor:"pointer",fontFamily:"inherit",marginTop:"8px"}},"Resend code");
+    resendBtn.addEventListener("click",function(){ST.obStep=0.5;window.recaptchaVerifier=null;redraw();});
+    body.appendChild(resendBtn);
+    scr.appendChild(body);wrap.appendChild(scr);
+    setTimeout(function(){codeIn.focus();},80);
+    return wrap;
   }
   if(step===1){
     var scr=d({cls:"ob-screen",css:{position:"relative"}});scr.appendChild(dots(1));
