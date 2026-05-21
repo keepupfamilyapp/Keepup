@@ -167,9 +167,6 @@ function broadcastNotif(title,body,groupId){
 function syncOn(){
   unsubscribers.forEach(function(u){u();});unsubscribers=[];
   var dot=document.getElementById("sync-dot");if(dot)dot.style.display="block";
-  // Wait briefly for auth to resolve before syncing
-  var syncDelay=currentUser?0:1500;
-  if(syncDelay){setTimeout(function(){doSync();},syncDelay);return;}
   doSync();
 }
 function doSync(){
@@ -1720,17 +1717,23 @@ function showInstallBanner(){
 }
 
 redraw();
-// Auth in background - don't block render
-try{
-  auth.onAuthStateChanged(function(user){
-    currentUser=user;
-    if(user)localStorage.setItem("ku_uid",user.uid);
-  });
-}catch(e){}
-if(ST.boarded){
-  syncOn();
-  if(typeof Notification!=="undefined"&&Notification.permission==="granted")initNotifications();
-}
+// Wait for auth to resolve, then sync
+var _syncStarted=false;
+auth.onAuthStateChanged(function(user){
+  currentUser=user;
+  if(user){
+    localStorage.setItem("ku_uid",user.uid);
+    if(ST.boarded&&!_syncStarted){
+      _syncStarted=true;
+      syncOn();
+      if(typeof Notification!=="undefined"&&Notification.permission==="granted")initNotifications();
+    }
+  } else if(ST.boarded&&!_syncStarted){
+    // No auth yet but was boarded - start sync anyway (rules are open)
+    _syncStarted=true;
+    syncOn();
+  }
+});
 </script>
 </body>
 </html>
