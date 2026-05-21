@@ -75,18 +75,7 @@ db.enablePersistence({synchronizeTabs:true}).catch(function(err){
 var storage=firebase.storage();
 var auth=firebase.auth();
 var messaging=firebase.messaging();
-
-// Track auth state
 var currentUser=null;
-auth.onAuthStateChanged(function(user){
-  currentUser=user;
-  if(user){
-    // User is signed in - store uid
-    localStorage.setItem("ku_uid",user.uid);
-    // If they've completed onboarding, sync
-    if(ST.boarded){syncOn();}
-  }
-});
 var unsubscribers=[];
 var VAPID_KEY="BJOij4wvBLe4ZgNbMuhHSVarzr9k65tSbnbF5oeSjsvOg_rTJN-ffZmCsLfz1iX_UGq5aPmTyWwRRb-fdAHJ7O4";
 
@@ -1675,26 +1664,18 @@ function showInstallBanner(){
   document.body.appendChild(banner);
 }
 
-// Render immediately - don't wait for auth
 redraw();
-// Auth state resolves asynchronously - update when ready
-auth.onAuthStateChanged(function(user){
-  currentUser=user;
-  if(user){
-    localStorage.setItem("ku_uid",user.uid);
-    if(ST.boarded&&!window._synced){
-      window._synced=true;
-      syncOn();
-      if(Notification.permission==="granted")initNotifications();
-    }
-  } else if(ST.boarded){
-    // Not signed in but was boarded - still sync (existing users before auth)
-    if(!window._synced){
-      window._synced=true;
-      syncOn();
-    }
-  }
-});
+// Auth in background - don't block render
+try{
+  auth.onAuthStateChanged(function(user){
+    currentUser=user;
+    if(user)localStorage.setItem("ku_uid",user.uid);
+  });
+}catch(e){}
+if(ST.boarded){
+  syncOn();
+  if(Notification.permission==="granted")initNotifications();
+}
 </script>
 </body>
 </html>
