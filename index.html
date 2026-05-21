@@ -1675,11 +1675,26 @@ function showInstallBanner(){
   document.body.appendChild(banner);
 }
 
+// Render immediately - don't wait for auth
 redraw();
-if(ST.boarded){
-  syncOn();
-  if(Notification.permission==="granted")initNotifications();
-}
+// Auth state resolves asynchronously - update when ready
+auth.onAuthStateChanged(function(user){
+  currentUser=user;
+  if(user){
+    localStorage.setItem("ku_uid",user.uid);
+    if(ST.boarded&&!window._synced){
+      window._synced=true;
+      syncOn();
+      if(Notification.permission==="granted")initNotifications();
+    }
+  } else if(ST.boarded){
+    // Not signed in but was boarded - still sync (existing users before auth)
+    if(!window._synced){
+      window._synced=true;
+      syncOn();
+    }
+  }
+});
 </script>
 </body>
 </html>
