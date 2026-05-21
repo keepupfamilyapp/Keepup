@@ -95,7 +95,7 @@ var VAPID_KEY="BJOij4wvBLe4ZgNbMuhHSVarzr9k65tSbnbF5oeSjsvOg_rTJN-ffZmCsLfz1iX_U
 
 // Register service worker and request notification permission
 function initNotifications(){
-  if(!messaging||!("serviceWorker" in navigator)||!("Notification" in window))return;
+  if(!messaging||!("serviceWorker" in navigator)||typeof Notification==="undefined")return;
   navigator.serviceWorker.register("/Keepup/firebase-messaging-sw.js")
     .then(function(reg){
       console.log("SW registered");
@@ -259,7 +259,7 @@ function doSync(){
           var age=n.sentAt?Date.now()-n.sentAt.toMillis():9999;
           if(age>3000&&age<30000){
             // Show browser notification if permission granted
-            if(Notification.permission==="granted"){
+            if(typeof Notification!=="undefined"&&Notification.permission==="granted"){
               new Notification(n.title||"Keep Up",{
                 body:n.body||"New activity in your family",
                 icon:"/Keepup/icon.svg"
@@ -672,8 +672,8 @@ function buildOnboarding(){
         joinedAt:firebase.firestore.FieldValue.serverTimestamp()
       }).catch(function(e){console.log("member write failed",e);});
       syncOn();
-      if(Notification.permission==="granted")initNotifications();
-      else if(Notification.permission!=="denied"){
+      if(typeof Notification!=="undefined"&&Notification.permission==="granted")initNotifications();
+      else if(typeof Notification!=="undefined"&&Notification.permission!=="denied"){
         Notification.requestPermission().then(function(perm){
           if(perm==="granted")initNotifications();
         });
@@ -1691,7 +1691,7 @@ try{
 }catch(e){}
 if(ST.boarded){
   syncOn();
-  if(Notification.permission==="granted")initNotifications();
+  if(typeof Notification!=="undefined"&&Notification.permission==="granted")initNotifications();
 }
 </script>
 </body>
