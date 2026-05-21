@@ -74,14 +74,15 @@ db.enablePersistence({synchronizeTabs:true}).catch(function(err){
 });
 var storage=firebase.storage();
 var auth=firebase.auth();
-var messaging=firebase.messaging();
+var messaging=null;
+try{messaging=firebase.messaging();}catch(e){console.log("Messaging not supported:",e);}
 var currentUser=null;
 var unsubscribers=[];
 var VAPID_KEY="BJOij4wvBLe4ZgNbMuhHSVarzr9k65tSbnbF5oeSjsvOg_rTJN-ffZmCsLfz1iX_UGq5aPmTyWwRRb-fdAHJ7O4";
 
 // Register service worker and request notification permission
 function initNotifications(){
-  if(!("serviceWorker" in navigator)||!("Notification" in window))return;
+  if(!messaging||!("serviceWorker" in navigator)||!("Notification" in window))return;
   navigator.serviceWorker.register("/Keepup/firebase-messaging-sw.js")
     .then(function(reg){
       console.log("SW registered");
@@ -103,12 +104,11 @@ function initNotifications(){
     .catch(function(e){console.log("Notification setup failed:",e);});
 
   // Handle foreground messages
-  messaging.onMessage(function(payload){
+  if(messaging){messaging.onMessage(function(payload){
     var title=payload.notification&&payload.notification.title||"Keep Up";
     var body=payload.notification&&payload.notification.body||"New activity in your family";
-    // Show in-app notification banner
     showInAppNotif(title,body);
-  });
+  });}
 }
 
 function showInAppNotif(title,body){
@@ -154,6 +154,12 @@ function broadcastNotif(title,body,groupId){
 function syncOn(){
   unsubscribers.forEach(function(u){u();});unsubscribers=[];
   var dot=document.getElementById("sync-dot");if(dot)dot.style.display="block";
+  // Wait briefly for auth to resolve before syncing
+  var syncDelay=currentUser?0:1500;
+  if(syncDelay){setTimeout(function(){doSync();},syncDelay);return;}
+  doSync();
+}
+function doSync(){
 
   // Listen to feed posts for current group
   function watchFeed(gid){
@@ -308,7 +314,7 @@ function syncOn(){
       if(ST.tab==="calendar")redraw();
     });
   unsubscribers.push(evUnsub);
-}
+} // end doSync
 
 function postToFeed(item){
   return db.collection("feed").add(Object.assign({},item,{
