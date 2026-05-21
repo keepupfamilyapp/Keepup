@@ -1719,16 +1719,20 @@ function showInstallBanner(){
 
 redraw();
 // Wait for auth to resolve, then sync
+var _lastUid=null;
 auth.onAuthStateChanged(function(user){
   currentUser=user;
+  var uid=user?user.uid:null;
+  if(uid===_lastUid)return; // No change, don't restart
+  _lastUid=uid;
   if(user){
     localStorage.setItem("ku_uid",user.uid);
     if(ST.boarded){
-      // Always restart sync when auth resolves so listeners have valid credentials
       syncOn();
       if(typeof Notification!=="undefined"&&Notification.permission==="granted")initNotifications();
     }
   } else if(ST.boarded){
+    // Not signed in - sync anyway with open rules
     syncOn();
   }
 });
