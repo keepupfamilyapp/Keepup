@@ -367,7 +367,7 @@ var ST={
   editingGroup:null,editingBirthdays:false,
   tab:"feed",group:"imm",name:"Sean",avatar:"\uD83D\uDC68",
   openChat:null,
-  chatMsgs:{imm:[],moms:[],dads:[],cousins:[]},
+  chatMsgs:{imm:[]},
   chatIn:{},
   dms:[],
   newDm:false,dmSel:[],dmGrp:"imm",
@@ -383,18 +383,10 @@ var ST={
     {id:"b4",name:"Lily",av:"\uD83D\uDC67",month:4,day:28,groupId:"cousins"}
   ],
   groups:[
-    {id:"imm",label:"Immediate",icon:"\u2764\uFE0F"},
-    {id:"moms",label:"Mom's Side",icon:"\uD83C\uDF38"},
-    {id:"dads",label:"Dad's Side",icon:"\uD83C\uDF32"},
-    {id:"cousins",label:"Cousins",icon:"\u2B50"}
+    {id:"imm",label:"Family",icon:"\u2764\uFE0F"}
   ],
-  mems:{
-    imm:[{av:"\uD83D\uDC69",name:"You",role:"Admin",you:true},{av:"\uD83D\uDC68",name:"Mike",role:"Member"},{av:"\uD83D\uDC66",name:"Jake",role:"Member"},{av:"\uD83D\uDC67",name:"Lily",role:"Member"}],
-    moms:[{av:"\uD83D\uDC75",name:"Grandma Rose",role:"Admin"},{av:"\uD83D\uDC69",name:"You",role:"Member",you:true},{av:"\uD83E\uDDD1",name:"Uncle Tom",role:"Member"}],
-    dads:[{av:"\uD83D\uDC74",name:"Grandpa Joe",role:"Admin"},{av:"\uD83D\uDC69",name:"You",role:"Member",you:true},{av:"\uD83D\uDC68",name:"Uncle Bill",role:"Member"}],
-    cousins:[{av:"\uD83D\uDC69",name:"You",role:"Admin",you:true},{av:"\uD83D\uDC66",name:"Jake",role:"Member"},{av:"\uD83D\uDC67",name:"Lily",role:"Member"}]
-  },
-  feed:{imm:[],moms:[],dads:[],cousins:[]},
+  mems:{imm:[]},
+  feed:{imm:[]},
   evs:[]
 };
 
@@ -1348,15 +1340,10 @@ function buildCompose(t,grp){
 
 function buildUpload(t,grp){
   var ov=d({css:{position:"fixed",inset:0,background:"rgba(61,35,20,.5)",zIndex:70,display:"flex",alignItems:"flex-end"}});
-  ov.addEventListener("click",function(){if(ST.upStep!==4){ST.upOpen=false;redraw();}});
-  var sh=d({css:{width:"100%",background:ST.upStep===4?t.ad:"#FFF9F2",borderRadius:"24px 24px 0 0",maxHeight:"92vh",display:"flex",flexDirection:"column",overflow:"hidden",animation:"slideUp .25s ease"}});
+  ov.addEventListener("click",function(){ST.upOpen=false;redraw();});
+  var sh=d({css:{width:"100%",background:"#FFF9F2",borderRadius:"24px 24px 0 0",maxHeight:"92vh",display:"flex",flexDirection:"column",overflow:"hidden",animation:"slideUp .25s ease"}});
   sh.addEventListener("click",function(e){e.stopPropagation();});
-  if(ST.upStep===4){
-    var sc=d({css:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"40px 26px",background:"linear-gradient(160deg,"+t.ad+","+t.a+")"}});
-    var si=d({css:{fontSize:"56px",marginBottom:"16px"}});si.textContent="\u2705";sc.appendChild(si);
-    sc.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"22px",fontWeight:600,color:"white",textAlign:"center"}},ST.upType==="checkin"?"Check-in posted!":"Photo shared!"));
-    sc.appendChild(d({css:{fontSize:"14px",color:"rgba(255,255,255,.75)",textAlign:"center",marginTop:"6px"}},"Your family can see it now"));sh.appendChild(sc);
-  }
+
   function upHdr(title,onBack){
     var h=d({css:{padding:"13px 15px",borderBottom:"1px solid #F5DDD1",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}});
     var bb=b({css:{background:"#F5DDD1",border:"none",borderRadius:"50px",padding:"6px 12px",fontSize:"13px",fontWeight:700,color:"#6B4226",cursor:"pointer",fontFamily:"inherit"}},onBack?"Back":"Cancel");
@@ -1614,24 +1601,51 @@ function syncRsvp(evId,going){
 }
 
 function submitPost(){
+  // Capture state before clearing
+  var imgData=ST.upImg;
+  var vidFile=ST.upVideoFile;
+  var isVid=ST.upIsVideo;
+  var postType=ST.upType;
+  var postStatus=ST.upCi;
+  var postCap=ST.upCap;
+  var postGroup=ST.group;
+  var postName=ST.name||"You";
+  var postAv=ST.avatar;
+
+  if(postType==="checkin"&&!postStatus.trim())return;
+
+  // Close sheet immediately
+  ST.upOpen=false;ST.upStep=1;ST.upCi="";ST.upCap="";
+  ST.upImg=null;ST.upIsVideo=false;ST.upVideoFile=null;
+  redraw();
+
   var p;
-  if(ST.upType==="checkin"){if(!ST.upCi.trim())return;p={type:"checkin",av:ST.avatar,name:ST.name||"You",time:"Just now",status:ST.upCi,groupId:ST.group};}
-  else{p={type:ST.upIsVideo?"video":"photo",av:ST.avatar,name:ST.name||"You",time:"Just now",emoji:"\uD83C\uDF3B",imgUrl:ST.upImg||null,cap:ST.upCap,groupId:ST.group};}
-  ST.upStep=4;redraw();
-  var notifBody=ST.upType==="checkin"?ST.name+" checked in: "+p.status.substring(0,60):ST.name+" shared a photo";
-  uploadPhoto(ST.upImg).then(function(photoUrl){
-    if(photoUrl)p.imgUrl=photoUrl;
-    return postToFeed(p);
-  }).then(function(){
-    broadcastNotif(ST.name+" posted",notifBody,"imm");
-    ST.upCi="";ST.upCap="";ST.upImg=null;ST.upIsVideo=false;ST.upVideoFile=null;
-    setTimeout(function(){ST.upOpen=false;ST.upStep=1;redraw();},2200);
-  }).catch(function(e){
-    console.log("post failed",e);
-    p.id=Date.now();if(!ST.feed[ST.group])ST.feed[ST.group]=[];ST.feed[ST.group].unshift(p);
-    setTimeout(function(){ST.upOpen=false;ST.upStep=1;redraw();},2200);
-  });
+  if(postType==="checkin"){
+    p={type:"checkin",av:postAv,name:postName,time:"Just now",status:postStatus,groupId:postGroup};
+    postToFeed(p).then(function(){
+      broadcastNotif(postName+" checked in",postStatus.substring(0,60),postGroup);
+    }).catch(function(e){console.log("checkin post failed",e);});
+  } else {
+    p={type:isVid?"video":"photo",av:postAv,name:postName,time:"Just now",emoji:"\uD83C\uDF3B",imgUrl:null,cap:postCap,groupId:postGroup};
+    var uid=(currentUser&&currentUser.uid)||localStorage.getItem("ku_uid")||"anon";
+    var uploadRef=isVid&&vidFile
+      ? storage.ref("videos/"+uid+"/"+Date.now()+"."+(vidFile.name.split(".").pop()||"mp4")).put(vidFile).then(function(s){return s.ref.getDownloadURL();})
+      : storage.ref("photos/"+uid+"/"+Date.now()+".jpg").putString(imgData,"data_url",{contentType:"image/jpeg"}).then(function(s){return s.ref.getDownloadURL();});
+    uploadRef.then(function(url){
+      p.imgUrl=url;
+      return postToFeed(p);
+    }).then(function(){
+      broadcastNotif(postName+" posted","Shared a photo",postGroup);
+    }).catch(function(e){
+      console.log("photo post failed",e);
+      // Post without image as fallback
+      p.imgUrl=imgData;
+      postToFeed(p).catch(function(){});
+    });
+  }
 }
+
+
 function addComment(){
   if(!ST.cmtIn.trim())return;var pid=ST.cmtOpen;
   var cmt={av:ST.avatar,name:ST.name||"You",text:ST.cmtIn.trim(),time:"Just now",postId:String(pid)};
