@@ -138,11 +138,11 @@ function showInAppNotif(title,body){
 function uploadPhoto(dataUrl){
   return new Promise(function(resolve,reject){
     if(!dataUrl||!dataUrl.startsWith("data:"))return resolve(dataUrl);
-    var uid=localStorage.getItem("ku_uid")||"anon";
+    var uid=(currentUser&&currentUser.uid)||localStorage.getItem("ku_uid")||"anon";
     var isVid=ST.upIsVideo&&ST.upVideoFile;
     if(isVid){
-      // Upload video file directly
-      var ref=storage.ref("videos/"+uid+"/"+Date.now()+"."+ST.upVideoFile.name.split(".").pop());
+      var ext=ST.upVideoFile.name.split(".").pop()||"mp4";
+      var ref=storage.ref("videos/"+uid+"/"+Date.now()+"."+ext);
       ref.put(ST.upVideoFile)
         .then(function(snap){return snap.ref.getDownloadURL();})
         .then(function(url){resolve(url);})
@@ -152,7 +152,7 @@ function uploadPhoto(dataUrl){
       ref.putString(dataUrl,"data_url",{contentType:"image/jpeg"})
         .then(function(snap){return snap.ref.getDownloadURL();})
         .then(function(url){resolve(url);})
-        .catch(function(e){console.log("Storage upload failed, using base64",e);resolve(dataUrl);});
+        .catch(function(e){console.log("Storage upload failed",e);resolve(dataUrl);});
     }
   });
 }
@@ -422,6 +422,20 @@ function b(a,c){return el("button",a,c);}
 
 function isAdmin(){
   try{return localStorage.getItem("ku_admin")!=="0";}catch(e){return true;}
+}
+
+function showFullScreen(url){
+  var ov=document.createElement("div");
+  ov.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:200;display:flex;align-items:center;justify-content:center;";
+  var img=document.createElement("img");
+  img.src=url;img.style.cssText="max-width:100%;max-height:100%;object-fit:contain;";
+  var closeBtn=document.createElement("button");
+  closeBtn.textContent="\u2715";
+  closeBtn.style.cssText="position:absolute;top:16px;right:16px;background:rgba(255,255,255,.2);border:none;color:white;font-size:22px;width:40px;height:40px;border-radius:50%;cursor:pointer;font-family:inherit;";
+  closeBtn.onclick=function(){ov.remove();};
+  ov.appendChild(img);ov.appendChild(closeBtn);
+  ov.addEventListener("click",function(e){if(e.target===ov)ov.remove();});
+  document.body.appendChild(ov);
 }
 
 function timeAgo(ts){
@@ -869,7 +883,10 @@ function buildItem(item,t){
       vidEl.style.cssText="width:100%;aspect-ratio:4/3;object-fit:cover;display:block;background:#000;";
       vidEl.controls=true;vidEl.playsInline=true;vidEl.preload="metadata";card.appendChild(vidEl);
     } else if(item.imgUrl){
-      var img=el("img",{css:{width:"100%",aspectRatio:"4/3",objectFit:"cover",display:"block"}});img.src=item.imgUrl;card.appendChild(img);
+      var img=el("img",{css:{width:"100%",aspectRatio:"4/3",objectFit:"cover",display:"block",cursor:"zoom-in"}});
+      img.src=item.imgUrl;
+      img.addEventListener("click",function(){showFullScreen(item.imgUrl);});
+      card.appendChild(img);
     } else {
       var ph=d({css:{width:"100%",aspectRatio:"4/3",background:"linear-gradient(135deg,"+t.ap+","+t.sb+")",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"56px"}});ph.textContent=item.emoji;card.appendChild(ph);
     }
@@ -1372,26 +1389,20 @@ function buildUpload(t,grp){
       body.appendChild(d({css:{fontSize:"12px",color:"#9B7B62",textAlign:"center",marginBottom:"8px"}},"\uD83D\uDCA1 Tip: Short clips under 30 seconds upload fastest"));
     }sh.appendChild(body);
     var ft=d({css:{padding:"12px 15px 26px",flexShrink:0}});
-    var nb=b({css:{width:"100%",padding:"13px",borderRadius:"50px",background:t.a,border:"none",color:"white",fontSize:"14px",fontWeight:800,cursor:"pointer",fontFamily:"inherit"}},ST.upImg?(ST.upIsVideo?"Next: Add Caption":"Next: Add Caption"):"Tap photo or video above");
+    // Caption input directly on photo step
+    var capLabel=d({css:{fontSize:"11px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".4px",marginBottom:"5px",marginTop:"8px"}},"Caption (optional)");
+    body.appendChild(capLabel);
+    var capTa=document.createElement("textarea");capTa.rows=2;capTa.placeholder="Say something...";
+    capTa.style.cssText="width:100%;padding:10px 12px;border-radius:12px;border:1.5px solid #F5DDD1;background:#FAF6F0;font-size:14px;color:#3D2314;outline:none;resize:none;line-height:1.5;font-family:inherit;margin-bottom:8px;";
+    capTa.value=ST.upCap;capTa.addEventListener("input",function(){ST.upCap=this.value;});
+    body.appendChild(capTa);
+    var nb=b({css:{width:"100%",padding:"13px",borderRadius:"50px",background:t.a,border:"none",color:"white",fontSize:"14px",fontWeight:800,cursor:"pointer",fontFamily:"inherit"}},ST.upImg?"Share":"Tap photo above to add");
     nb.addEventListener("click",function(){
-      if(!ST.upImg){pa.style.border="2.5px solid #C4714A";pa.style.animation="none";setTimeout(function(){pa.style.border="2.5px dashed "+t.al;},800);return;}
-      ST.upStep=2.5;redraw();
+      if(!ST.upImg){pa.style.border="2.5px solid #C4714A";setTimeout(function(){pa.style.border="2.5px dashed "+t.al;},800);return;}
+      submitPost();
     });ft.appendChild(nb);sh.appendChild(ft);
   }
-  if(ST.upStep===2.5){
-    sh.appendChild(upHdr("Add Caption",function(){ST.upStep=2;redraw();}));
-    var body=d({cls:"scr",css:{padding:"14px 15px"}});
-    if(ST.upImg&&ST.upIsVideo){
-      var capVid=document.createElement("video");capVid.src=ST.upImg;capVid.style.cssText="width:100%;height:130px;object-fit:cover;border-radius:13px;margin-bottom:12px;display:block;";capVid.controls=true;capVid.playsInline=true;body.appendChild(capVid);
-    } else if(ST.upImg){
-      var pi=el("img",{css:{width:"100%",height:"130px",objectFit:"cover",borderRadius:"13px",marginBottom:"12px",display:"block"}});pi.src=ST.upImg;body.appendChild(pi);
-    }
-    var ta=el("textarea",{rows:4,placeholder:"Tell your family what's going on...",css:{width:"100%",padding:"12px",borderRadius:"13px",border:"2px solid #F5DDD1",background:"#FAF6F0",fontSize:"15px",color:"#3D2314",outline:"none",resize:"none",lineHeight:"1.6",fontFamily:"inherit"}});
-    ta.value=ST.upCap;ta.addEventListener("input",function(){ST.upCap=this.value;});body.appendChild(ta);sh.appendChild(body);
-    var ft=d({css:{padding:"12px 15px 26px",flexShrink:0}});
-    var sb=b({css:{width:"100%",padding:"13px",borderRadius:"50px",background:t.a,border:"none",color:"white",fontSize:"14px",fontWeight:800,cursor:"pointer",fontFamily:"inherit"}},"Share with "+grp.label);
-    sb.addEventListener("click",submitPost);ft.appendChild(sb);sh.appendChild(ft);
-  }
+
   if(ST.upStep===3){
     sh.appendChild(upHdr("Check-in",null));
     var body=d({cls:"scr",css:{padding:"14px 15px"}});
