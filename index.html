@@ -1660,9 +1660,16 @@ function submitPost(){
   } else {
     p={type:isVid?"video":"photo",av:postAv,name:postName,time:"Just now",emoji:"\uD83C\uDF3B",imgUrl:null,cap:postCap,groupId:postGroup};
     var uid=(currentUser&&currentUser.uid)||localStorage.getItem("ku_uid")||"anon";
+    // Convert base64 to blob for reliable mobile upload
+    function dataUrlToBlob(dataUrl){
+      var arr=dataUrl.split(",");var mime=arr[0].match(/:(.*?);/)[1];
+      var bstr=atob(arr[1]);var n=bstr.length;var u8=new Uint8Array(n);
+      while(n--){u8[n]=bstr.charCodeAt(n);}
+      return new Blob([u8],{type:mime});
+    }
     var uploadRef=isVid&&vidFile
       ? storage.ref("videos/"+uid+"/"+Date.now()+"."+(vidFile.name.split(".").pop()||"mp4")).put(vidFile).then(function(s){return s.ref.getDownloadURL();})
-      : storage.ref("photos/"+uid+"/"+Date.now()+".jpg").putString(imgData,"data_url",{contentType:"image/jpeg"}).then(function(s){return s.ref.getDownloadURL();});
+      : storage.ref("photos/"+uid+"/"+Date.now()+".jpg").put(dataUrlToBlob(imgData)).then(function(s){return s.ref.getDownloadURL();});
     // Show uploading indicator in feed
     var tempId="temp-"+Date.now();
     var tempPost={id:tempId,type:"photo",av:postAv,name:postName,time:"Just now",cap:postCap,groupId:postGroup,emoji:"\uD83D\uDCF7",uploading:true};
@@ -1781,6 +1788,8 @@ function showInstallBanner(){
 }
 
 redraw();
+// Fetch feed immediately without auth (rules are open)
+setTimeout(function(){fetchAllFeeds();},500);
 // Wait for auth to resolve, then sync
 var _lastUid=null;
 auth.onAuthStateChanged(function(user){
