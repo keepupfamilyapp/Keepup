@@ -171,35 +171,44 @@ function syncOn(){
 }
 function doSync(){
 
-  // Listen to feed posts for current group
-  function watchFeed(gid){
-    var unsub=db.collection("feed").where("groupId","==",gid)
-      .onSnapshot(function(snap){
-
-        if(!ST.feed[gid])ST.feed[gid]=[];
-        snap.docChanges().forEach(function(change){
-          var data=Object.assign({},change.doc.data(),{id:change.doc.id});
-          if(change.type==="added"||change.type==="modified"){
-            var idx=ST.feed[gid].findIndex(function(x){return x.id===data.id;});
-            if(idx>=0)ST.feed[gid][idx]=data;
-            else ST.feed[gid].push(data);
-          }
-          if(change.type==="removed"){
-            ST.feed[gid]=ST.feed[gid].filter(function(x){return x.id!==data.id;});
-          }
+  // Fetch feed for all groups
+  function fetchFeed(gid){
+    db.collection("feed").where("groupId","==",gid).get()
+      .then(function(snap){
+        ST.feed[gid]=[];
+        snap.forEach(function(doc){
+          ST.feed[gid].push(Object.assign({},doc.data(),{id:doc.id}));
         });
-        // Sort by createdAt descending
         ST.feed[gid].sort(function(a,b){
           var ta=a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():0;
           var tb=b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():0;
           return tb-ta;
         });
         if(ST.tab==="feed")redraw();
-      });
+      }).catch(function(e){console.log("fetchFeed error:",e);});
+  }
+  ST.groups.forEach(function(g){fetchFeed(g.id);});
+
+  // Also set up real-time listener for new posts
+  function watchFeed(gid){
+    var unsub=db.collection("feed").where("groupId","==",gid)
+      .onSnapshot(function(snap){
+        ST.feed[gid]=ST.feed[gid]||[];
+        snap.forEach(function(doc){
+          var data=Object.assign({},doc.data(),{id:doc.id});
+          var existing=ST.feed[gid].findIndex(function(x){return x.id===data.id;});
+          if(existing>=0)ST.feed[gid][existing]=data;
+          else ST.feed[gid].push(data);
+        });
+        ST.feed[gid].sort(function(a,b){
+          var ta=a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():0;
+          var tb=b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():0;
+          return tb-ta;
+        });
+        if(ST.tab==="feed")redraw();
+      },function(err){console.log("watchFeed error:",err);});
     unsubscribers.push(unsub);
   }
-
-  // Watch all groups
   ST.groups.forEach(function(g){watchFeed(g.id);});
 
   // Listen to chat messages for current group
@@ -747,7 +756,17 @@ function buildApp(){
     nb.appendChild(d({html:n[1],css:{fontSize:"20px"}}));
     nb.appendChild(el("small",{css:{color:ST.tab===n[0]?t.a:"#9B7B62"}},n[2]));
     if(ST.tab===n[0])nb.appendChild(d({css:{width:"15px",height:"3px",borderRadius:"3px",background:t.a,margin:"1px auto 0"}}));
-    nb.addEventListener("click",function(){ST.tab=n[0];if(n[0]!=="chat")ST.openChat=null;redraw();});nav.appendChild(nb);
+    nb.addEventListener("click",function(){
+      ST.tab=n[0];if(n[0]!=="chat")ST.openChat=null;
+      if(n[0]==="feed")ST.groups.forEach(function(g){
+        db.collection("feed").where("groupId","==",g.id).get().then(function(snap){
+          ST.feed[g.id]=[];snap.forEach(function(doc){ST.feed[g.id].push(Object.assign({},doc.data(),{id:doc.id}));});
+          ST.feed[g.id].sort(function(a,b){var ta=a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():0;var tb=b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():0;return tb-ta;});
+          redraw();
+        }).catch(function(){});
+      });
+      redraw();
+    });nav.appendChild(nb);
   });
   wrap.appendChild(nav);
   if(ST.editingGroup)wrap.appendChild(buildEditGroup(ST.editingGroup));
@@ -1622,6 +1641,13 @@ function submitPost(){
     p={type:"checkin",av:postAv,name:postName,time:"Just now",status:postStatus,groupId:postGroup};
     postToFeed(p).then(function(){
       broadcastNotif(postName+" checked in",postStatus.substring(0,60),postGroup);
+      // Refresh feed after posting
+      db.collection("feed").where("groupId","==",postGroup).get().then(function(snap){
+        ST.feed[postGroup]=[];
+        snap.forEach(function(doc){ST.feed[postGroup].push(Object.assign({},doc.data(),{id:doc.id}));});
+        ST.feed[postGroup].sort(function(a,b){var ta=a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():0;var tb=b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():0;return tb-ta;});
+        redraw();
+      });
     }).catch(function(e){console.log("checkin post failed",e);});
   } else {
     p={type:isVid?"video":"photo",av:postAv,name:postName,time:"Just now",emoji:"\uD83C\uDF3B",imgUrl:null,cap:postCap,groupId:postGroup};
@@ -1634,11 +1660,21 @@ function submitPost(){
       return postToFeed(p);
     }).then(function(){
       broadcastNotif(postName+" posted","Shared a photo",postGroup);
+      // Refresh feed after posting
+      db.collection("feed").where("groupId","==",postGroup).get().then(function(snap){
+        ST.feed[postGroup]=[];
+        snap.forEach(function(doc){ST.feed[postGroup].push(Object.assign({},doc.data(),{id:doc.id}));});
+        ST.feed[postGroup].sort(function(a,b){var ta=a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():0;var tb=b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():0;return tb-ta;});
+        redraw();
+      });
     }).catch(function(e){
       console.log("photo post failed",e);
-      // Post without image as fallback
       p.imgUrl=imgData;
-      postToFeed(p).catch(function(){});
+      postToFeed(p).then(function(){
+        if(!ST.feed[postGroup])ST.feed[postGroup]=[];
+        ST.feed[postGroup].unshift(p);
+        redraw();
+      }).catch(function(){});
     });
   }
 }
