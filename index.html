@@ -320,17 +320,21 @@ function doSync(){
 
   // Listen to comments
   var cmtUnsub=db.collection("comments").onSnapshot(function(snap){
-    snap.docChanges().forEach(function(change){
-      var data=Object.assign({},change.doc.data(),{id:change.doc.id});
-      var pid=data.postId;
-      if(!pid)return;
+    // Rebuild all comments from scratch on each snapshot to avoid dupes
+    ST.comments={};
+    snap.forEach(function(doc){
+      var data=Object.assign({},doc.data(),{id:doc.id});
+      var pid=data.postId;if(!pid)return;
       if(!ST.comments[pid])ST.comments[pid]=[];
-      if(change.type==="added"||change.type==="modified"){
-        var ci=ST.comments[pid].findIndex(function(x){return x.id===data.id||x.id==="local-"+data.id;});
-        if(ci>=0)ST.comments[pid][ci]=data;
-        else ST.comments[pid].push(data);
-      }
-      if(change.type==="removed"){ST.comments[pid]=ST.comments[pid].filter(function(x){return x.id!==data.id;});}
+      ST.comments[pid].push(data);
+    });
+    // Sort each post's comments by createdAt
+    Object.keys(ST.comments).forEach(function(pid){
+      ST.comments[pid].sort(function(a,b){
+        var ta=a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():0;
+        var tb=b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():0;
+        return ta-tb;
+      });
     });
     if(ST.cmtOpen!==null)redraw();
   });
@@ -1760,17 +1764,13 @@ function submitPost(){
 
 
 function addComment(){
-  if(!ST.cmtIn.trim())return;var pid=ST.cmtOpen;
+  if(!ST.cmtIn.trim()||!currentUser)return;
+  var pid=ST.cmtOpen;
   var cmt={av:ST.avatar,name:ST.name||"You",text:ST.cmtIn.trim(),time:"Just now",postId:String(pid)};
-  ST.cmtIn="";
-  // Optimistic local add
-  if(!ST.comments[pid])ST.comments[pid]=[];
-  var localCmt=Object.assign({id:"local-"+Date.now()},cmt);
-  ST.comments[pid].push(localCmt);redraw();
-  // Sync to Firebase
+  ST.cmtIn="";redraw();
   db.collection("comments").add(Object.assign({},cmt,{
     createdAt:firebase.firestore.FieldValue.serverTimestamp()
-  })).catch(function(e){console.log("comment sync failed",e);});
+  })).catch(function(e){console.log("comment failed",e);});
 }
 
 // Check for invite link ?join=GroupName&icon=emoji
