@@ -164,6 +164,27 @@ function broadcastNotif(title,body,groupId){
   }).catch(function(e){});
 }
 
+function fetchAllFeeds(){
+  ST.feedLoading=true;
+  var pending=ST.groups.length;
+  ST.groups.forEach(function(g){
+    db.collection("feed").where("groupId","==",g.id).get()
+      .then(function(snap){
+        ST.feed[g.id]=[];
+        snap.forEach(function(doc){ST.feed[g.id].push(Object.assign({},doc.data(),{id:doc.id}));});
+        ST.feed[g.id].sort(function(a,b){
+          var ta=a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():0;
+          var tb=b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():0;
+          return tb-ta;
+        });
+        pending--;if(pending<=0){ST.feedLoading=false;}
+        if(ST.tab==="feed")redraw();
+      }).catch(function(e){
+        pending--;if(pending<=0){ST.feedLoading=false;if(ST.tab==="feed")redraw();}
+      });
+  });
+}
+
 function syncOn(){
   unsubscribers.forEach(function(u){u();});unsubscribers=[];
   var dot=document.getElementById("sync-dot");if(dot)dot.style.display="block";
@@ -372,7 +393,7 @@ var ST={
   boarded:false,obStep:0,obName:"",obAvatar:"\uD83D\uDC69",obPhoto:null,
   obGrpName:"",obGrpEmoji:"\u2764\uFE0F",obGrpPhoto:null,joinInvite:false,fbMembers:{},
   editingGroup:null,editingBirthdays:false,
-  tab:"feed",group:"imm",name:"Sean",avatar:"\uD83D\uDC68",
+  tab:"feed",group:"imm",name:"Sean",avatar:"\uD83D\uDC68",feedLoading:true,
   openChat:null,
   chatMsgs:{imm:[]},
   chatIn:{},
@@ -823,7 +844,12 @@ function buildFeed(t,grp){
   });
 
   var feedItems=ST.feed[ST.group]||[];
-  if(!feedItems.length){
+  if(ST.feedLoading){
+    var loading=d({css:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"60px 24px",textAlign:"center"}});
+    var licon=d({css:{fontSize:"36px",marginBottom:"12px",opacity:".4"}});licon.textContent=grp.icon;loading.appendChild(licon);
+    loading.appendChild(d({css:{fontSize:"13px",color:"#9B7B62"}},"Loading..."));
+    list.appendChild(loading);
+  } else if(!feedItems.length){
     var empty=d({css:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"50px 24px",textAlign:"center"}});
     var eicon=d({css:{fontSize:"52px",marginBottom:"14px",animation:"float 3s ease-in-out infinite"}});eicon.textContent=grp.icon;empty.appendChild(eicon);
     empty.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"20px",fontWeight:600,color:"#3D2314",marginBottom:"8px"}},grp.label+" is quiet..."));
@@ -1659,8 +1685,15 @@ function submitPost(){
     }).catch(function(e){console.log("checkin post failed",e);});
   } else {
     p={type:isVid?"video":"photo",av:postAv,name:postName,time:"Just now",emoji:"\uD83C\uDF3B",imgUrl:null,cap:postCap,groupId:postGroup};
-    var uid=(currentUser&&currentUser.uid)||localStorage.getItem("ku_uid")||"anon";
-    console.log("Upload uid:",uid,"currentUser:",currentUser&&currentUser.uid);
+    // Must have real Firebase auth uid for Storage
+    if(!currentUser){
+      var errB=document.createElement("div");
+      errB.style.cssText="position:fixed;top:60px;left:12px;right:12px;background:#C0392B;color:white;padding:12px 16px;border-radius:14px;z-index:999;font-family:Nunito,sans-serif;font-size:13px;font-weight:700;";
+      errB.textContent="Please wait a moment and try again — still signing you in.";
+      document.body.appendChild(errB);setTimeout(function(){errB.remove();},4000);
+      return;
+    }
+    var uid=currentUser.uid;
     // Convert base64 to blob for reliable mobile upload
     function dataUrlToBlob(dataUrl){
       var arr=dataUrl.split(",");var mime=arr[0].match(/:(.*?);/)[1];
