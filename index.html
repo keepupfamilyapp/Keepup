@@ -1277,13 +1277,26 @@ function buildProfile(t){
     var copyBtn=b({css:{padding:"7px 13px",borderRadius:"50px",background:gt.a,border:"none",color:"white",fontSize:"12px",fontWeight:700,cursor:"pointer",fontFamily:"inherit",flexShrink:0}},"Copy Link");
     (function(grpObj,btn,gtc){
       btn.addEventListener("click",function(){
-        var link="https://keepupfamilyapp.github.io/Keepup?join="+encodeURIComponent(grpObj.label)+"&icon="+encodeURIComponent(grpObj.icon);
-        if(navigator.clipboard&&navigator.clipboard.writeText){
-          navigator.clipboard.writeText(link).then(function(){
-            btn.textContent="\u2713 Copied!";btn.style.background="#4A7C59";
-            setTimeout(function(){btn.textContent="Copy Link";btn.style.background=gtc.a;},2500);
-          }).catch(function(){fallbackCopy(link,btn,gtc.a);});
-        } else {fallbackCopy(link,btn,gtc.a);}
+        if(!currentUser){alert("Please wait — still signing you in.");return;}
+        btn.textContent="Generating...";btn.style.background="#9B7B62";
+        // Generate a one-time token in Firebase
+        var token=Math.random().toString(36).substring(2,10)+Math.random().toString(36).substring(2,10);
+        db.collection("inviteTokens").doc(token).set({
+          token:token,groupId:grpObj.id,groupLabel:grpObj.label,groupIcon:grpObj.icon,
+          createdBy:currentUser.uid,createdAt:firebase.firestore.FieldValue.serverTimestamp(),
+          used:false
+        }).then(function(){
+          var link="https://keepupfamilyapp.github.io/Keepup?token="+token;
+          if(navigator.clipboard&&navigator.clipboard.writeText){
+            navigator.clipboard.writeText(link).then(function(){
+              btn.textContent="\u2713 Copied!";btn.style.background="#4A7C59";
+              setTimeout(function(){btn.textContent="Copy Link";btn.style.background=gtc.a;},2500);
+            }).catch(function(){fallbackCopy(link,btn,gtc.a);});
+          } else {fallbackCopy(link,btn,gtc.a);}
+        }).catch(function(e){
+          btn.textContent="Copy Link";btn.style.background=gtc.a;
+          alert("Could not generate invite link. Try again.");
+        });
       });
     })(g,copyBtn,gt);
     row.appendChild(copyBtn);invBody.appendChild(row);
@@ -1787,15 +1800,39 @@ function addComment(){
 // Check for invite link ?join=GroupName&icon=emoji
 (function(){
   var params=new URLSearchParams(window.location.search);
-  var joinGroup=params.get("join");
+  var token=params.get("token");
+  var joinGroup=params.get("join"); // legacy support
   var joinIcon=params.get("icon");
-  if(joinGroup){
-    // Pre-fill onboarding with the group from the invite
+
+  if(token){
+    // Validate one-time token
+    window.history.replaceState({},"",window.location.pathname);
+    db.collection("inviteTokens").doc(token).get().then(function(doc){
+      if(!doc.exists){
+        alert("This invite link is invalid or has already been used. Please ask for a new one.");
+        return;
+      }
+      var data=doc.data();
+      if(data.used){
+        alert("This invite link has already been used. Please ask for a new one.");
+        return;
+      }
+      // Mark token as used immediately
+      db.collection("inviteTokens").doc(token).update({used:true,usedAt:firebase.firestore.FieldValue.serverTimestamp()});
+      // Pre-fill onboarding
+      ST.obGrpName=data.groupLabel||"Family";
+      ST.obGrpEmoji=data.groupIcon||"\u2764\uFE0F";
+      ST.joinInvite=true;
+      redraw();
+    }).catch(function(e){
+      // If rules block unauthenticated read, still allow with legacy params
+      console.log("token validation error:",e);
+    });
+  } else if(joinGroup){
+    // Legacy invite link support
     ST.obGrpName=joinGroup;
     if(joinIcon)ST.obGrpEmoji=joinIcon;
-    // Show a join banner on the welcome screen
     ST.joinInvite=true;
-    // Clean URL so refreshing doesn't re-trigger
     window.history.replaceState({},"",window.location.pathname);
   }
 })();
