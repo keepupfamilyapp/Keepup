@@ -165,6 +165,7 @@ function broadcastNotif(title,body,groupId){
 }
 
 function fetchAllFeeds(){
+  if(!currentUser)return;
   ST.feedLoading=true;
   if(ST.tab==="feed")redraw();
   var gid=ST.group||"imm";
@@ -187,6 +188,7 @@ function fetchAllFeeds(){
 }
 
 function syncOn(){
+  if(!currentUser)return;
   unsubscribers.forEach(function(u){u();});unsubscribers=[];
   var dot=document.getElementById("sync-dot");if(dot)dot.style.display="block";
   doSync();
@@ -359,12 +361,14 @@ function doSync(){
 } // end doSync
 
 function postToFeed(item){
+  if(!currentUser)return Promise.reject(new Error("Not authenticated"));
   return db.collection("feed").add(Object.assign({},item,{
     createdAt:firebase.firestore.FieldValue.serverTimestamp()
   }));
 }
 
 function postToChat(gid,msg){
+  if(!currentUser)return Promise.reject(new Error("Not authenticated"));
   return db.collection("chat").add(Object.assign({},msg,{
     groupId:gid,createdAt:firebase.firestore.FieldValue.serverTimestamp()
   }));
@@ -846,7 +850,12 @@ function buildFeed(t,grp){
   });
 
   var feedItems=ST.feed[ST.group]||[];
-  if(ST.feedLoading){
+  if(!currentUser){
+    var authWait=d({css:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"60px 24px",textAlign:"center"}});
+    var awicon=d({css:{fontSize:"36px",marginBottom:"12px",opacity:".4"}});awicon.textContent=grp.icon;authWait.appendChild(awicon);
+    authWait.appendChild(d({css:{fontSize:"13px",color:"#9B7B62"}},"Signing you in..."));
+    list.appendChild(authWait);
+  } else if(ST.feedLoading){
     var loading=d({css:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"60px 24px",textAlign:"center"}});
     var licon=d({css:{fontSize:"36px",marginBottom:"12px",opacity:".4"}});licon.textContent=grp.icon;loading.appendChild(licon);
     loading.appendChild(d({css:{fontSize:"13px",color:"#9B7B62"}},"Loading..."));
@@ -1838,9 +1847,8 @@ auth.onAuthStateChanged(function(user){
       syncOn();
       if(typeof Notification!=="undefined"&&Notification.permission==="granted")initNotifications();
     }
-  } else if(ST.boarded){
-    syncOn();
   }
+  // Never sync without auth - rules require authentication
 });
 </script>
 </body>
