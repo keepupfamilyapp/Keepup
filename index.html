@@ -714,12 +714,13 @@ function buildOnboarding(){
       ST.birthdays=[];ST.evs=[];ST.dms=[];ST.boarded=true;
       var isCreator=!ST.joinInvite;
       try{localStorage.setItem("ku_ob","1");localStorage.setItem("ku_name",ST.obName);localStorage.setItem("ku_av",ST.obAvatar);localStorage.setItem("ku_grp",JSON.stringify({label:ST.obGrpName,icon:ST.obGrpEmoji}));localStorage.setItem("ku_admin",isCreator?"1":"0");}catch(e){}
-      // Write this member to Firestore so others can see them
-      var uid=localStorage.getItem("ku_uid")||("u"+Date.now());
+      // Write full profile to Firestore
+      var uid=currentUser?currentUser.uid:(localStorage.getItem("ku_uid")||("u"+Date.now()));
       localStorage.setItem("ku_uid",uid);
       db.collection("members").doc(uid).set({
         uid:uid,name:ST.obName,av:ST.obPhoto||ST.obAvatar,
-        groupId:"imm",groupLabel:ST.obGrpName,
+        groupId:"imm",groupLabel:ST.obGrpName,groupIcon:ST.obGrpEmoji,
+        isAdmin:!ST.joinInvite,
         joinedAt:firebase.firestore.FieldValue.serverTimestamp()
       }).catch(function(e){console.log("member write failed",e);});
       syncOn();
@@ -1294,7 +1295,11 @@ function buildProfile(t){
   var enp=d({css:{padding:"10px 15px"}});
   var eni=el("input",{type:"text",css:{width:"100%",padding:"10px 13px",borderRadius:"12px",border:"1.5px solid #F5DDD1",background:"#FAF6F0",fontSize:"15px",color:"#3D2314",outline:"none",fontFamily:"inherit"}});
   eni.value=ST.name;eni.addEventListener("input",function(){ST.name=this.value;});
-  eni.addEventListener("change",function(){try{localStorage.setItem("ku_name",ST.name);}catch(e){}redraw();});
+  eni.addEventListener("change",function(){
+    try{localStorage.setItem("ku_name",ST.name);}catch(e){}
+    if(currentUser)db.collection("members").doc(currentUser.uid).update({name:ST.name}).catch(function(){});
+    redraw();
+  });
   enp.appendChild(eni);enc.appendChild(enp);body.appendChild(enc);
   var apc=d({css:{background:"#FFF9F2",borderRadius:"18px",overflow:"hidden",boxShadow:"0 2px 12px rgba(0,0,0,.08)",marginBottom:"12px"}});
   apc.appendChild(d({css:{padding:"13px 15px 9px",fontSize:"12px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".5px",borderBottom:"1px solid #F5DDD1"}},"Your Avatar"));
@@ -1304,7 +1309,9 @@ function buildProfile(t){
   if(ST.avatar&&ST.avatar.startsWith("data:")){var apImg=el("img",{css:{width:"100%",height:"100%",objectFit:"cover",display:"block"}});apImg.src=ST.avatar;apC.appendChild(apImg);}
   else apC.textContent=ST.avatar;
   var apFi=el("input",{type:"file",accept:"image/*",css:{display:"none"}});
-  apFi.addEventListener("change",function(){var f=this.files&&this.files[0];if(!f)return;var r=new FileReader();r.onload=function(e){ST.avatar=e.target.result;try{localStorage.setItem("ku_av",ST.avatar);}catch(e2){}redraw();};r.readAsDataURL(f);});
+  apFi.addEventListener("change",function(){var f=this.files&&this.files[0];if(!f)return;var r=new FileReader();r.onload=function(e){ST.avatar=e.target.result;try{localStorage.setItem("ku_av",ST.avatar);}catch(e2){}
+    if(currentUser)db.collection("members").doc(currentUser.uid).update({av:ST.avatar}).catch(function(){});
+    redraw();};r.readAsDataURL(f);});
   apC.addEventListener("click",function(){apFi.click();});
   var apUp=b({css:{flex:1,padding:"10px",borderRadius:"12px",background:"#FAF6F0",border:"1.5px dashed #E8956D",fontSize:"13px",fontWeight:700,color:"#C4714A",cursor:"pointer",fontFamily:"inherit"}},"\uD83D\uDCF7 Upload new photo");
   apUp.addEventListener("click",function(){apFi.click();});
@@ -1312,7 +1319,11 @@ function buildProfile(t){
   var apg=d({css:{display:"flex",flexWrap:"wrap",gap:"8px"}});
   ["\uD83D\uDC69","\uD83D\uDC68","\uD83D\uDC75","\uD83D\uDC74","\uD83D\uDC67","\uD83D\uDC66","\uD83E\uDDD2","\uD83E\uDDD1"].forEach(function(a){
     var ab=b({css:{width:"42px",height:"42px",borderRadius:"12px",background:ST.avatar===a?t.ap:"#FAF6F0",border:"2px solid "+(ST.avatar===a?t.a:"rgba(107,66,38,.12)"),fontSize:"22px",cursor:"pointer",fontFamily:"inherit"}},a);
-    ab.addEventListener("click",function(){ST.avatar=a;try{localStorage.setItem("ku_av",a);}catch(e){}redraw();});apg.appendChild(ab);
+    ab.addEventListener("click",function(){
+      ST.avatar=a;try{localStorage.setItem("ku_av",a);}catch(e){}
+      if(currentUser)db.collection("members").doc(currentUser.uid).update({av:a}).catch(function(){});
+      redraw();
+    });apg.appendChild(ab);
   });
   apBody.appendChild(apg);apc.appendChild(apBody);body.appendChild(apc);
 
@@ -1843,13 +1854,34 @@ auth.onAuthStateChanged(function(user){
   if(user){
     localStorage.setItem("ku_uid",user.uid);
     if(ST.boarded){
-      fetchAllFeeds();
-      syncOn();
-      if(typeof Notification!=="undefined"&&Notification.permission==="granted")initNotifications();
+      // Load profile from Firebase to sync across browsers
+      db.collection("members").doc(user.uid).get().then(function(doc){
+        if(doc.exists){
+          var m=doc.data();
+          if(m.name){ST.name=m.name;localStorage.setItem("ku_name",m.name);}
+          if(m.av){ST.avatar=m.av;localStorage.setItem("ku_av",m.av);}
+          if(m.groupLabel){
+            ST.groups[0].label=m.groupLabel;
+            localStorage.setItem("ku_grp",JSON.stringify({label:m.groupLabel,icon:m.groupIcon||ST.groups[0].icon}));
+          }
+          if(m.groupIcon)ST.groups[0].icon=m.groupIcon;
+          if(m.isAdmin!==undefined)localStorage.setItem("ku_admin",m.isAdmin?"1":"0");
+        }
+        fetchAllFeeds();
+        syncOn();
+        redraw();
+      }).catch(function(){
+        fetchAllFeeds();
+        syncOn();
+        redraw();
+      });
+    } else {
+      redraw();
     }
+  } else {
+    // Always redraw so "Signing you in..." clears
+    redraw();
   }
-  // Always redraw so "Signing you in..." clears
-  redraw();
 });
 </script>
 </body>
