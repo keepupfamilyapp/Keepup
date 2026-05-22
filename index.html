@@ -401,7 +401,7 @@ function th(id){return TH[id]||TH.imm;}
 var ST={
   boarded:false,obStep:0,obName:"",obAvatar:"\uD83D\uDC69",obPhoto:null,
   obGrpName:"",obGrpEmoji:"\u2764\uFE0F",obGrpPhoto:null,joinInvite:false,fbMembers:{},
-  editingGroup:null,editingBirthdays:false,
+  editingGroup:null,editingBirthdays:false,creatingGroup:false,
   tab:"feed",group:"imm",name:"Sean",avatar:"\uD83D\uDC68",feedLoading:false,
   openChat:null,
   chatMsgs:{imm:[]},
@@ -796,6 +796,7 @@ function buildApp(){
   });
   wrap.appendChild(nav);
   if(ST.editingGroup)wrap.appendChild(buildEditGroup(ST.editingGroup));
+  if(ST.creatingGroup)wrap.appendChild(buildCreateGroup());
   if(ST.editingBirthdays)wrap.appendChild(buildEditBirthdays());
   if(ST.newDm)wrap.appendChild(buildNewDm());
   if(ST.addEv)wrap.appendChild(buildAddEvent(t));
@@ -1360,13 +1361,14 @@ function buildProfile(t){
   bdBtn.addEventListener("click",function(){ST.editingBirthdays=true;redraw();});
   bdBody.appendChild(bdBtn);bdCard.appendChild(bdBody);body.appendChild(bdCard);
 
-  // Multiple groups note
-  var mgNote=d({css:{background:"#FFF9F2",borderRadius:"18px",overflow:"hidden",boxShadow:"0 2px 12px rgba(0,0,0,.08)",marginBottom:"12px"}});
-  mgNote.appendChild(d({css:{padding:"13px 15px 9px",fontSize:"12px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".5px",borderBottom:"1px solid #F5DDD1"}},"Join Another Group"));
-  var mgBody=d({css:{padding:"12px 15px"}});
-  mgBody.appendChild(d({css:{fontSize:"13px",color:"#9B7B62",marginBottom:"10px"}},"Have an invite link from another family group? Open it in your browser to join."));
-  var mgBtn=b({css:{width:"100%",padding:"11px",borderRadius:"50px",background:"#F5DDD1",border:"none",color:"#6B4226",fontSize:"13px",fontWeight:700,cursor:"pointer",fontFamily:"inherit"}},"\uD83D\uDCCB Copy my invite links above to share");
-  mgBody.appendChild(mgBtn);mgNote.appendChild(mgBody);body.appendChild(mgNote);
+  // Create new group card
+  var cgCard=d({css:{background:"#FFF9F2",borderRadius:"18px",overflow:"hidden",boxShadow:"0 2px 12px rgba(0,0,0,.08)",marginBottom:"12px"}});
+  cgCard.appendChild(d({css:{padding:"13px 15px 9px",fontSize:"12px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".5px",borderBottom:"1px solid #F5DDD1"}},"Groups"));
+  var cgBody=d({css:{padding:"12px 15px"}});
+  cgBody.appendChild(d({css:{fontSize:"13px",color:"#9B7B62",marginBottom:"10px"}},"Create a new group and invite a different branch of your family. You'll be the admin."));
+  var cgBtn=b({css:{width:"100%",padding:"11px",borderRadius:"50px",background:t.a,border:"none",color:"white",fontSize:"13px",fontWeight:700,cursor:"pointer",fontFamily:"inherit"}},"+ Create a New Group");
+  cgBtn.addEventListener("click",function(){ST.creatingGroup=true;redraw();});
+  cgBody.appendChild(cgBtn);cgCard.appendChild(cgBody);body.appendChild(cgCard);
 
   // Sign out
   var so=b({css:{width:"100%",padding:"13px",borderRadius:"50px",background:"transparent",border:"2px solid #F5DDD1",color:"#9B7B62",fontSize:"14px",fontWeight:700,cursor:"pointer",fontFamily:"inherit",marginTop:"4px"}},"Sign Out");
@@ -1519,6 +1521,67 @@ function buildComments(t){
   ft.appendChild(ci);
   var sb=b({css:{width:"34px",height:"34px",borderRadius:"50%",background:t.a,border:"none",color:"white",fontSize:"16px",cursor:"pointer",flexShrink:0,fontFamily:"inherit"}},"^");
   sb.addEventListener("click",addComment);ft.appendChild(sb);sh.appendChild(ft);ov.appendChild(sh);return ov;
+}
+
+function buildCreateGroup(){
+  var ov=d({cls:"overlay"});ov.addEventListener("click",function(){ST.creatingGroup=false;redraw();});
+  var sh=d({cls:"sheet"});sh.addEventListener("click",function(e){e.stopPropagation();});
+  sh.appendChild(d({cls:"handle"}));
+  sh.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"18px",fontWeight:600,color:"#3D2314",marginBottom:"6px"}},"Create a New Group"));
+  sh.appendChild(d({css:{fontSize:"13px",color:"#9B7B62",marginBottom:"16px"}},"You'll be the admin. Invite family members after creating."));
+
+  // Group name
+  sh.appendChild(d({css:{fontSize:"11px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".4px",marginBottom:"6px"}},"Group Name"));
+  var ni=document.createElement("input");ni.type="text";ni.placeholder="e.g. Mom's Side, The Cousins...";
+  ni.style.cssText="width:100%;padding:12px 14px;border-radius:12px;border:1.5px solid #F5DDD1;background:#FAF6F0;font-size:15px;color:#3D2314;outline:none;font-family:inherit;margin-bottom:14px;";
+  sh.appendChild(ni);
+
+  // Emoji picker
+  sh.appendChild(d({css:{fontSize:"11px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".4px",marginBottom:"8px"}},"Group Icon"));
+  var selEmoji=["\u2764\uFE0F"];
+  var egrid=d({css:{display:"flex",flexWrap:"wrap",gap:"8px",marginBottom:"16px"}});
+  ["\u2764\uFE0F","\uD83C\uDF38","\uD83C\uDF32","\u2B50","\uD83C\uDFE0","\uD83C\uDF89","\uD83C\uDF3B","\uD83E\uDD8B","\uD83C\uDF0A","\uD83C\uDF42","\uD83C\uDFB6","\uD83C\uDF19"].forEach(function(e){
+    var eb=b({css:{width:"44px",height:"44px",borderRadius:"11px",background:selEmoji[0]===e?"#F5DDD1":"#FAF6F0",border:"2px solid "+(selEmoji[0]===e?"#C4714A":"rgba(107,66,38,.12)"),fontSize:"21px",cursor:"pointer",fontFamily:"inherit"}},e);
+    eb.addEventListener("click",function(){
+      selEmoji[0]=e;
+      egrid.querySelectorAll("button").forEach(function(btn){btn.style.background="#FAF6F0";btn.style.borderColor="rgba(107,66,38,.12)";});
+      eb.style.background="#F5DDD1";eb.style.borderColor="#C4714A";
+    });
+    egrid.appendChild(eb);
+  });
+  sh.appendChild(egrid);
+
+  var saveBtn=b({css:{width:"100%",padding:"14px",borderRadius:"50px",background:"#C4714A",border:"none",color:"white",fontSize:"15px",fontWeight:800,cursor:"pointer",fontFamily:"inherit"}},"Create Group");
+  saveBtn.addEventListener("click",function(){
+    if(!ni.value.trim()){ni.style.borderColor="#C4714A";return;}
+    if(!currentUser){alert("Please wait — still signing you in.");return;}
+    var newGid="g"+Date.now();
+    var newGroup={id:newGid,label:ni.value.trim(),icon:selEmoji[0]};
+    // Add to local groups
+    ST.groups.push(newGroup);
+    ST.feed[newGid]=[];
+    ST.chatMsgs[newGid]=[];
+    ST.mems[newGid]=[{av:ST.avatar,name:ST.name,role:"Admin",you:true,uid:currentUser.uid}];
+    // Save group to Firebase
+    db.collection("groups").doc(newGid).set({
+      id:newGid,label:newGroup.label,icon:newGroup.icon,
+      adminUid:currentUser.uid,adminName:ST.name,
+      createdAt:firebase.firestore.FieldValue.serverTimestamp()
+    }).then(function(){
+      // Add self as member of new group
+      db.collection("members").doc(currentUser.uid+"_"+newGid).set({
+        uid:currentUser.uid,name:ST.name,av:ST.avatar,
+        groupId:newGid,groupLabel:newGroup.label,isAdmin:true,
+        joinedAt:firebase.firestore.FieldValue.serverTimestamp()
+      });
+    }).catch(function(e){console.log("group create failed",e);});
+    ST.group=newGid;ST.creatingGroup=false;
+    // Save updated groups to localStorage
+    try{localStorage.setItem("ku_groups",JSON.stringify(ST.groups));}catch(e){}
+    redraw();
+  });
+  sh.appendChild(saveBtn);
+  ov.appendChild(sh);return ov;
 }
 
 function buildEditGroup(gid){
@@ -1798,38 +1861,17 @@ function addComment(){
 }
 
 // Check for invite link ?join=GroupName&icon=emoji
+// Store pending invite token to process after page loads
+var _pendingToken=null;
 (function(){
   var params=new URLSearchParams(window.location.search);
   var token=params.get("token");
-  var joinGroup=params.get("join"); // legacy support
+  var joinGroup=params.get("join");
   var joinIcon=params.get("icon");
-
   if(token){
-    // Validate one-time token
+    _pendingToken=token;
     window.history.replaceState({},"",window.location.pathname);
-    db.collection("inviteTokens").doc(token).get().then(function(doc){
-      if(!doc.exists){
-        alert("This invite link is invalid or has already been used. Please ask for a new one.");
-        return;
-      }
-      var data=doc.data();
-      if(data.used){
-        alert("This invite link has already been used. Please ask for a new one.");
-        return;
-      }
-      // Mark token as used immediately
-      db.collection("inviteTokens").doc(token).update({used:true,usedAt:firebase.firestore.FieldValue.serverTimestamp()});
-      // Pre-fill onboarding
-      ST.obGrpName=data.groupLabel||"Family";
-      ST.obGrpEmoji=data.groupIcon||"\u2764\uFE0F";
-      ST.joinInvite=true;
-      redraw();
-    }).catch(function(e){
-      // If rules block unauthenticated read, still allow with legacy params
-      console.log("token validation error:",e);
-    });
   } else if(joinGroup){
-    // Legacy invite link support
     ST.obGrpName=joinGroup;
     if(joinIcon)ST.obGrpEmoji=joinIcon;
     ST.joinInvite=true;
@@ -1837,12 +1879,41 @@ function addComment(){
   }
 })();
 
+function processInviteToken(token){
+  db.collection("inviteTokens").doc(token).get().then(function(doc){
+    if(!doc.exists){
+      alert("This invite link is invalid. Please ask for a new one.");
+      return;
+    }
+    var data=doc.data();
+    if(data.used){
+      alert("This invite link has already been used. Please ask for a new one.");
+      return;
+    }
+    db.collection("inviteTokens").doc(token).update({used:true,usedAt:firebase.firestore.FieldValue.serverTimestamp()});
+    ST.obGrpName=data.groupLabel||"Family";
+    ST.obGrpEmoji=data.groupIcon||"\u2764\uFE0F";
+    ST.joinInvite=true;
+    ST.boarded=false;
+    redraw();
+  }).catch(function(e){
+    console.log("token error:",e);
+    alert("Could not validate invite link. Please try again.");
+  });
+}
+
 try{
   if(localStorage.getItem("ku_ob")==="1"){
     ST.boarded=true;
     if(localStorage.getItem("ku_name"))ST.name=localStorage.getItem("ku_name");
     if(localStorage.getItem("ku_av"))ST.avatar=localStorage.getItem("ku_av");
     if(localStorage.getItem("ku_grp")){var sg=JSON.parse(localStorage.getItem("ku_grp"));ST.groups[0].label=sg.label;ST.groups[0].icon=sg.icon;}
+    if(localStorage.getItem("ku_groups")){
+      try{
+        var savedGroups=JSON.parse(localStorage.getItem("ku_groups"));
+        if(savedGroups&&savedGroups.length>1)ST.groups=savedGroups;
+      }catch(e){}
+    }
     // ku_admin defaults to true for existing users
   }
 }catch(e){}
@@ -1890,6 +1961,12 @@ auth.onAuthStateChanged(function(user){
   _lastUid=uid;
   if(user){
     localStorage.setItem("ku_uid",user.uid);
+    // Process pending invite token now that we have auth
+    if(_pendingToken){
+      var t=_pendingToken;_pendingToken=null;
+      processInviteToken(t);
+      return;
+    }
     if(ST.boarded){
       // Load profile from Firebase to sync across browsers
       db.collection("members").doc(user.uid).get().then(function(doc){
