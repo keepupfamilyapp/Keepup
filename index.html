@@ -1660,6 +1660,7 @@ function submitPost(){
   } else {
     p={type:isVid?"video":"photo",av:postAv,name:postName,time:"Just now",emoji:"\uD83C\uDF3B",imgUrl:null,cap:postCap,groupId:postGroup};
     var uid=(currentUser&&currentUser.uid)||localStorage.getItem("ku_uid")||"anon";
+    console.log("Upload uid:",uid,"currentUser:",currentUser&&currentUser.uid);
     // Convert base64 to blob for reliable mobile upload
     function dataUrlToBlob(dataUrl){
       var arr=dataUrl.split(",");var mime=arr[0].match(/:(.*?);/)[1];
@@ -1788,8 +1789,6 @@ function showInstallBanner(){
 }
 
 redraw();
-// Fetch feed immediately without auth (rules are open)
-setTimeout(function(){fetchAllFeeds();},500);
 // Wait for auth to resolve, then sync
 var _lastUid=null;
 auth.onAuthStateChanged(function(user){
@@ -1800,11 +1799,11 @@ auth.onAuthStateChanged(function(user){
   if(user){
     localStorage.setItem("ku_uid",user.uid);
     if(ST.boarded){
+      fetchAllFeeds();
       syncOn();
       if(typeof Notification!=="undefined"&&Notification.permission==="granted")initNotifications();
     }
   } else if(ST.boarded){
-    // Not signed in - sync anyway with open rules
     syncOn();
   }
 });
