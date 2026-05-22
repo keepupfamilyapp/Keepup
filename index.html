@@ -1848,7 +1848,8 @@ auth.onAuthStateChanged(function(user){
       if(typeof Notification!=="undefined"&&Notification.permission==="granted")initNotifications();
     }
   }
-  // Never sync without auth - rules require authentication
+  // Always redraw so "Signing you in..." clears
+  redraw();
 });
 </script>
 </body>
