@@ -779,26 +779,26 @@ function buildApp(){
   else content=buildProfile(t);
   wrap.appendChild(content);
   // Floating nav
-  var navFloat=d({css:{position:"fixed",bottom:"20px",left:"50%",transform:"translateX(-50%)",zIndex:45,display:"flex",flexDirection:"column",alignItems:"center",gap:"8px"}});
-  var navExpanded=ST.navExpanded||false;
-  if(navExpanded){
-    var navPill=d({css:{background:"white",borderRadius:"50px",padding:"6px 8px",display:"flex",gap:"4px",boxShadow:"0 4px 20px rgba(0,0,0,.15)"}});
-    [["chat","&#128172;","Chat"],["calendar","&#128197;","Cal"],["profile","&#128100;","Me"]].forEach(function(n){
-      var nb=b({css:{display:"flex",flexDirection:"column",alignItems:"center",gap:"2px",padding:"6px 14px",borderRadius:"50px",background:ST.tab===n[0]?t.ap:"transparent",border:"none",cursor:"pointer",fontFamily:"inherit"}});
-      nb.appendChild(d({html:n[1],css:{fontSize:"20px"}}));
-      nb.appendChild(el("small",{css:{fontSize:"10px",color:ST.tab===n[0]?t.a:"#9B7B62",fontWeight:ST.tab===n[0]?800:600}},n[2]));
-      nb.addEventListener("click",function(){ST.tab=n[0];ST.navExpanded=false;if(n[0]!=="chat")ST.openChat=null;redraw();});
-      navPill.appendChild(nb);
-    });
-    navFloat.appendChild(navPill);
-  }
-  var homeBtn=b({css:{width:"56px",height:"56px",borderRadius:"50%",background:ST.tab==="feed"?t.a:"white",border:"none",fontSize:"24px",boxShadow:"0 4px 20px rgba(0,0,0,.2)",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center"}});
+  // Floating nav - home button bottom left, options slide right
+  var navFloat=d({css:{position:"fixed",bottom:"20px",left:"20px",zIndex:45,display:"flex",flexDirection:"row",alignItems:"center",gap:"8px"}});
+  var homeBtn=b({css:{width:"52px",height:"52px",borderRadius:"50%",background:ST.tab==="feed"?t.a:"white",border:"none",fontSize:"22px",boxShadow:"0 4px 20px rgba(0,0,0,.2)",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}});
   homeBtn.innerHTML="&#127968;";
   homeBtn.addEventListener("click",function(){
     if(ST.tab!=="feed"){ST.tab="feed";ST.navExpanded=false;fetchAllFeeds();redraw();}
     else{ST.navExpanded=!ST.navExpanded;redraw();}
   });
   navFloat.appendChild(homeBtn);
+  if(ST.navExpanded){
+    var navPill=d({css:{background:"white",borderRadius:"50px",padding:"5px 6px",display:"flex",gap:"2px",boxShadow:"0 4px 20px rgba(0,0,0,.15)",animation:"fadeUp .2s ease"}});
+    [["chat","&#128172;","Chat"],["calendar","&#128197;","Cal"],["profile","&#128100;","Me"]].forEach(function(n){
+      var nb=b({css:{display:"flex",flexDirection:"column",alignItems:"center",gap:"2px",padding:"5px 12px",borderRadius:"50px",background:ST.tab===n[0]?t.ap:"transparent",border:"none",cursor:"pointer",fontFamily:"inherit"}});
+      nb.appendChild(d({html:n[1],css:{fontSize:"18px"}}));
+      nb.appendChild(el("small",{css:{fontSize:"9px",color:ST.tab===n[0]?t.a:"#9B7B62",fontWeight:ST.tab===n[0]?800:600}},n[2]));
+      nb.addEventListener("click",function(){ST.tab=n[0];ST.navExpanded=false;if(n[0]!=="chat")ST.openChat=null;redraw();});
+      navPill.appendChild(nb);
+    });
+    navFloat.appendChild(navPill);
+  }
   wrap.appendChild(navFloat);
   if(ST.editingGroup)wrap.appendChild(buildEditGroup(ST.editingGroup));
   if(ST.creatingGroup)wrap.appendChild(buildCreateGroup());
@@ -834,7 +834,7 @@ function buildFeed(t,grp){
   var ptr=d({css:{textAlign:"center",padding:"0",fontSize:"12px",color:"#9B7B62",fontWeight:700,flexShrink:0,height:"0px",overflow:"hidden",transition:"height .15s ease,opacity .15s ease",opacity:"0"}});
   ptr.textContent="Release to refresh";wrap.appendChild(ptr);
   // Compose bar removed - use + button instead
-  var list=d({cls:"scr",css:{padding:"4px 0 100px",display:"flex",flexDirection:"column",gap:"4px"}});
+  var list=d({cls:"scr",css:{padding:"4px 0 90px",display:"flex",flexDirection:"column",gap:"4px"}});
 
   // Pull to refresh touch handling
   var touchStartY=0;var pulling=false;
@@ -887,8 +887,32 @@ function buildFeed(t,grp){
     return qa;
   }
   var hideAll=function(){qaVisible=false;[qaCheckin,qaPhoto,qaVideo].forEach(function(q){q.style.display="none";});fab.style.transform="";};
-  var qaVideo=makeQA("\uD83C\uDFA5","Video",function(){hideAll();ST.upType="photo";ST.upIsVideo=true;ST.upStep=2;ST.upCap="";ST.upImg=null;ST.upOpen=true;redraw();});
-  var qaPhoto=makeQA("\uD83D\uDCF7","Photo",function(){hideAll();ST.upType="photo";ST.upIsVideo=false;ST.upStep=2;ST.upCap="";ST.upImg=null;ST.upOpen=true;redraw();});
+  var qaVideo=makeQA("\uD83C\uDFA5","Video",function(){
+    hideAll();
+    // Open camera directly for video recording
+    var vfi=document.createElement("input");vfi.type="file";vfi.accept="video/*";vfi.capture="camcorder";
+    vfi.style.display="none";document.body.appendChild(vfi);
+    vfi.addEventListener("change",function(){
+      var f=this.files&&this.files[0];document.body.removeChild(vfi);
+      if(!f)return;
+      ST.upType="photo";ST.upIsVideo=true;ST.upVideoFile=f;ST.upStep=2;ST.upCap="";
+      var r=new FileReader();r.onload=function(e){ST.upImg=e.target.result;ST.upOpen=true;redraw();};r.readAsDataURL(f);
+    });
+    vfi.click();
+  });
+  var qaPhoto=makeQA("\uD83D\uDCF7","Photo",function(){
+    hideAll();
+    // Open camera directly for photo
+    var pfi=document.createElement("input");pfi.type="file";pfi.accept="image/*";pfi.capture="camera";
+    pfi.style.display="none";document.body.appendChild(pfi);
+    pfi.addEventListener("change",function(){
+      var f=this.files&&this.files[0];document.body.removeChild(pfi);
+      if(!f)return;
+      ST.upType="photo";ST.upIsVideo=false;ST.upVideoFile=null;ST.upStep=2;ST.upCap="";
+      var r=new FileReader();r.onload=function(e){ST.upImg=e.target.result;ST.upOpen=true;redraw();};r.readAsDataURL(f);
+    });
+    pfi.click();
+  });
   var qaCheckin=makeQA("\uD83D\uDCCD","Check-in",function(){hideAll();ST.upType="checkin";ST.upStep=3;ST.upCi="";ST.upOpen=true;redraw();});
   fabWrap.appendChild(qaVideo);fabWrap.appendChild(qaPhoto);fabWrap.appendChild(qaCheckin);
   var fab=b({css:{width:"52px",height:"52px",borderRadius:"50%",background:t.a,border:"none",color:"white",fontSize:"24px",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 18px "+t.a+"88",cursor:"pointer",fontFamily:"inherit",transition:"transform .15s ease"}},"+");
