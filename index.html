@@ -828,13 +828,8 @@ function buildFeed(t,grp){
   // Pull to refresh indicator
   var ptr=d({css:{textAlign:"center",padding:"0",fontSize:"12px",color:"#9B7B62",fontWeight:700,flexShrink:0,height:"0px",overflow:"hidden",transition:"height .15s ease,opacity .15s ease",opacity:"0"}});
   ptr.textContent="Release to refresh";wrap.appendChild(ptr);
-  var cb=b({css:{margin:"8px 12px 0",padding:"10px 13px",borderRadius:"13px",background:t.cb,border:"2px dashed "+t.al,display:"flex",alignItems:"center",gap:"8px",cursor:"pointer",textAlign:"left",flexShrink:0,fontFamily:"inherit",alignSelf:"stretch"}});
-  var cav=d({css:{width:"28px",height:"28px",borderRadius:"50%",background:t.ap,border:"2px solid "+t.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"14px",flexShrink:0,overflow:"hidden"}});
-  if(ST.avatar&&ST.avatar.startsWith("data:")){var cavImg=el("img",{css:{width:"100%",height:"100%",objectFit:"cover",display:"block"}});cavImg.src=ST.avatar;cav.appendChild(cavImg);}
-  else cav.textContent=ST.avatar;cb.appendChild(cav);
-  cb.appendChild(d({css:{fontSize:"13px",color:"#9B7B62",fontWeight:600}},"Share something with your family..."));
-  cb.addEventListener("click",function(){ST.compose=true;redraw();});wrap.appendChild(cb);
-  var list=d({cls:"scr",css:{padding:"9px 12px 80px",display:"flex",flexDirection:"column",gap:"10px"}});
+  // Compose bar removed - use + button instead
+  var list=d({cls:"scr",css:{padding:"4px 0 80px",display:"flex",flexDirection:"column",gap:"4px"}});
 
   // Pull to refresh touch handling
   var touchStartY=0;var pulling=false;
@@ -877,8 +872,36 @@ function buildFeed(t,grp){
     feedItems.forEach(function(item){list.appendChild(buildItem(item,t));});
   }
   wrap.appendChild(list);
-  var fab=b({css:{position:"fixed",bottom:"76px",right:"20px",width:"48px",height:"48px",borderRadius:"50%",background:t.a,border:"none",color:"white",fontSize:"22px",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 18px "+t.a+"88",cursor:"pointer",zIndex:40,fontFamily:"inherit"}},"+");
-  fab.addEventListener("click",function(){ST.compose=true;redraw();});wrap.appendChild(fab);
+  var fabWrap=d({css:{position:"fixed",bottom:"76px",right:"20px",zIndex:40,display:"flex",flexDirection:"column",alignItems:"flex-end",gap:"10px"}});
+  // Quick action buttons (shown on long press)
+  var qaVisible=false;
+  var qaPhoto=b({css:{display:"none",alignItems:"center",gap:"8px",padding:"8px 14px",borderRadius:"50px",background:"white",border:"none",boxShadow:"0 2px 12px rgba(0,0,0,.15)",fontSize:"13px",fontWeight:700,color:"#3D2314",cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}});
+  qaPhoto.innerHTML="\uD83D\uDCF7 Photo or Video";
+  qaPhoto.addEventListener("click",function(){qaVisible=false;qaPhoto.style.display="none";qaCheckin.style.display="none";ST.upType="photo";ST.upStep=2;ST.upCap="";ST.upImg=null;ST.upOpen=true;redraw();});
+  var qaCheckin=b({css:{display:"none",alignItems:"center",gap:"8px",padding:"8px 14px",borderRadius:"50px",background:"white",border:"none",boxShadow:"0 2px 12px rgba(0,0,0,.15)",fontSize:"13px",fontWeight:700,color:"#3D2314",cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}});
+  qaCheckin.innerHTML="\uD83D\uDCCD Check-in";
+  qaCheckin.addEventListener("click",function(){qaVisible=false;qaPhoto.style.display="none";qaCheckin.style.display="none";ST.upType="checkin";ST.upStep=3;ST.upCi="";ST.upOpen=true;redraw();});
+  fabWrap.appendChild(qaCheckin);fabWrap.appendChild(qaPhoto);
+  var fab=b({css:{width:"52px",height:"52px",borderRadius:"50%",background:t.a,border:"none",color:"white",fontSize:"24px",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 18px "+t.a+"88",cursor:"pointer",fontFamily:"inherit",transition:"transform .15s ease"}},"+");
+  var pressTimer=null;
+  fab.addEventListener("touchstart",function(e){
+    pressTimer=setTimeout(function(){
+      qaVisible=true;
+      qaPhoto.style.display="flex";qaCheckin.style.display="flex";
+      fab.style.transform="rotate(45deg)";
+    },400);
+  },{passive:true});
+  fab.addEventListener("touchend",function(){
+    if(pressTimer){clearTimeout(pressTimer);pressTimer=null;}
+    if(!qaVisible){ST.compose=true;redraw();}
+    else{fab.style.transform="";}
+  });
+  fab.addEventListener("touchmove",function(){if(pressTimer){clearTimeout(pressTimer);pressTimer=null;}},{passive:true});
+  // Close quick actions on outside tap
+  document.addEventListener("touchstart",function(e){
+    if(qaVisible&&!fabWrap.contains(e.target)){qaVisible=false;qaPhoto.style.display="none";qaCheckin.style.display="none";fab.style.transform="";}
+  },{passive:true});
+  fabWrap.appendChild(fab);wrap.appendChild(fabWrap);
   return wrap;
 }
 
@@ -899,16 +922,16 @@ function buildItem(item,t){
     bd.appendChild(wb);card.appendChild(bd);wrap.appendChild(card);
   }
   if(item.type==="photo"){
-    var card=d({cls:"card"});
+    var card=d({css:{background:"#FFF9F2",borderRadius:"16px",overflow:"hidden",marginBottom:"6px",boxShadow:"0 1px 4px rgba(0,0,0,.06)"}});
     if(item.uploading){
-      var upCard=d({css:{background:"#FFF9F2",borderRadius:"16px",border:"1px solid #F5DDD1",padding:"16px",display:"flex",alignItems:"center",gap:"12px",marginBottom:"10px",opacity:".7"}});
+      var upCard=d({css:{background:"#FFF9F2",borderRadius:"16px",border:"1px solid #F5DDD1",padding:"16px",display:"flex",alignItems:"center",gap:"12px",marginBottom:"6px",opacity:".7"}});
       var upIcon=d({css:{fontSize:"28px",flexShrink:0}});upIcon.textContent="\uD83D\uDCF8";upCard.appendChild(upIcon);
       var upTxt=d({css:{flex:1}});
       upTxt.appendChild(d({css:{fontSize:"14px",fontWeight:700,color:"#3D2314"}},"Uploading photo..."));
       upTxt.appendChild(d({css:{fontSize:"12px",color:"#9B7B62",marginTop:"2px"}},"This may take a moment"));
       upCard.appendChild(upTxt);wrap.appendChild(upCard);return wrap;
     }
-    var hdr=d({css:{display:"flex",alignItems:"center",gap:"8px",padding:"10px 12px 7px"}});
+    var hdr=d({css:{display:"flex",alignItems:"center",gap:"8px",padding:"8px 10px 5px"}});
     var av=d({css:{width:"36px",height:"36px",borderRadius:"50%",background:t.ap,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"18px",flexShrink:0}});av.textContent=item.av;hdr.appendChild(av);
     var nm=d();nm.appendChild(d({css:{fontSize:"14px",fontWeight:700,color:"#3D2314"}},item.name));nm.appendChild(d({css:{fontSize:"11px",color:"#9B7B62"}},item.createdAt?timeAgo(item.createdAt):item.time));hdr.appendChild(nm);
     // Delete button for own posts
@@ -943,7 +966,7 @@ function buildItem(item,t){
       vidEl.style.cssText="width:100%;max-height:80vh;object-fit:contain;display:block;background:#000;";
       vidEl.controls=true;vidEl.playsInline=true;vidEl.preload="metadata";card.appendChild(vidEl);
     } else if(item.imgUrl){
-      var img=el("img",{css:{width:"100%",maxHeight:"80vh",objectFit:"contain",display:"block",cursor:"zoom-in",background:"#F5EDE4"}});
+      var img=el("img",{css:{width:"100%",maxHeight:"85vh",objectFit:"contain",display:"block",cursor:"zoom-in",background:"#1a1a1a"}});
       img.src=item.imgUrl;
       img.addEventListener("click",function(){showFullScreen(item.imgUrl);});
       card.appendChild(img);
@@ -969,7 +992,7 @@ function buildItem(item,t){
     body.appendChild(acts);card.appendChild(body);wrap.appendChild(card);
   }
   if(item.type==="checkin"){
-    var card=d({css:{background:t.ap,border:"2px solid "+t.al,borderRadius:"16px",padding:"13px",display:"flex",gap:"10px"}});
+    var card=d({css:{background:t.ap,border:"1.5px solid "+t.al,borderRadius:"14px",padding:"10px 12px",display:"flex",gap:"10px",margin:"0 4px"}});
     var av=d({css:{width:"40px",height:"40px",borderRadius:"50%",background:t.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"20px",flexShrink:0}});av.textContent=item.av;card.appendChild(av);
     var bd=d({css:{flex:1}});bd.appendChild(d({css:{fontSize:"12px",fontWeight:700,color:t.ad}},item.name+" checked in"));bd.appendChild(d({css:{fontSize:"13px",color:"#3D2314",marginTop:"4px",lineHeight:"1.5"}},item.status));bd.appendChild(d({css:{fontSize:"11px",color:"#9B7B62",marginTop:"4px"}},item.createdAt?timeAgo(item.createdAt):item.time));card.appendChild(bd);
     if(item.name===(ST.name||"You")||item.av===ST.avatar){
