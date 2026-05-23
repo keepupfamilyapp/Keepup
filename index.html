@@ -1627,6 +1627,7 @@ function buildUpload(t,grp){
     sh.appendChild(upHdr(ST.upIsVideo?"Add Video":"Add Photo",null));
     var body=d({cls:"scr",css:{padding:"14px 15px"}});
     var fi=el("input",{type:"file",accept:"image/*,video/*",css:{display:"none"}});
+    // No capture attribute - lets user choose camera or gallery
     fi.addEventListener("change",function(){
       var f=this.files&&this.files[0];if(!f)return;
       ST.upIsVideo=f.type.startsWith("video/");
