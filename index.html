@@ -1967,31 +1967,39 @@ auth.onAuthStateChanged(function(user){
       processInviteToken(t);
       return;
     }
-    if(ST.boarded){
-      // Load profile from Firebase to sync across browsers
-      db.collection("members").doc(user.uid).get().then(function(doc){
-        if(doc.exists){
-          var m=doc.data();
-          if(m.name){ST.name=m.name;localStorage.setItem("ku_name",m.name);}
-          if(m.av){ST.avatar=m.av;localStorage.setItem("ku_av",m.av);}
-          if(m.groupLabel){
-            ST.groups[0].label=m.groupLabel;
-            localStorage.setItem("ku_grp",JSON.stringify({label:m.groupLabel,icon:m.groupIcon||ST.groups[0].icon}));
-          }
-          if(m.groupIcon)ST.groups[0].icon=m.groupIcon;
-          if(m.isAdmin!==undefined)localStorage.setItem("ku_admin",m.isAdmin?"1":"0");
+    // Always check Firebase for existing profile - even if not boarded locally
+    db.collection("members").doc(user.uid).get().then(function(doc){
+      if(doc.exists){
+        var m=doc.data();
+        // Restore profile from Firebase
+        if(m.name){ST.name=m.name;localStorage.setItem("ku_name",m.name);}
+        if(m.av){ST.avatar=m.av;localStorage.setItem("ku_av",m.av);}
+        if(m.groupLabel){
+          ST.groups[0].label=m.groupLabel;
+          ST.groups[0].icon=m.groupIcon||ST.groups[0].icon;
+          localStorage.setItem("ku_grp",JSON.stringify({label:m.groupLabel,icon:m.groupIcon||ST.groups[0].icon}));
         }
+        if(m.isAdmin!==undefined)localStorage.setItem("ku_admin",m.isAdmin?"1":"0");
+        // Mark as boarded so we skip onboarding
+        ST.boarded=true;
+        localStorage.setItem("ku_ob","1");
         fetchAllFeeds();
         syncOn();
         redraw();
-      }).catch(function(){
+      } else if(ST.boarded){
+        // No Firebase profile but locally boarded - sync anyway
         fetchAllFeeds();
         syncOn();
         redraw();
-      });
-    } else {
+      } else {
+        // New user - show onboarding
+        redraw();
+      }
+    }).catch(function(){
+      // Error loading profile - fall back to local state
+      if(ST.boarded){fetchAllFeeds();syncOn();}
       redraw();
-    }
+    });
   } else {
     // Always redraw so "Signing you in..." clears
     redraw();
