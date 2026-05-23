@@ -28,6 +28,8 @@ html,body{height:100%;background:#FAF6F0;font-family:Nunito,sans-serif;overflow:
 @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
 @keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
 @keyframes slideDown{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:translateY(0)}}
+button{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;}
+.no-select{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;}
 .ob-screen{position:fixed;inset:0;background:#FAF6F0;display:flex;flex-direction:column;z-index:100;}
 .ob-hero{flex:0 0 42%;background:linear-gradient(170deg,#F5DDD1,#FAF0E6 60%,#E8F2E9);display:flex;align-items:center;justify-content:center;}
 .ob-body{flex:1;display:flex;flex-direction:column;padding:24px 26px 32px;animation:fadeUp .4s ease both;}
@@ -780,8 +782,8 @@ function buildApp(){
   wrap.appendChild(content);
   // Floating nav
   // Floating nav - home button bottom left, options slide right
-  var navFloat=d({css:{position:"fixed",bottom:"20px",left:"20px",zIndex:45,display:"flex",flexDirection:"row",alignItems:"center",gap:"8px"}});
-  var homeBtn=b({css:{width:"52px",height:"52px",borderRadius:"50%",background:ST.tab==="feed"?t.a:"white",border:"none",fontSize:"22px",boxShadow:"0 4px 20px rgba(0,0,0,.2)",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}});
+  var navFloat=d({css:{position:"fixed",bottom:"20px",left:"20px",zIndex:45,display:"flex",flexDirection:"row",alignItems:"center",gap:"8px",WebkitUserSelect:"none",userSelect:"none"}});
+  var homeBtn=b({css:{width:"52px",height:"52px",borderRadius:"50%",background:ST.tab==="feed"?t.a:"white",border:"none",fontSize:"22px",boxShadow:"0 4px 20px rgba(0,0,0,.2)",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,WebkitUserSelect:"none",userSelect:"none",WebkitTouchCallout:"none"}});
   homeBtn.innerHTML="&#127968;";
   homeBtn.addEventListener("click",function(){
     if(ST.tab!=="feed"){ST.tab="feed";ST.navExpanded=false;fetchAllFeeds();redraw();}
@@ -877,7 +879,7 @@ function buildFeed(t,grp){
     feedItems.forEach(function(item){list.appendChild(buildItem(item,t));});
   }
   wrap.appendChild(list);
-  var fabWrap=d({css:{position:"fixed",bottom:"76px",right:"20px",zIndex:40,display:"flex",flexDirection:"column",alignItems:"flex-end",gap:"10px"}});
+  var fabWrap=d({css:{position:"fixed",bottom:"20px",right:"20px",zIndex:40,display:"flex",flexDirection:"column",alignItems:"flex-end",gap:"10px",WebkitUserSelect:"none",userSelect:"none"}});
   // Quick action buttons (shown on long press)
   var qaVisible=false;
   function makeQA(icon,label,onClick){
@@ -915,7 +917,7 @@ function buildFeed(t,grp){
   });
   var qaCheckin=makeQA("\uD83D\uDCCD","Check-in",function(){hideAll();ST.upType="checkin";ST.upStep=3;ST.upCi="";ST.upOpen=true;redraw();});
   fabWrap.appendChild(qaVideo);fabWrap.appendChild(qaPhoto);fabWrap.appendChild(qaCheckin);
-  var fab=b({css:{width:"52px",height:"52px",borderRadius:"50%",background:t.a,border:"none",color:"white",fontSize:"24px",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 18px "+t.a+"88",cursor:"pointer",fontFamily:"inherit",transition:"transform .15s ease"}},"+");
+  var fab=b({css:{width:"52px",height:"52px",borderRadius:"50%",background:t.a,border:"none",color:"white",fontSize:"24px",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 18px "+t.a+"88",cursor:"pointer",fontFamily:"inherit",transition:"transform .15s ease",WebkitUserSelect:"none",userSelect:"none",WebkitTouchCallout:"none"}},"+");
   var pressTimer=null;
   fab.addEventListener("touchstart",function(e){
     pressTimer=setTimeout(function(){
@@ -1524,7 +1526,7 @@ function buildUpload(t,grp){
     h.appendChild(bb);h.appendChild(d({css:{fontSize:"16px",fontWeight:700,color:"#C4714A"}},title));h.appendChild(d({css:{width:"60px"}}));return h;
   }
   if(ST.upStep===2){
-    sh.appendChild(upHdr("Add Photo",null));
+    sh.appendChild(upHdr(ST.upIsVideo?"Add Video":"Add Photo",null));
     var body=d({cls:"scr",css:{padding:"14px 15px"}});
     var fi=el("input",{type:"file",accept:"image/*,video/*",css:{display:"none"}});
     fi.addEventListener("change",function(){
