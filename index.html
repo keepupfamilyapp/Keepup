@@ -747,7 +747,7 @@ function buildApp(){
   var grpBtn=b({css:{position:"absolute",left:"50%",transform:"translateX(-50%)",display:"flex",alignItems:"center",gap:"6px",padding:"5px 13px",borderRadius:"50px",background:t.ap,border:"1.5px solid "+t.al,fontSize:"13px",fontWeight:800,color:t.ad,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}});
   var grpIc=d({css:{fontSize:"14px"}});grpIc.textContent=grp.icon;grpBtn.appendChild(grpIc);
   grpBtn.appendChild(document.createTextNode(grp.label));
-  if(ST.groups.length>1)grpBtn.appendChild(d({css:{fontSize:"10px",marginLeft:"2px",opacity:".7"}},"▾"));
+  if(ST.groups.length>1)grpBtn.appendChild(d({css:{fontSize:"10px",marginLeft:"2px",opacity:".7"}},"\u25BE"));
   grpBtn.addEventListener("click",function(){ST.showGroupSwitcher=!ST.showGroupSwitcher;redraw();});
   bar.appendChild(grpBtn);
   var av=d({css:{width:"30px",height:"30px",borderRadius:"50%",background:t.ap,border:"2px solid "+t.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"15px",overflow:"hidden",cursor:"pointer",flexShrink:0}});
@@ -765,7 +765,7 @@ function buildApp(){
       var gt=th(g.id);var ia=g.id===ST.group;
       var gr=b({css:{display:"flex",alignItems:"center",gap:"10px",width:"100%",padding:"12px 16px",background:ia?gt.ap:"white",border:"none",borderBottom:"1px solid #F5DDD1",fontSize:"14px",fontWeight:ia?800:600,color:ia?gt.ad:"#3D2314",cursor:"pointer",fontFamily:"inherit",textAlign:"left"}});
       var gi=d({css:{fontSize:"18px"}});gi.textContent=g.icon;gr.appendChild(gi);gr.appendChild(document.createTextNode(g.label));
-      if(ia)gr.appendChild(d({css:{marginLeft:"auto",fontSize:"14px",color:gt.a}},"✓"));
+      if(ia)gr.appendChild(d({css:{marginLeft:"auto",fontSize:"14px",color:gt.a}},"\u2713"));
       gr.addEventListener("click",function(){ST.group=g.id;ST.showGroupSwitcher=false;fetchAllFeeds();redraw();});
       gsw.appendChild(gr);
     });
