@@ -17,8 +17,7 @@ html,body{height:100%;background:#FAF6F0;font-family:Nunito,sans-serif;overflow:
 #app{position:fixed;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column;overflow:hidden;}
 .scr{overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;flex:1;scrollbar-width:none;}
 .scr::-webkit-scrollbar{display:none;}
-.nav{display:flex;background:#FFF9F2;border-top:2px solid #F5DDD1;padding:8px 0 16px;flex-shrink:0;}
-.navbtn{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;border:none;background:none;font-family:inherit;}
+/* floating nav - no bottom bar */
 .card{background:#FFF9F2;border-radius:16px;overflow:hidden;margin-bottom:10px;border:1px solid #F5DDD1;box-shadow:0 2px 8px rgba(0,0,0,.06);}
 .pill{display:flex;align-items:center;gap:5px;padding:6px 12px;border-radius:50px;border:2px solid rgba(107,66,38,.12);background:#FAF6F0;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:inherit;flex-shrink:0;}
 .pill.active{background:#F5DDD1;border-color:#C4714A;color:#6B4226;}
@@ -401,7 +400,7 @@ function th(id){return TH[id]||TH.imm;}
 var ST={
   boarded:false,obStep:0,obName:"",obAvatar:"\uD83D\uDC69",obPhoto:null,
   obGrpName:"",obGrpEmoji:"\u2764\uFE0F",obGrpPhoto:null,joinInvite:false,fbMembers:{},
-  editingGroup:null,editingBirthdays:false,creatingGroup:false,showGroupSwitcher:false,
+  editingGroup:null,editingBirthdays:false,creatingGroup:false,showGroupSwitcher:false,navExpanded:false,
   tab:"feed",group:"imm",name:"Sean",avatar:"\uD83D\uDC68",feedLoading:false,
   openChat:null,
   chatMsgs:{imm:[]},
@@ -779,25 +778,28 @@ function buildApp(){
   else if(ST.tab==="calendar")content=buildCal(t);
   else content=buildProfile(t);
   wrap.appendChild(content);
-  var nav=el("nav",{cls:"nav"});
-  [["feed","&#127968;","Home"],["chat","&#128172;","Chat"],["calendar","&#128197;","Cal"],["profile","&#128100;","Me"]].forEach(function(n){
-    var nb=b({cls:"navbtn"});
-    nb.appendChild(d({html:n[1],css:{fontSize:"20px"}}));
-    nb.appendChild(el("small",{css:{color:ST.tab===n[0]?t.a:"#9B7B62"}},n[2]));
-    if(ST.tab===n[0])nb.appendChild(d({css:{width:"15px",height:"3px",borderRadius:"3px",background:t.a,margin:"1px auto 0"}}));
-    nb.addEventListener("click",function(){
-      ST.tab=n[0];if(n[0]!=="chat")ST.openChat=null;
-      if(n[0]==="feed")ST.groups.forEach(function(g){
-        db.collection("feed").where("groupId","==",g.id).get().then(function(snap){
-          ST.feed[g.id]=[];snap.forEach(function(doc){ST.feed[g.id].push(Object.assign({},doc.data(),{id:doc.id}));});
-          ST.feed[g.id].sort(function(a,b){var ta=a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():0;var tb=b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():0;return tb-ta;});
-          redraw();
-        }).catch(function(){});
-      });
-      redraw();
-    });nav.appendChild(nb);
+  // Floating nav
+  var navFloat=d({css:{position:"fixed",bottom:"20px",left:"50%",transform:"translateX(-50%)",zIndex:45,display:"flex",flexDirection:"column",alignItems:"center",gap:"8px"}});
+  var navExpanded=ST.navExpanded||false;
+  if(navExpanded){
+    var navPill=d({css:{background:"white",borderRadius:"50px",padding:"6px 8px",display:"flex",gap:"4px",boxShadow:"0 4px 20px rgba(0,0,0,.15)"}});
+    [["chat","&#128172;","Chat"],["calendar","&#128197;","Cal"],["profile","&#128100;","Me"]].forEach(function(n){
+      var nb=b({css:{display:"flex",flexDirection:"column",alignItems:"center",gap:"2px",padding:"6px 14px",borderRadius:"50px",background:ST.tab===n[0]?t.ap:"transparent",border:"none",cursor:"pointer",fontFamily:"inherit"}});
+      nb.appendChild(d({html:n[1],css:{fontSize:"20px"}}));
+      nb.appendChild(el("small",{css:{fontSize:"10px",color:ST.tab===n[0]?t.a:"#9B7B62",fontWeight:ST.tab===n[0]?800:600}},n[2]));
+      nb.addEventListener("click",function(){ST.tab=n[0];ST.navExpanded=false;if(n[0]!=="chat")ST.openChat=null;redraw();});
+      navPill.appendChild(nb);
+    });
+    navFloat.appendChild(navPill);
+  }
+  var homeBtn=b({css:{width:"56px",height:"56px",borderRadius:"50%",background:ST.tab==="feed"?t.a:"white",border:"none",fontSize:"24px",boxShadow:"0 4px 20px rgba(0,0,0,.2)",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center"}});
+  homeBtn.innerHTML="&#127968;";
+  homeBtn.addEventListener("click",function(){
+    if(ST.tab!=="feed"){ST.tab="feed";ST.navExpanded=false;fetchAllFeeds();redraw();}
+    else{ST.navExpanded=!ST.navExpanded;redraw();}
   });
-  wrap.appendChild(nav);
+  navFloat.appendChild(homeBtn);
+  wrap.appendChild(navFloat);
   if(ST.editingGroup)wrap.appendChild(buildEditGroup(ST.editingGroup));
   if(ST.creatingGroup)wrap.appendChild(buildCreateGroup());
   if(ST.editingBirthdays)wrap.appendChild(buildEditBirthdays());
@@ -832,7 +834,7 @@ function buildFeed(t,grp){
   var ptr=d({css:{textAlign:"center",padding:"0",fontSize:"12px",color:"#9B7B62",fontWeight:700,flexShrink:0,height:"0px",overflow:"hidden",transition:"height .15s ease,opacity .15s ease",opacity:"0"}});
   ptr.textContent="Release to refresh";wrap.appendChild(ptr);
   // Compose bar removed - use + button instead
-  var list=d({cls:"scr",css:{padding:"4px 0 80px",display:"flex",flexDirection:"column",gap:"4px"}});
+  var list=d({cls:"scr",css:{padding:"4px 0 100px",display:"flex",flexDirection:"column",gap:"4px"}});
 
   // Pull to refresh touch handling
   var touchStartY=0;var pulling=false;
@@ -878,31 +880,34 @@ function buildFeed(t,grp){
   var fabWrap=d({css:{position:"fixed",bottom:"76px",right:"20px",zIndex:40,display:"flex",flexDirection:"column",alignItems:"flex-end",gap:"10px"}});
   // Quick action buttons (shown on long press)
   var qaVisible=false;
-  var qaPhoto=b({css:{display:"none",alignItems:"center",gap:"8px",padding:"8px 14px",borderRadius:"50px",background:"white",border:"none",boxShadow:"0 2px 12px rgba(0,0,0,.15)",fontSize:"13px",fontWeight:700,color:"#3D2314",cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}});
-  qaPhoto.innerHTML="\uD83D\uDCF7 Photo or Video";
-  qaPhoto.addEventListener("click",function(){qaVisible=false;qaPhoto.style.display="none";qaCheckin.style.display="none";ST.upType="photo";ST.upStep=2;ST.upCap="";ST.upImg=null;ST.upOpen=true;redraw();});
-  var qaCheckin=b({css:{display:"none",alignItems:"center",gap:"8px",padding:"8px 14px",borderRadius:"50px",background:"white",border:"none",boxShadow:"0 2px 12px rgba(0,0,0,.15)",fontSize:"13px",fontWeight:700,color:"#3D2314",cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}});
-  qaCheckin.innerHTML="\uD83D\uDCCD Check-in";
-  qaCheckin.addEventListener("click",function(){qaVisible=false;qaPhoto.style.display="none";qaCheckin.style.display="none";ST.upType="checkin";ST.upStep=3;ST.upCi="";ST.upOpen=true;redraw();});
-  fabWrap.appendChild(qaCheckin);fabWrap.appendChild(qaPhoto);
+  function makeQA(icon,label,onClick){
+    var qa=b({css:{display:"none",alignItems:"center",gap:"10px",padding:"10px 16px",borderRadius:"50px",background:"white",border:"none",boxShadow:"0 2px 16px rgba(0,0,0,.15)",fontSize:"14px",fontWeight:700,color:"#3D2314",cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}});
+    qa.innerHTML=icon+" "+label;
+    qa.addEventListener("click",onClick);
+    return qa;
+  }
+  var hideAll=function(){qaVisible=false;[qaCheckin,qaPhoto,qaVideo].forEach(function(q){q.style.display="none";});fab.style.transform="";};
+  var qaVideo=makeQA("\uD83C\uDFA5","Video",function(){hideAll();ST.upType="photo";ST.upIsVideo=true;ST.upStep=2;ST.upCap="";ST.upImg=null;ST.upOpen=true;redraw();});
+  var qaPhoto=makeQA("\uD83D\uDCF7","Photo",function(){hideAll();ST.upType="photo";ST.upIsVideo=false;ST.upStep=2;ST.upCap="";ST.upImg=null;ST.upOpen=true;redraw();});
+  var qaCheckin=makeQA("\uD83D\uDCCD","Check-in",function(){hideAll();ST.upType="checkin";ST.upStep=3;ST.upCi="";ST.upOpen=true;redraw();});
+  fabWrap.appendChild(qaVideo);fabWrap.appendChild(qaPhoto);fabWrap.appendChild(qaCheckin);
   var fab=b({css:{width:"52px",height:"52px",borderRadius:"50%",background:t.a,border:"none",color:"white",fontSize:"24px",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 18px "+t.a+"88",cursor:"pointer",fontFamily:"inherit",transition:"transform .15s ease"}},"+");
   var pressTimer=null;
   fab.addEventListener("touchstart",function(e){
     pressTimer=setTimeout(function(){
       qaVisible=true;
-      qaPhoto.style.display="flex";qaCheckin.style.display="flex";
+      qaCheckin.style.display="flex";qaPhoto.style.display="flex";qaVideo.style.display="flex";
       fab.style.transform="rotate(45deg)";
     },400);
   },{passive:true});
   fab.addEventListener("touchend",function(){
     if(pressTimer){clearTimeout(pressTimer);pressTimer=null;}
     if(!qaVisible){ST.compose=true;redraw();}
-    else{fab.style.transform="";}
   });
   fab.addEventListener("touchmove",function(){if(pressTimer){clearTimeout(pressTimer);pressTimer=null;}},{passive:true});
   // Close quick actions on outside tap
   document.addEventListener("touchstart",function(e){
-    if(qaVisible&&!fabWrap.contains(e.target)){qaVisible=false;qaPhoto.style.display="none";qaCheckin.style.display="none";fab.style.transform="";}
+    if(qaVisible&&!fabWrap.contains(e.target)){hideAll();}
   },{passive:true});
   fabWrap.appendChild(fab);wrap.appendChild(fabWrap);
   return wrap;
