@@ -1091,7 +1091,7 @@ function buildItem(item,t){
       hdr.appendChild(delBtn);
     }
     card.appendChild(hdr);
-    if(item.imgUrl&&item.type==="video"){
+    if(item.imgUrl&&(item.type==="video"||item.isVideo)){
       var vidEl=document.createElement("video");vidEl.src=item.imgUrl;
       vidEl.style.cssText="width:100%;max-height:80vh;object-fit:contain;display:block;background:#000;";
       vidEl.controls=true;vidEl.playsInline=true;vidEl.preload="metadata";card.appendChild(vidEl);
