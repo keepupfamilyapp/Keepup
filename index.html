@@ -1968,7 +1968,7 @@ function submitPost(){
       });
     }).catch(function(e){console.log("checkin post failed",e);});
   } else {
-    p={type:isVid?"video":"photo",av:postAv,name:postName,time:"Just now",emoji:"\uD83C\uDF3B",imgUrl:null,cap:postCap,groupId:postGroup};
+    p={type:isVid?"video":"photo",isVideo:isVid,av:postAv,name:postName,time:"Just now",emoji:"\uD83C\uDF3B",imgUrl:null,cap:postCap,groupId:postGroup};
     // Must have real Firebase auth uid for Storage
     if(!currentUser){
       var errB=document.createElement("div");
