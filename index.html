@@ -1052,7 +1052,7 @@ function buildItem(item,t){
     wb.addEventListener("click",function(){ST.tab="chat";ST.openChat=item.groupId;redraw();});
     bd.appendChild(wb);card.appendChild(bd);wrap.appendChild(card);
   }
-  if(item.type==="photo"){
+  if(item.type==="photo"||item.type==="video"){
     var card=d({css:{background:"#FFF9F2",borderRadius:"16px",overflow:"hidden",marginBottom:"6px",boxShadow:"0 1px 4px rgba(0,0,0,.06)"}});
     if(item.uploading){
       var upCard=d({css:{background:"#FFF9F2",borderRadius:"16px",border:"1px solid #F5DDD1",padding:"16px",display:"flex",alignItems:"center",gap:"12px",marginBottom:"6px",opacity:".7"}});
