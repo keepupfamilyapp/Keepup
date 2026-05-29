@@ -783,7 +783,8 @@ function buildOnboarding(){
       ST.chatMsgs={imm:[]};ST.mems={imm:[{av:ST.obPhoto||ST.obAvatar,name:ST.obName,role:"Admin",you:true}]};
       ST.birthdays=[];ST.evs=[];ST.dms=[];ST.boarded=true;
       var isCreator=!ST.joinInvite;
-     if(currentUser){db.collection("userGroups").doc(currentUser.uid).set({groups:ST.groups,updatedAt:firebase.firestore.FieldValue.serverTimestamp()}).catch(function(){});} try{localStorage.setItem("ku_ob","1");localStorage.setItem("ku_name",ST.obName);localStorage.setItem("ku_av",ST.obAvatar);localStorage.setItem("ku_grp",JSON.stringify({label:ST.obGrpName,icon:ST.obGrpEmoji}));localStorage.setItem("ku_admin",isCreator?"1":"0");}catch(e){}
+     var ug=db.collection("userGroups");
+ug.doc(currentUser.uid).set({groups:ST.groups}).catch(function(){});
       // Write full profile to Firestore
       var uid=currentUser?currentUser.uid:(localStorage.getItem("ku_uid")||("u"+Date.now()));
       localStorage.setItem("ku_uid",uid);
