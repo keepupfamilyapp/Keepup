@@ -1760,7 +1760,7 @@ function buildCreateGroup(){
     ST.group=newGid;ST.creatingGroup=false;
     // Save updated groups to localStorage
     try{localStorage.setItem("ku_groups",JSON.stringify(ST.groups));}catch(e){}
-    if(currentUser){db.collection("userGroups").doc(currentUser.uid).set({groups:ST.groups,updatedAt:firebase.firestore.FieldValue.serverTimestamp()}).catch(function(){});}
+    if(currentUser){db.collection("userGroups").doc(currentUser.uid).set({groups:ST.groups}).catch(function(){});}
     redraw();
   sh.appendChild(saveBtn);
   ov.appendChild(sh);return ov;
