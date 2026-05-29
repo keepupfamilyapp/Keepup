@@ -2162,6 +2162,13 @@ auth.onAuthStateChanged(function(user){
           localStorage.setItem("ku_grp",JSON.stringify({label:m.groupLabel,icon:m.groupIcon||ST.groups[0].icon}));
         }
         if(m.isAdmin!==undefined)localStorage.setItem("ku_admin",m.isAdmin?"1":"0");
+        // Load groups from Firestore
+        db.collection("userGroups").doc(user.uid).get().then(function(gdoc){
+          if(gdoc.exists&&gdoc.data().groups&&gdoc.data().groups.length>0){
+            ST.groups=gdoc.data().groups;
+            try{localStorage.setItem("ku_groups",JSON.stringify(ST.groups));}catch(e){}
+          }
+        }).catch(function(){});
         // Mark as boarded so we skip onboarding
         ST.boarded=true;
         localStorage.setItem("ku_ob","1");
