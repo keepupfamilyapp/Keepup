@@ -2166,7 +2166,8 @@ auth.onAuthStateChanged(function(user){
         // Load groups from Firestore
         db.collection("userGroups").doc(user.uid).get().then(function(gdoc){
           if(gdoc.exists&&gdoc.data().groups&&gdoc.data().groups.length>0){
-            ST.groups=gdoc.data().groups;
+            var savedGroups=gdoc.data().groups;
+savedGroups.forEach(function(sg){if(!ST.groups.find(function(g){return g.id===sg.id;}))ST.groups.push(sg);});
             try{localStorage.setItem("ku_groups",JSON.stringify(ST.groups));}catch(e){}
           }
         }).catch(function(){});
