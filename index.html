@@ -1762,6 +1762,7 @@ function buildCreateGroup(){
     try{localStorage.setItem("ku_groups",JSON.stringify(ST.groups));}catch(e){}
     if(currentUser){db.collection("userGroups").doc(currentUser.uid).set({groups:ST.groups}).catch(function(){});}
     redraw();
+  });
   sh.appendChild(saveBtn);
   ov.appendChild(sh);return ov;
 }
