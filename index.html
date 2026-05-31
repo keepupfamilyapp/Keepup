@@ -1711,6 +1711,27 @@ function buildComments(t){
   sb.addEventListener("click",addComment);ft.appendChild(sb);sh.appendChild(ft);ov.appendChild(sh);return ov;
 }
 
+function buildTutorial(){
+  var step=ST.tutorialStep;
+  var steps=[null,{title:"Welcome to Keep Up!",body:"This is your family feed. See photos, check-ins and updates from everyone here.",btn:"Next"},{title:"Post something",body:"Tap the + button in the bottom right to share a photo, video or check-in with your family.",btn:"Next",spot:"fab"},{title:"Navigate",body:"The home button bottom left is your hub. Tap it to reveal Chat, Calendar and your Profile.",btn:"Next",spot:"nav"},{title:"React & Comment",body:"Tap React or Comment on any post. Tap a photo to view it full screen and pinch to zoom.",btn:"Next"},{title:"You're all set!",body:"Keep Up is your private family space. No ads, no algorithms. Just the people you love.",btn:"Let's go!"}];
+  var s=steps[step];if(!s||step>5){ST.showTutorial=false;return d({});}
+  var ov=d({css:{position:"fixed",inset:"0",zIndex:"300"}});
+  var dark=d({css:{position:"absolute",inset:"0",background:"rgba(0,0,0,.72)",pointerEvents:"all"}});
+  dark.addEventListener("click",function(e){e.stopPropagation();});ov.appendChild(dark);
+  if(s.spot==="fab"){ov.appendChild(d({css:{position:"absolute",bottom:"8px",right:"8px",width:"76px",height:"76px",borderRadius:"50%",border:"3px solid #C4714A",boxShadow:"0 0 0 4px rgba(196,113,74,.3)",pointerEvents:"none",animation:"float 1.5s ease-in-out infinite"}}));}
+  else if(s.spot==="nav"){ov.appendChild(d({css:{position:"absolute",bottom:"8px",left:"8px",width:"68px",height:"68px",borderRadius:"50%",border:"3px solid white",boxShadow:"0 0 0 4px rgba(255,255,255,.3)",pointerEvents:"none",animation:"float 1.5s ease-in-out infinite"}}));}
+  var card=d({css:{position:"absolute",bottom:s.spot?"110px":"30%",left:"16px",right:"16px",background:"white",borderRadius:"20px",padding:"22px 20px",boxShadow:"0 8px 32px rgba(0,0,0,.3)",pointerEvents:"all",animation:"slideUp .3s ease"}});
+  var dotRow=d({css:{display:"flex",gap:"6px",justifyContent:"center",marginBottom:"14px"}});
+  [1,2,3,4,5].forEach(function(i){dotRow.appendChild(d({css:{width:i===step?"20px":"7px",height:"7px",borderRadius:"7px",background:i===step?"#C4714A":"#E8C4A8",transition:"all .3s"}}));});
+  card.appendChild(dotRow);
+  card.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"18px",fontWeight:600,color:"#3D2314",marginBottom:"8px",textAlign:"center"}},s.title));
+  card.appendChild(d({css:{fontSize:"14px",color:"#6B4C35",lineHeight:"1.65",textAlign:"center",marginBottom:"18px"}},s.body));
+  var nb=b({css:{width:"100%",padding:"13px",borderRadius:"50px",background:"#C4714A",border:"none",color:"white",fontSize:"15px",fontWeight:800,cursor:"pointer",fontFamily:"inherit"}},s.btn);
+  nb.addEventListener("click",function(){if(step>=5){ST.showTutorial=false;ST.tutorialStep=0;try{localStorage.setItem("ku_tutorial","done");}catch(e){}redraw();}else{ST.tutorialStep=step+1;redraw();}});
+  card.appendChild(nb);
+  if(step<5){var sk=b({css:{width:"100%",padding:"8px",borderRadius:"50px",background:"transparent",border:"none",color:"#9B7B62",fontSize:"13px",cursor:"pointer",fontFamily:"inherit",marginTop:"6px"}},"Skip tutorial");sk.addEventListener("click",function(){ST.showTutorial=false;ST.tutorialStep=0;try{localStorage.setItem("ku_tutorial","done");}catch(e){}redraw();});card.appendChild(sk);}
+  ov.appendChild(card);return ov;
+}
 function buildCreateGroup(){
   var ov=d({cls:"overlay"});ov.addEventListener("click",function(){ST.creatingGroup=false;redraw();});
   var sh=d({cls:"sheet"});sh.addEventListener("click",function(e){e.stopPropagation();});
