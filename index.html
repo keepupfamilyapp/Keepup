@@ -1208,7 +1208,7 @@ function buildChat(t){
     if(last)gd.appendChild(d({css:{fontSize:"12px",color:"#9B7B62",marginTop:"2px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},last.name+": "+last.text));
     else gd.appendChild(d({css:{fontSize:"12px",color:"#9B7B62",marginTop:"2px"}},"No messages yet"));
     row.appendChild(gd);row.appendChild(d({css:{fontSize:"18px",color:gt.al}},">"));
-    row.addEventListener("click",function(){ST.openChat=g.id;redraw();});wrap.appendChild(row);
+    row.addEventListener("click",function(){try{localStorage.setItem("ku_seen_"+g.id,Date.now());}catch(e){}ST.openChat=g.id;redraw();});
   });
   var dmhdr=d({css:{display:"flex",alignItems:"center",justifyContent:"space-between",margin:"16px 0 8px"}});
   dmhdr.appendChild(d({css:{fontSize:"11px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".6px"}},"Direct Messages"));
