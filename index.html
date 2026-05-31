@@ -794,6 +794,7 @@ function buildOnboarding(){
         joinedAt:firebase.firestore.FieldValue.serverTimestamp()
       }).catch(function(e){console.log("member write failed",e);});
       syncOn();
+      if(ST.joinInvite&&!localStorage.getItem("ku_tutorial")){ST.showTutorial=true;ST.tutorialStep=1;}
       if(typeof Notification!=="undefined"&&Notification.permission==="granted")initNotifications();
       else if(typeof Notification!=="undefined"&&Notification.permission!=="denied"){
         Notification.requestPermission().then(function(perm){
