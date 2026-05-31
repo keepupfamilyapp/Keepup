@@ -853,7 +853,9 @@ function buildApp(){
   // Floating nav - home button bottom left, options slide right
   var navFloat=d({css:{position:"fixed",bottom:"20px",left:"20px",zIndex:45,display:"flex",flexDirection:"row",alignItems:"center",gap:"8px",WebkitUserSelect:"none",userSelect:"none"}});
   var homeBtn=b({css:{width:"52px",height:"52px",borderRadius:"50%",background:ST.tab==="feed"?t.a:"white",border:"none",fontSize:"22px",boxShadow:"0 4px 20px rgba(0,0,0,.2)",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,WebkitUserSelect:"none",userSelect:"none",WebkitTouchCallout:"none"}});
-  homeBtn.innerHTML="&#127968;";
+  var anyUnread=ST.groups.some(function(g){return hasUnread(g.id);});
+homeBtn.innerHTML="&#127968;"+(anyUnread?"<span style='position:absolute;top:-2px;right:-2px;width:9px;height:9px;background:#C0392B;border-radius:50%;border:2px solid white;display:block'></span>":"");
+homeBtn.style.position="relative";
   homeBtn.addEventListener("click",function(){
     if(ST.tab!=="feed"){
       ST.tab="feed";ST.navExpanded=false;fetchAllFeeds();redraw();
