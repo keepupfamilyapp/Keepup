@@ -1263,7 +1263,7 @@ function buildChatView(t,grp){
     row.appendChild(mb);list.appendChild(row);
   });
   wrap.appendChild(list);
-  var inp=d({css:{padding:"8px 11px 22px",borderTop:"1px solid "+t.ap,background:t.cb,flexShrink:0,display:"flex",gap:"7px",alignItems:"flex-end"}});
+  var inp=d({css:{padding:"8px 11px 22px 70px",borderTop:"1px solid "+t.ap,background:t.cb,flexShrink:0,display:"flex",gap:"7px",alignItems:"flex-end"}});
   var ci=el("input",{type:"text",placeholder:"Message "+chatName+"...",css:{flex:1,padding:"10px 13px",borderRadius:"22px",border:"1.5px solid "+t.ap,background:t.bg,fontSize:"14px",color:"#3D2314",outline:"none",fontFamily:"inherit"}});
   ci.addEventListener("input",function(){if(!ST.chatIn)ST.chatIn={};ST.chatIn[cid]=this.value;});
   ci.addEventListener("keydown",function(e){if(e.key==="Enter"&&this.value.trim())sendChat(cid);});
@@ -1281,7 +1281,7 @@ function sendChat(gid){
   if(dm){
     postToDm(gid,Object.assign({},msg,{you:false})).then(function(){
       broadcastNotif(ST.name+" (DM)",msg.text.substring(0,80),gid);
-    }).catch(function(){});
+    }).catch(function(){
     postToDm(gid,Object.assign({},msg,{you:false})).catch(function(){
       dm.msgs.push(Object.assign({},msg,{id:Date.now()}));dm.last=msg.text;dm.lt="Just now";redraw();
     });
