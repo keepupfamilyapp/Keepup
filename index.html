@@ -1236,7 +1236,7 @@ function buildChatView(t,grp){
   var dm=ST.dms&&ST.dms.find(function(x){return x.id===ST.openChat;});
   var msgs=dm?dm.msgs:(ST.chatMsgs[grp.id]||[]);
   var chatName=dm?dm.members.map(function(m){return m.name;}).join(", "):grp.label;
-  var chatIcon=dm?dm.members[0].av:grp.icon;
+  var chatIcon=dm?(dm.members&&dm.members[0]&&dm.members[0].av)||"\uD83D\uDC64":grp.icon;
   var chatSub=dm?"Direct message":((ST.mems[grp.id]||[]).length+" members");
   var cid=ST.openChat;
   var hdr=d({css:{background:t.cb,padding:"10px 13px",display:"flex",alignItems:"center",gap:"10px",borderBottom:"1px solid "+t.ap,flexShrink:0}});
