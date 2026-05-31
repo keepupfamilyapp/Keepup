@@ -1219,7 +1219,7 @@ function buildChat(t){
   if(!ST.dms||!ST.dms.length){wrap.appendChild(d({css:{textAlign:"center",padding:"16px",background:"#FFF9F2",borderRadius:"14px",border:"1.5px solid #F5DDD1",fontSize:"13px",color:"#9B7B62"}},"No direct messages yet"));}
   else{ST.dms.forEach(function(dm){
     var row=d({css:{display:"flex",alignItems:"center",gap:"10px",padding:"11px 12px",borderRadius:"15px",background:"#FFF9F2",border:"1.5px solid #F5DDD1",cursor:"pointer",marginBottom:"7px"}});
-    var av=d({css:{width:"44px",height:"44px",borderRadius:"50%",background:"#F5DDD1",border:"2px solid #E8956D",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"22px",flexShrink:0}});av.textContent=dm.members[0].av;row.appendChild(av);
+    var av=d({css:{width:"44px",height:"44px",borderRadius:"50%",background:"#F5DDD1",border:"2px solid #E8956D",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"22px",flexShrink:0}});av.textContent=(dm.members&&dm.members[0]&&dm.members[0].av)||"\uD83D\uDC64";
     var gd=d({css:{flex:1,minWidth:0}});
     var gtop=d({css:{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:"6px"}});
     gtop.appendChild(d({css:{fontSize:"14px",fontWeight:700,color:"#3D2314"}},dm.members.map(function(m){return m.name;}).join(", ")));
