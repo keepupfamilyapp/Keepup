@@ -1927,7 +1927,9 @@ function buildNewDm(){
     gb.addEventListener("click",function(){ST.dmGrp=g.id;ST.dmSel=[];redraw();});gp.appendChild(gb);
   });sh.appendChild(gp);
   sh.appendChild(d({css:{fontSize:"11px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".4px",marginBottom:"8px"}},"Select people:"));
-  var mems=(ST.mems[ST.dmGrp]||[]).filter(function(m){return!m.you;});
+  var fbMems=(ST.fbMembers&&ST.fbMembers[ST.dmGrp])||[];
+var uid=localStorage.getItem("ku_uid")||"";
+var mems=fbMems.filter(function(m){return m.uid!==uid;});
   mems.forEach(function(mem){
     var gt=th(ST.dmGrp);var sel=ST.dmSel.includes(mem.av+mem.name);
     var row=d({css:{display:"flex",alignItems:"center",gap:"10px",padding:"10px 12px",borderRadius:"13px",background:sel?gt.ap:"#FAF6F0",border:"2px solid "+(sel?gt.a:"rgba(107,66,38,.1)"),cursor:"pointer",marginBottom:"6px"}});
