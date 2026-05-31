@@ -1934,7 +1934,7 @@ var mems=fbMems.filter(function(m){return m.uid!==uid&&m.av;});
     var gt=th(ST.dmGrp);var sel=ST.dmSel.includes(mem.av+mem.name);
     var row=d({css:{display:"flex",alignItems:"center",gap:"10px",padding:"10px 12px",borderRadius:"13px",background:sel?gt.ap:"#FAF6F0",border:"2px solid "+(sel?gt.a:"rgba(107,66,38,.1)"),cursor:"pointer",marginBottom:"6px"}});
     var av=d({css:{width:"36px",height:"36px",borderRadius:"50%",background:sel?gt.al:gt.ap,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"18px",flexShrink:0}});av.textContent=mem.av||"\uD83D\uDC64";row.appendChild(av);
-    row.appendChild(d({css:{flex:1,fontSize:"14px",fontWeight:700,color:"#3D2314"}},mem.name));
+    row.appendChild(d({css:{flex:1,fontSize:"14px",fontWeight:700,color:"#3D2314"}},mem.name||"Family member"));
     var ck=d({css:{width:"20px",height:"20px",borderRadius:"50%",background:sel?gt.a:"white",border:"2px solid "+(sel?gt.a:"rgba(107,66,38,.2)"),display:"flex",alignItems:"center",justifyContent:"center",fontSize:"11px",color:"white",fontWeight:700}},sel?"v":"");
     row.appendChild(ck);
     row.addEventListener("click",function(){var key=mem.av+mem.name;if(ST.dmSel.includes(key))ST.dmSel=ST.dmSel.filter(function(x){return x!==key;});else ST.dmSel.push(key);redraw();});sh.appendChild(row);
