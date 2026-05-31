@@ -1282,7 +1282,6 @@ function sendChat(gid){
     postToDm(gid,Object.assign({},msg,{you:false})).then(function(){
       broadcastNotif(ST.name+" (DM)",msg.text.substring(0,80),gid);
     }).catch(function(){
-    postToDm(gid,Object.assign({},msg,{you:false})).catch(function(){
       dm.msgs.push(Object.assign({},msg,{id:Date.now()}));dm.last=msg.text;dm.lt="Just now";redraw();
     });
   } else {
