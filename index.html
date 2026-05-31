@@ -895,7 +895,8 @@ homeBtn.style.position="relative";
     navFloat.appendChild(navPill);
   }
   wrap.appendChild(navFloat);
-  if(ST.editingGroup)wrap.appendChild(buildEditGroup(ST.editingGroup));
+  if(ST.showTutorial)wrap.appendChild(buildTutorial());
+if(ST.editingGroup)wrap.appendChild(buildEditGroup(ST.editingGroup));
   if(ST.creatingGroup)wrap.appendChild(buildCreateGroup());
   if(ST.editingBirthdays)wrap.appendChild(buildEditBirthdays());
   if(ST.newDm)wrap.appendChild(buildNewDm());
