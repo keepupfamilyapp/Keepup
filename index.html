@@ -1192,7 +1192,7 @@ function hasUnread(gid){var seen=parseInt(localStorage.getItem("ku_seen_"+gid)||
 function buildChat(t){
   if(ST.openChat){
     var isDm=ST.dms&&ST.dms.find(function(x){return x.id===ST.openChat;});
-    if(isDm){return buildChatView({a:"#C4714A",al:"#E8956D",ap:"#F5DDD1",ad:"#6B4226",bg:"#FAF6F0",cb:"#FFF9F2",sb:"#FFF3E8"},{id:ST.openChat,label:isDm.members.map(function(m){return m.name;}).join(", "),icon:(isDm.members&&isDm.members[0]&&isDm.members[0].av)||"\uD83D\uDC64"
+    if(isDm){return buildChatView({a:"#C4714A",al:"#E8956D",ap:"#F5DDD1",ad:"#6B4226",bg:"#FAF6F0",cb:"#FFF9F2",sb:"#FFF3E8"},{id:ST.openChat,label:isDm.members.map(function(m){return m.name;}).join(", "),icon:(isDm.members&&isDm.members[0]&&isDm.members[0].av)||"\uD83D\uDC64"});
     var grpForChat=ST.groups.find(function(g){return g.id===ST.openChat;})||ST.groups[0];
     return buildChatView(th(ST.openChat),grpForChat);
   }
