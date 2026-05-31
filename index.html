@@ -1927,9 +1927,10 @@ function buildNewDm(){
     gb.addEventListener("click",function(){ST.dmGrp=g.id;ST.dmSel=[];redraw();});gp.appendChild(gb);
   });sh.appendChild(gp);
   sh.appendChild(d({css:{fontSize:"11px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".4px",marginBottom:"8px"}},"Select people:"));
-  var fbMems=(ST.fbMembers&&ST.fbMembers[ST.dmGrp])||[];
-var uid=localStorage.getItem("ku_uid")||"";
-var mems=fbMems.filter(function(m){return m.uid!==uid&&m.av;});
+  var uid=localStorage.getItem("ku_uid")||"";
+var fbMems=((ST.fbMembers&&ST.fbMembers[ST.dmGrp])||[]).filter(function(m){return m.uid!==uid;});
+var localMems=(ST.mems[ST.dmGrp]||[]).filter(function(m){return!m.you;});
+var mems=fbMems.length?fbMems.map(function(m){return{av:m.av||"\uD83D\uDC64",name:m.name||"Member",uid:m.uid};}) : localMems;
   mems.forEach(function(mem){
     var gt=th(ST.dmGrp);var sel=ST.dmSel.includes(mem.av+mem.name);
     var row=d({css:{display:"flex",alignItems:"center",gap:"10px",padding:"10px 12px",borderRadius:"13px",background:sel?gt.ap:"#FAF6F0",border:"2px solid "+(sel?gt.a:"rgba(107,66,38,.1)"),cursor:"pointer",marginBottom:"6px"}});
