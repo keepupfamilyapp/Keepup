@@ -1186,7 +1186,7 @@ function buildItem(item,t){
   }
   return wrap;
 }
-
+function hasUnread(gid){var seen=parseInt(localStorage.getItem("ku_seen_"+gid)||"0");var msgs=ST.chatMsgs[gid]||[];return msgs.some(function(m){var t=m.createdAt&&m.createdAt.toMillis?m.createdAt.toMillis():0;return t>seen&&!m.you;});}
 function buildChat(t){
   if(ST.openChat){
     var isDm=ST.dms&&ST.dms.find(function(x){return x.id===ST.openChat;});
