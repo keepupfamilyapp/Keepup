@@ -275,9 +275,12 @@ function doSync(){
         if(!dm)return;
         snap.docChanges().forEach(function(change){
           var data=Object.assign({},change.doc.data(),{id:change.doc.id});
-          if(change.type==="added"&&!dm.msgs.find(function(x){return x.id===data.id;})){
-            data.you=(data.name===(ST.name||"You")&&data.av===ST.avatar);
-            dm.msgs.push(data);dm.last=data.text||"📷";dm.lt="Just now";
+          if(change.type==="added"){
+            dm.msgs=dm.msgs.filter(function(x){return !(x.id&&x.id.startsWith("tmp-")&&x.text===data.text);});
+            if(!dm.msgs.find(function(x){return x.id===data.id;})){
+              data.you=(data.name===(ST.name||"You")&&data.av===ST.avatar);
+              dm.msgs.push(data);dm.last=data.text||"📷";dm.lt="Just now";
+            }
           }
         });
         if(ST.tab==="chat")redraw();
@@ -293,9 +296,12 @@ function doSync(){
           var data=doc.data();
           var dmId=doc.id;
           if(!ST.dms.find(function(x){return x.id===dmId;})){
+            var myUid2=currentUser?currentUser.uid:localStorage.getItem("ku_uid");
+            var otherProfiles=(data.memberProfiles||[]).filter(function(p){return p.uid!==myUid2;});
+            if(!otherProfiles.length)otherProfiles=data.memberProfiles||[];
             ST.dms.push({
               id:dmId,
-              members:data.memberProfiles||[],
+              members:otherProfiles,
               last:data.last||"",
               lt:data.lt||"",
               msgs:[]
@@ -2129,11 +2135,14 @@ var mems=fbMems.length?fbMems.map(function(m){return{av:m.av||"👤",name:m.name
     ST.dms.unshift({id:nid,members:selMems,last:"",lt:"Now",msgs:[]});
     // Save DM metadata to Firestore so it persists across sessions
     var memberUids=selMems.map(function(m){return m.uid||"anon";});
-    if(uid)memberUids.push(uid);
+    if(uid&&!memberUids.includes(uid))memberUids.push(uid);
+    var senderProfile={av:ST.avatar,name:ST.name||"You",uid:uid||"anon"};
+    var allProfiles=selMems.concat([senderProfile]);
     db.collection("userDms").doc(nid).set({
       id:nid,
       members:memberUids,
-      memberProfiles:selMems,
+      memberProfiles:allProfiles,
+      createdBy:uid||"anon",
       last:"",lt:"",
       createdAt:firebase.firestore.FieldValue.serverTimestamp()
     }).catch(function(e){console.log("DM meta save failed",e);});
