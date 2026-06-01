@@ -160,8 +160,9 @@ function uploadPhoto(dataUrl){
 }
 
 function broadcastNotif(title,body,groupId){
+  var uid=currentUser?currentUser.uid:(localStorage.getItem("ku_uid")||"anon");
   db.collection("notifications").add({
-    title:title,body:body,groupId:groupId,
+    title:title,body:body,groupId:groupId,senderUid:uid,
     sentAt:firebase.firestore.FieldValue.serverTimestamp()
   }).catch(function(e){});
 }
@@ -288,7 +289,9 @@ function doSync(){
       snap.docChanges().forEach(function(change){
         if(change.type==="added"){
           var n=change.doc.data();
-          // Don't show if we just posted it (within 3s)
+          // Don't show if we sent it ourselves
+          var myUid=currentUser?currentUser.uid:(localStorage.getItem("ku_uid")||"anon");
+          if(n.senderUid&&n.senderUid===myUid)return;
           var age=n.sentAt?Date.now()-n.sentAt.toMillis():9999;
           if(age>3000&&age<30000){
             // Show browser notification if permission granted
@@ -1235,9 +1238,10 @@ function buildChatView(t,grp){
   var wrap=d({css:{display:"flex",flexDirection:"column",flex:1,overflow:"hidden",minHeight:0}});
   var dm=ST.dms&&ST.dms.find(function(x){return x.id===ST.openChat;});
   var msgs=dm?dm.msgs:(ST.chatMsgs[grp.id]||[]);
-  var chatName=dm?dm.members.map(function(m){return m.name;}).join(", "):grp.label;
+  var dmNames=dm?(dm.members||[]).map(function(m){return m.name||"Family member";}).filter(Boolean):[];
+  var chatName=dm?(dmNames.length?dmNames.join(", "):"Direct message"):grp.label;
   var chatIcon=dm?(dm.members&&dm.members[0]&&dm.members[0].av)||"\uD83D\uDC64":grp.icon;
-  var chatSub=dm?"Direct message":((ST.mems[grp.id]||[]).length+" members");
+  var chatSub=dm?(dm.members&&dm.members.length>1?"Group DM":"Direct message"):((ST.mems[grp.id]||[]).length+" members");
   var cid=ST.openChat;
   var hdr=d({css:{background:t.cb,padding:"10px 13px",display:"flex",alignItems:"center",gap:"10px",borderBottom:"1px solid "+t.ap,flexShrink:0}});
   var bb=b({css:{background:t.ap,border:"none",borderRadius:"50px",padding:"7px 13px",fontSize:"13px",fontWeight:700,color:t.ad,cursor:"pointer",fontFamily:"inherit"}},"Back");
@@ -1258,19 +1262,95 @@ function buildChatView(t,grp){
     if(!iy){var ma=d({css:{width:"26px",height:"26px",borderRadius:"50%",background:t.ap,border:"1.5px solid "+t.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"13px",flexShrink:0}});ma.textContent=msg.av;row.appendChild(ma);}
     var mb=d({css:{maxWidth:"72%"}});
     if(!iy)mb.appendChild(d({css:{fontSize:"10px",fontWeight:700,color:t.ad,marginBottom:"2px",paddingLeft:"2px"}},msg.name));
-    var bubble=d({css:{padding:"9px 12px",borderRadius:iy?"16px 16px 3px 16px":"16px 16px 16px 3px",background:iy?t.a:"white",color:iy?"white":"#3D2314",fontSize:"13px",lineHeight:"1.55",boxShadow:"0 1px 5px rgba(0,0,0,.08)",border:iy?"none":"1px solid "+t.ap}},msg.text);
-    mb.appendChild(bubble);mb.appendChild(d({css:{fontSize:"9px",color:"#9B7B62",marginTop:"2px",textAlign:iy?"right":"left"}},msg.createdAt?timeAgo(msg.createdAt):msg.time));
+    // Photo message
+    if(msg.imgUrl){
+      var photoBubble=d({css:{borderRadius:iy?"16px 16px 3px 16px":"16px 16px 16px 3px",overflow:"hidden",cursor:"pointer",boxShadow:"0 1px 5px rgba(0,0,0,.12)",maxWidth:"220px",background:iy?t.a:"white",border:iy?"none":"1px solid "+t.ap}});
+      var pimg=document.createElement("img");
+      pimg.src=msg.imgUrl;
+      pimg.style.cssText="width:100%;max-height:240px;object-fit:cover;display:block;";
+      pimg.addEventListener("click",function(){showFullScreen(msg.imgUrl);});
+      photoBubble.appendChild(pimg);
+      if(msg.text){var capEl=d({css:{padding:"7px 10px",fontSize:"13px",color:iy?"white":"#3D2314",lineHeight:"1.4"}},msg.text);photoBubble.appendChild(capEl);}
+      mb.appendChild(photoBubble);
+    } else if(msg.uploading){
+      var upBubble=d({css:{padding:"12px 14px",borderRadius:iy?"16px 16px 3px 16px":"16px 16px 16px 3px",background:iy?t.a+"bb":"rgba(0,0,0,.06)",display:"flex",alignItems:"center",gap:"8px",minWidth:"120px"}});
+      var upSpin=d({css:{fontSize:"18px",animation:"float 1s ease-in-out infinite"}});upSpin.textContent="\uD83D\uDCF8";upBubble.appendChild(upSpin);
+      upBubble.appendChild(d({css:{fontSize:"12px",color:iy?"white":"#6B4C35",fontWeight:700}},"Sending photo..."));
+      mb.appendChild(upBubble);
+    } else {
+      var bubble=d({css:{padding:"9px 12px",borderRadius:iy?"16px 16px 3px 16px":"16px 16px 16px 3px",background:iy?t.a:"white",color:iy?"white":"#3D2314",fontSize:"13px",lineHeight:"1.55",boxShadow:"0 1px 5px rgba(0,0,0,.08)",border:iy?"none":"1px solid "+t.ap}},msg.text);
+      mb.appendChild(bubble);
+    }
+    mb.appendChild(d({css:{fontSize:"9px",color:"#9B7B62",marginTop:"2px",textAlign:iy?"right":"left"}},msg.createdAt?timeAgo(msg.createdAt):msg.time));
     row.appendChild(mb);list.appendChild(row);
   });
   wrap.appendChild(list);
-  var inp=d({css:{padding:"8px 11px 22px 70px",borderTop:"1px solid "+t.ap,background:t.cb,flexShrink:0,display:"flex",gap:"7px",alignItems:"flex-end"}});
+  // Input bar with camera button
+  var inp=d({css:{padding:"8px 11px 22px",borderTop:"1px solid "+t.ap,background:t.cb,flexShrink:0,display:"flex",gap:"7px",alignItems:"flex-end"}});
+  // Hidden file input for photos
+  var photoFi=document.createElement("input");photoFi.type="file";photoFi.accept="image/*";photoFi.style.display="none";
+  photoFi.addEventListener("change",function(){
+    var f=this.files&&this.files[0];
+    photoFi.value="";
+    if(!f)return;
+    sendChatPhoto(cid,f,t);
+  });
+  inp.appendChild(photoFi);
+  // Camera button
+  var camBtn=b({css:{width:"38px",height:"38px",borderRadius:"50%",background:t.ap,border:"none",fontSize:"18px",cursor:"pointer",flexShrink:0,fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",color:t.ad}});
+  camBtn.textContent="\uD83D\uDCF7";
+  camBtn.addEventListener("click",function(){photoFi.click();});
+  inp.appendChild(camBtn);
   var ci=el("input",{type:"text",placeholder:"Message "+chatName+"...",css:{flex:1,padding:"10px 13px",borderRadius:"22px",border:"1.5px solid "+t.ap,background:t.bg,fontSize:"14px",color:"#3D2314",outline:"none",fontFamily:"inherit"}});
+  ci.value=ST.chatIn[cid]||"";
   ci.addEventListener("input",function(){if(!ST.chatIn)ST.chatIn={};ST.chatIn[cid]=this.value;});
   ci.addEventListener("keydown",function(e){if(e.key==="Enter"&&this.value.trim())sendChat(cid);});
   inp.appendChild(ci);
   var sb=b({css:{width:"38px",height:"38px",borderRadius:"50%",background:t.a,border:"none",color:"white",fontSize:"18px",cursor:"pointer",flexShrink:0,fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center"}},"^");
   sb.addEventListener("click",function(){sendChat(cid);});inp.appendChild(sb);wrap.appendChild(inp);
+  // Scroll to bottom
+  setTimeout(function(){list.scrollTop=list.scrollHeight;},60);
   return wrap;
+}
+
+function sendChatPhoto(gid,file,t){
+  if(!currentUser){alert("Still signing you in, try again in a moment.");return;}
+  var dm=ST.dms&&ST.dms.find(function(x){return x.id===gid;});
+  var tempId="chatphoto-"+Date.now();
+  var tempMsg={id:tempId,av:ST.avatar,name:ST.name||"You",text:"",imgUrl:null,uploading:true,time:"Just now",you:true};
+  if(dm){dm.msgs.push(tempMsg);}
+  else{if(!ST.chatMsgs[gid])ST.chatMsgs[gid]=[];ST.chatMsgs[gid].push(tempMsg);}
+  redraw();
+  setTimeout(function(){var els=document.querySelectorAll(".scr");els.forEach(function(l){l.scrollTop=l.scrollHeight;});},50);
+  var uid=currentUser.uid;
+  var ext=file.name.split(".").pop()||"jpg";
+  storage.ref("chat-photos/"+uid+"/"+Date.now()+"."+ext).put(file)
+    .then(function(snap){return snap.ref.getDownloadURL();})
+    .then(function(url){
+      var msg={av:ST.avatar,name:ST.name||"You",text:"",imgUrl:url,time:"Just now",you:true};
+      // Remove temp
+      if(dm){dm.msgs=dm.msgs.filter(function(x){return x.id!==tempId;});}
+      else{ST.chatMsgs[gid]=ST.chatMsgs[gid].filter(function(x){return x.id!==tempId;});}
+      if(dm){
+        postToDm(gid,Object.assign({},msg,{you:false})).catch(function(){
+          dm.msgs.push(Object.assign({},msg,{id:Date.now()}));dm.last="📷 Photo";dm.lt="Just now";
+        });
+      } else {
+        postToChat(gid,Object.assign({},msg,{you:false})).catch(function(){
+          if(!ST.chatMsgs[gid])ST.chatMsgs[gid]=[];
+          ST.chatMsgs[gid].push(Object.assign({},msg,{id:Date.now()}));
+        });
+      }
+      broadcastNotif(ST.name+" sent a photo","\uD83D\uDCF7 Photo",gid);
+      redraw();
+      setTimeout(function(){var els=document.querySelectorAll(".scr");els.forEach(function(l){l.scrollTop=l.scrollHeight;});},80);
+    }).catch(function(e){
+      console.log("chat photo upload failed",e);
+      if(dm){dm.msgs=dm.msgs.filter(function(x){return x.id!==tempId;});}
+      else{ST.chatMsgs[gid]=ST.chatMsgs[gid].filter(function(x){return x.id!==tempId;});}
+      redraw();
+      alert("Photo failed to send. Check your connection.");
+    });
 }
 
 function sendChat(gid){
