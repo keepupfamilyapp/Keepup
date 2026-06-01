@@ -289,30 +289,37 @@ function doSync(){
       });
     unsubscribers.push(unsub);
   }
-  // Load DMs from Firestore for this user
+  // Listen for DMs in real-time so new DMs from others appear without refresh
   var uid=currentUser?currentUser.uid:localStorage.getItem("ku_uid");
   if(uid){
-    db.collection("userDms").where("members","array-contains",uid).get()
-      .then(function(snap){
-        snap.forEach(function(doc){
-          var data=doc.data();
-          var dmId=doc.id;
-          if(!ST.dms.find(function(x){return x.id===dmId;})){
-            var myUid2=currentUser?currentUser.uid:localStorage.getItem("ku_uid");
-            var otherProfiles=(data.memberProfiles||[]).filter(function(p){return p.uid!==myUid2;});
-            if(!otherProfiles.length)otherProfiles=data.memberProfiles||[];
-            ST.dms.push({
-              id:dmId,
-              members:otherProfiles,
-              last:data.last||"",
-              lt:data.lt||"",
-              msgs:[]
-            });
+    var dmListUnsub=db.collection("userDms").where("members","array-contains",uid)
+      .onSnapshot(function(snap){
+        snap.docChanges().forEach(function(change){
+          var data=change.doc.data();
+          var dmId=change.doc.id;
+          var myUid2=currentUser?currentUser.uid:localStorage.getItem("ku_uid");
+          var otherProfiles=(data.memberProfiles||[]).filter(function(p){
+            var safeAv=(p.av&&p.av.length<=8)?p.av:"\uD83D\uDC64";
+            var safeName=(p.name&&p.name.length<40&&!/^[A-Za-z0-9_-]{20,}$/.test(p.name))?p.name:"Family member";
+            p.av=safeAv;p.name=safeName;
+            return p.uid!==myUid2;
+          });
+          if(!otherProfiles.length)otherProfiles=data.memberProfiles||[];
+          if(change.type==="added"){
+            // New DM appeared (either we created it or someone DMed us)
+            if(!ST.dms.find(function(x){return x.id===dmId;})){
+              ST.dms.push({id:dmId,members:otherProfiles,last:data.last||"",lt:data.lt||"",msgs:[]});
+            }
+            watchDm(dmId);
+          } else if(change.type==="modified"){
+            // Update last message preview
+            var existing=ST.dms.find(function(x){return x.id===dmId;});
+            if(existing){existing.last=data.last||"";existing.lt=data.lt||"";}
           }
-          watchDm(dmId);
         });
         if(ST.tab==="chat")redraw();
-      }).catch(function(e){console.log("load DMs failed",e);});
+      },function(e){console.log("userDms listener failed",e);});
+    unsubscribers.push(dmListUnsub);
   }
 
   // Listen for notifications triggered by other users
@@ -1387,7 +1394,21 @@ function buildChatView(t,grp){
     var f=this.files&&this.files[0];
     photoFi.value="";
     if(!f)return;
-    sendChatPhoto(cid,f,t);
+    // Show preview confirm before sending
+    var previewUrl=URL.createObjectURL(f);
+    var ov=d({css:{position:"fixed",inset:"0",background:"rgba(0,0,0,.6)",zIndex:300,display:"flex",alignItems:"flex-end"}});
+    var sh=d({css:{background:"white",borderRadius:"20px 20px 0 0",padding:"18px 18px 32px",width:"100%",boxSizing:"border-box"}});
+    sh.appendChild(d({css:{fontSize:"16px",fontWeight:800,color:"#3D2314",marginBottom:"12px",textAlign:"center"}},"Send this photo?"));
+    var pimg=document.createElement("img");pimg.src=previewUrl;
+    pimg.style.cssText="width:100%;max-height:220px;object-fit:cover;border-radius:12px;display:block;margin-bottom:14px;";
+    sh.appendChild(pimg);
+    var row=d({css:{display:"flex",gap:"10px"}});
+    var cBtn=b({css:{flex:1,padding:"13px",borderRadius:"50px",background:"#F0EDE8",border:"none",fontSize:"15px",fontWeight:700,color:"#6B4C35",cursor:"pointer",fontFamily:"inherit"}},"Cancel");
+    var sBtn=b({css:{flex:1,padding:"13px",borderRadius:"50px",background:t.a,border:"none",fontSize:"15px",fontWeight:700,color:"white",cursor:"pointer",fontFamily:"inherit"}},"\uD83D\uDCF7 Send");
+    cBtn.addEventListener("click",function(){ov.remove();URL.revokeObjectURL(previewUrl);});
+    sBtn.addEventListener("click",function(){ov.remove();URL.revokeObjectURL(previewUrl);sendChatPhoto(cid,f,t);});
+    row.appendChild(cBtn);row.appendChild(sBtn);sh.appendChild(row);
+    ov.appendChild(sh);document.body.appendChild(ov);
   });
   inp.appendChild(photoFi);
   // Camera button
@@ -1435,7 +1456,7 @@ function sendChatPhoto(gid,file,t){
           ST.chatMsgs[gid].push(Object.assign({},msg,{id:Date.now()}));
         });
       }
-      broadcastNotif(ST.name+" sent a photo","\uD83D\uDCF7 Photo",gid);
+      // No broadcastNotif for DM photos - keep DMs private
       redraw();
       setTimeout(function(){var els=document.querySelectorAll(".scr");els.forEach(function(l){l.scrollTop=l.scrollHeight;});},80);
     }).catch(function(e){
@@ -1465,8 +1486,7 @@ function sendChat(gid){
   setTimeout(function(){var els=document.querySelectorAll(".scr");els.forEach(function(l){l.scrollTop=l.scrollHeight;});},50);
   if(dm){
     postToDm(gid,Object.assign({},msg,{you:false})).then(function(){
-      broadcastNotif(ST.name+" (DM)",msg.text.substring(0,80),gid);
-      // Update last message in Firestore so DM list stays current
+      // Update last message in Firestore - no broadcastNotif for DMs (private)
       db.collection("userDms").doc(gid).update({
         last:msg.text,lt:"Just now",
         updatedAt:firebase.firestore.FieldValue.serverTimestamp()
