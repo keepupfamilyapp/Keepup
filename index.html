@@ -2170,7 +2170,7 @@ function buildNewDm(){
     gb.addEventListener("click",function(){ST.dmGrp=g.id;ST.dmSel=[];redraw();});gp.appendChild(gb);
   });sh.appendChild(gp);
   sh.appendChild(d({css:{fontSize:"11px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".4px",marginBottom:"8px"}},"Select people:"));
-  var uid=localStorage.getItem("ku_uid")||"";
+  var uid=(currentUser?currentUser.uid:null)||localStorage.getItem("ku_uid")||"";
 var fbMems=((ST.fbMembers&&ST.fbMembers[ST.dmGrp])||[]).filter(function(m){return m.uid!==uid;});
 var localMems=(ST.mems[ST.dmGrp]||[]).filter(function(m){return!m.you;});
 var mems=fbMems.length?fbMems.map(function(m){
@@ -2206,13 +2206,15 @@ var mems=fbMems.length?fbMems.map(function(m){
     // Save DM metadata to Firestore so it persists across sessions
     var memberUids=selMems.map(function(m){return m.uid||"anon";});
     if(uid&&!memberUids.includes(uid))memberUids.push(uid);
-    var senderProfile={av:ST.avatar,name:ST.name||"You",uid:uid||"anon"};
+    var senderUid2=(currentUser?currentUser.uid:null)||uid||"anon";
+    var senderProfile={av:ST.avatar,name:ST.name||"You",uid:senderUid2};
     var allProfiles=selMems.concat([senderProfile]);
+    if(!memberUids.includes(senderUid2))memberUids.push(senderUid2);
     db.collection("userDms").doc(nid).set({
       id:nid,
       members:memberUids,
       memberProfiles:allProfiles,
-      createdBy:uid||"anon",
+      createdBy:senderUid2,
       last:"",lt:"",
       createdAt:firebase.firestore.FieldValue.serverTimestamp()
     }).catch(function(e){console.log("DM meta save failed",e);});
