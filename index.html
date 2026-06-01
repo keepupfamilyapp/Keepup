@@ -105,11 +105,13 @@ function initNotifications(){
     })
     .then(function(token){
       if(token){
-        // Save token to Firestore so we can send notifications later
-        var uid=localStorage.getItem("ku_uid");
+        // Save token - use currentUser.uid for reliability
+        var uid=currentUser?currentUser.uid:localStorage.getItem("ku_uid");
         if(uid){
+          var groupIds=ST.groups.map(function(g){return g.id;});
           db.collection("fcmTokens").doc(uid).set({
             token:token,uid:uid,name:ST.name,
+            groupIds:groupIds,
             updatedAt:firebase.firestore.FieldValue.serverTimestamp()
           }).catch(function(e){console.log("token save failed",e);});
         }
@@ -347,7 +349,9 @@ function doSync(){
       var gid=m.groupId||"imm";
       if(!ST.fbMembers[gid])ST.fbMembers[gid]=[];
       if(!ST.fbMembers[gid].find(function(x){return x.uid===m.uid;})){
-        ST.fbMembers[gid].push(m);
+        var safeAv=(m.av&&m.av.length<=8)?m.av:"\uD83D\uDC64";
+        var safeName=(m.name&&m.name.length<40&&!/^[A-Za-z0-9_-]{20,}$/.test(m.name))?m.name:"Family member";
+        ST.fbMembers[gid].push(Object.assign({},m,{av:safeAv,name:safeName}));
       }
     });
     if(ST.tab==="profile")redraw();
@@ -2109,7 +2113,11 @@ function buildNewDm(){
   var uid=localStorage.getItem("ku_uid")||"";
 var fbMems=((ST.fbMembers&&ST.fbMembers[ST.dmGrp])||[]).filter(function(m){return m.uid!==uid;});
 var localMems=(ST.mems[ST.dmGrp]||[]).filter(function(m){return!m.you;});
-var mems=fbMems.length?fbMems.map(function(m){return{av:m.av||"👤",name:m.name||"Member",uid:m.uid};}) : localMems;
+var mems=fbMems.length?fbMems.map(function(m){
+  var cleanAv=(m.av&&m.av.length<=8)?m.av:"\uD83D\uDC64";
+  var cleanName=(m.name&&m.name.length<40&&!/^[A-Za-z0-9_-]{20,}$/.test(m.name))?m.name:"Family member";
+  return{av:cleanAv,name:cleanName,uid:m.uid};
+}) : localMems;
   mems.forEach(function(mem){
     var gt=th(ST.dmGrp);var sel=ST.dmSel.includes(mem.av+mem.name);
     var row=d({css:{display:"flex",alignItems:"center",gap:"10px",padding:"10px 12px",borderRadius:"13px",background:sel?gt.ap:"#FAF6F0",border:"2px solid "+(sel?gt.a:"rgba(107,66,38,.1)"),cursor:"pointer",marginBottom:"6px"}});
