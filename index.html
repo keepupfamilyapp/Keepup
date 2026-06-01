@@ -403,6 +403,7 @@ function doSync(){
 function postToFeed(item){
   if(!currentUser)return Promise.reject(new Error("Not authenticated"));
   return db.collection("feed").add(Object.assign({},item,{
+    senderUid:currentUser.uid,
     createdAt:firebase.firestore.FieldValue.serverTimestamp()
   }));
 }
@@ -1444,7 +1445,8 @@ function sendChatPhoto(gid,file,t){
 
 function sendChat(gid){
   var iv=ST.chatIn[gid]||"";if(!iv.trim())return;
-  var msg={av:ST.avatar,name:ST.name||"You",text:iv.trim(),time:"Just now",you:true};
+  var sUid=currentUser?currentUser.uid:(localStorage.getItem("ku_uid")||"anon");
+  var msg={av:ST.avatar,name:ST.name||"You",text:iv.trim(),time:"Just now",you:true,senderUid:sUid};
   ST.chatIn[gid]="";
   var dm=ST.dms&&ST.dms.find(function(x){return x.id===gid;});
   // Optimistic: show message immediately before Firestore confirms
