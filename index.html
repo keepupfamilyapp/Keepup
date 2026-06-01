@@ -271,6 +271,17 @@ function doSync(){
 
   // Listen to DM messages
   function watchDm(dmId){
+    // Listen to seenBy field on the DM meta doc
+    var seenUnsub=db.collection("userDms").doc(dmId)
+      .onSnapshot(function(doc){
+        if(!doc.exists)return;
+        var dm=ST.dms.find(function(x){return x.id===dmId;});
+        if(!dm)return;
+        var data=doc.data();
+        dm.seenBy=data.seenBy||{};
+        if(ST.tab==="chat"&&ST.openChat===dmId)redraw();
+      },function(){});
+    unsubscribers.push(seenUnsub);
     var unsub=db.collection("dms").doc(dmId).collection("msgs")
       .onSnapshot(function(snap){
         var dm=ST.dms.find(function(x){return x.id===dmId;});
@@ -282,6 +293,7 @@ function doSync(){
             if(!dm.msgs.find(function(x){return x.id===data.id;})){
               data.you=(data.name===(ST.name||"You")&&data.av===ST.avatar);
               dm.msgs.push(data);dm.last=data.text||"📷";dm.lt="Just now";
+              if(!data.you&&ST.openChat!==dmId){dm.unread=(dm.unread||0)+1;}
             }
           }
         });
@@ -1264,15 +1276,29 @@ function buildChat(t){
   ndb.addEventListener("click",function(){ST.newDm=true;redraw();});dmhdr.appendChild(ndb);wrap.appendChild(dmhdr);
   if(!ST.dms||!ST.dms.length){wrap.appendChild(d({css:{textAlign:"center",padding:"16px",background:"#FFF9F2",borderRadius:"14px",border:"1.5px solid #F5DDD1",fontSize:"13px",color:"#9B7B62"}},"No direct messages yet"));}
   else{ST.dms.forEach(function(dm){
-    var row=d({css:{display:"flex",alignItems:"center",gap:"10px",padding:"11px 12px",borderRadius:"15px",background:"#FFF9F2",border:"1.5px solid #F5DDD1",cursor:"pointer",marginBottom:"7px"}});
+    var hasUnread=dm.unread&&dm.unread>0;
+    var row=d({css:{display:"flex",alignItems:"center",gap:"10px",padding:"11px 12px",borderRadius:"15px",background:hasUnread?"#FFF3E8":"#FFF9F2",border:"1.5px solid "+(hasUnread?"#E8956D":"#F5DDD1"),cursor:"pointer",marginBottom:"7px"}});
     var av=d({css:{width:"44px",height:"44px",borderRadius:"50%",background:"#F5DDD1",border:"2px solid #E8956D",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"22px",flexShrink:0}});av.textContent=(dm.members&&dm.members[0]&&dm.members[0].av)||"\uD83D\uDC64";
     var gd=d({css:{flex:1,minWidth:0}});
-    var gtop=d({css:{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:"6px"}});
-    gtop.appendChild(d({css:{fontSize:"14px",fontWeight:700,color:"#3D2314"}},dm.members.map(function(m){return m.name;}).join(", ")));
-    gtop.appendChild(d({css:{fontSize:"10px",color:"#9B7B62",flexShrink:0}},dm.lt));
-    gd.appendChild(gtop);gd.appendChild(d({css:{fontSize:"12px",color:"#9B7B62",marginTop:"2px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},dm.last));
+    var gtop=d({css:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"6px"}});
+    gtop.appendChild(d({css:{fontSize:"14px",fontWeight:hasUnread?800:700,color:"#3D2314"}},dm.members.map(function(m){return m.name;}).join(", ")));
+    var timeEl=d({css:{display:"flex",alignItems:"center",gap:"5px",flexShrink:0}});
+    timeEl.appendChild(d({css:{fontSize:"10px",color:"#9B7B62"}},dm.lt));
+    if(hasUnread){var badge=d({css:{background:"#C4714A",color:"white",borderRadius:"50px",padding:"1px 7px",fontSize:"11px",fontWeight:800,minWidth:"18px",textAlign:"center"}},String(dm.unread));timeEl.appendChild(badge);}
+    gtop.appendChild(timeEl);
+    gd.appendChild(gtop);
+    gd.appendChild(d({css:{fontSize:"12px",color:hasUnread?"#6B4226":"#9B7B62",fontWeight:hasUnread?700:400,marginTop:"2px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},dm.last));
     row.appendChild(gd);row.appendChild(d({css:{fontSize:"18px",color:"#E8956D"}},">"));
-    row.addEventListener("click",function(){ST.openChat=dm.id;redraw();});wrap.appendChild(row);
+    row.addEventListener("click",function(){
+      dm.unread=0;
+      ST.openChat=dm.id;
+      // Mark seen in Firestore so sender gets "Seen" receipt
+      var myUid=currentUser?currentUser.uid:localStorage.getItem("ku_uid");
+      if(myUid)db.collection("userDms").doc(dm.id).update({
+        ["seenBy."+myUid]:firebase.firestore.FieldValue.serverTimestamp()
+      }).catch(function(){});
+      redraw();
+    });wrap.appendChild(row);
   });}
   return wrap;
 }
@@ -1286,6 +1312,9 @@ function buildChatView(t,grp){
   var chatIcon=dm?(dm.members&&dm.members[0]&&dm.members[0].av)||"\uD83D\uDC64":grp.icon;
   var chatSub=dm?(dm.members&&dm.members.length>1?"Group DM":"Direct message"):((ST.mems[grp.id]||[]).length+" members");
   var cid=ST.openChat;
+  // Clear unread for this chat now that it's open
+  if(dm){dm.unread=0;var myUid=currentUser?currentUser.uid:localStorage.getItem("ku_uid");
+    if(myUid)db.collection("userDms").doc(cid).update({["seenBy."+myUid]:firebase.firestore.FieldValue.serverTimestamp()}).catch(function(){});}
   var hdr=d({css:{background:t.cb,padding:"10px 13px",display:"flex",alignItems:"center",gap:"10px",borderBottom:"1px solid "+t.ap,flexShrink:0}});
   var bb=b({css:{background:t.ap,border:"none",borderRadius:"50px",padding:"7px 13px",fontSize:"13px",fontWeight:700,color:t.ad,cursor:"pointer",fontFamily:"inherit"}},"Back");
   bb.addEventListener("click",function(){ST.openChat=null;redraw();});hdr.appendChild(bb);
@@ -1382,7 +1411,18 @@ function buildChatView(t,grp){
       });
       mb.appendChild(rxRow);
     }
-    mb.appendChild(d({css:{fontSize:"9px",color:"#9B7B62",marginTop:"2px",textAlign:iy?"right":"left"}},msg.createdAt?timeAgo(msg.createdAt):msg.time));
+    var tsRow=d({css:{display:"flex",alignItems:"center",gap:"4px",justifyContent:iy?"flex-end":"flex-start",marginTop:"2px"}});
+    tsRow.appendChild(d({css:{fontSize:"9px",color:"#9B7B62"}},msg.createdAt?timeAgo(msg.createdAt):msg.time));
+    // Show "Seen" under the last message you sent if the other person has seen it
+    if(iy&&dm&&dm.seenBy){
+      var myUid=currentUser?currentUser.uid:localStorage.getItem("ku_uid");
+      var lastYourMsg=msgs.filter(function(x){return x.you;}).slice(-1)[0];
+      if(lastYourMsg&&lastYourMsg===msg){
+        var othersSeen=Object.keys(dm.seenBy).filter(function(k){return k!==myUid;});
+        if(othersSeen.length)tsRow.appendChild(d({css:{fontSize:"9px",color:"#C4714A",fontWeight:700}},"\u2713 Seen"));
+      }
+    }
+    mb.appendChild(tsRow);
     row.appendChild(mb);list.appendChild(row);
   });
   wrap.appendChild(list);
