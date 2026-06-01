@@ -284,7 +284,28 @@ function doSync(){
       });
     unsubscribers.push(unsub);
   }
-  ST.dms.forEach(function(dm){watchDm(dm.id);});
+  // Load DMs from Firestore for this user
+  var uid=currentUser?currentUser.uid:localStorage.getItem("ku_uid");
+  if(uid){
+    db.collection("userDms").where("members","array-contains",uid).get()
+      .then(function(snap){
+        snap.forEach(function(doc){
+          var data=doc.data();
+          var dmId=doc.id;
+          if(!ST.dms.find(function(x){return x.id===dmId;})){
+            ST.dms.push({
+              id:dmId,
+              members:data.memberProfiles||[],
+              last:data.last||"",
+              lt:data.lt||"",
+              msgs:[]
+            });
+          }
+          watchDm(dmId);
+        });
+        if(ST.tab==="chat")redraw();
+      }).catch(function(e){console.log("load DMs failed",e);});
+  }
 
   // Listen for notifications triggered by other users
   var notifUnsub=db.collection("notifications")
@@ -1433,6 +1454,11 @@ function sendChat(gid){
   if(dm){
     postToDm(gid,Object.assign({},msg,{you:false})).then(function(){
       broadcastNotif(ST.name+" (DM)",msg.text.substring(0,80),gid);
+      // Update last message in Firestore so DM list stays current
+      db.collection("userDms").doc(gid).update({
+        last:msg.text,lt:"Just now",
+        updatedAt:firebase.firestore.FieldValue.serverTimestamp()
+      }).catch(function(){});
     }).catch(function(e){console.log("DM send failed",e);});
   } else {
     postToChat(gid,Object.assign({},msg,{you:false})).catch(function(e){console.log("chat send failed",e);});
@@ -2101,6 +2127,16 @@ var mems=fbMems.length?fbMems.map(function(m){return{av:m.av||"👤",name:m.name
     if(!selMems.length)selMems=[{av:"\uD83D\uDC64",name:"Family member"}];
     var nid="dm-"+Date.now();if(!ST.dms)ST.dms=[];
     ST.dms.unshift({id:nid,members:selMems,last:"",lt:"Now",msgs:[]});
+    // Save DM metadata to Firestore so it persists across sessions
+    var memberUids=selMems.map(function(m){return m.uid||"anon";});
+    if(uid)memberUids.push(uid);
+    db.collection("userDms").doc(nid).set({
+      id:nid,
+      members:memberUids,
+      memberProfiles:selMems,
+      last:"",lt:"",
+      createdAt:firebase.firestore.FieldValue.serverTimestamp()
+    }).catch(function(e){console.log("DM meta save failed",e);});
     // Start listening to this new DM immediately so messages appear in real time
     (function(dmId){
       var unsub=db.collection("dms").doc(dmId).collection("msgs")
