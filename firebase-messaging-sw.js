@@ -1,5 +1,8 @@
-importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
+// firebase-messaging-sw.js
+// Place this file at the ROOT of your Netlify site (same level as index.html)
+
+importScripts("https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js");
+importScripts("https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js");
 
 firebase.initializeApp({
   apiKey: "AIzaSyBLUsaETkcXh_1f2KOayMAkhM9jPb1XE9Y",
@@ -12,20 +15,30 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
+// Handle background messages (app is closed or in background)
 messaging.onBackgroundMessage(function(payload) {
-  const title = payload.notification?.title || 'Keep Up';
-  const options = {
-    body: payload.notification?.body || 'Someone posted in your family group',
-    icon: '/Keepup/icon-192.png',
-    badge: '/Keepup/icon-192.png',
-    data: payload.data
-  };
-  return self.registration.showNotification(title, options);
+  const title = payload.notification?.title || "Keep Up";
+  const body  = payload.notification?.body  || "New activity in your family";
+
+  self.registration.showNotification(title, {
+    body,
+    icon:  "/Keepup/icon.svg",
+    badge: "/Keepup/icon.svg",
+    data:  { url: "https://keepupfamilyapp.github.io/Keepup" },
+    vibrate: [200, 100, 200],
+  });
 });
 
-self.addEventListener('notificationclick', function(event) {
+// Tap notification → open the app
+self.addEventListener("notificationclick", function(event) {
   event.notification.close();
+  const url = event.notification.data?.url || "https://keepupfamilyapp.github.io/Keepup";
   event.waitUntil(
-    clients.openWindow('https://keepupfamilyapp.github.io/Keepup')
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then(function(list) {
+      for (const client of list) {
+        if (client.url === url && "focus" in client) return client.focus();
+      }
+      if (clients.openWindow) return clients.openWindow(url);
+    })
   );
 });
