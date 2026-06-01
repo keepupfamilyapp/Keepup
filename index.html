@@ -250,7 +250,8 @@ function doSync(){
           if(change.type==="added"||change.type==="modified"){
             data.you=(data.name===(ST.name||"You")&&data.av===ST.avatar);
             // Remove matching optimistic temp message
-            ST.chatMsgs[gid]=ST.chatMsgs[gid].filter(function(x){return !x.id.startsWith("tmp-")||x.text!==data.text;});
+            if(data.imgUrl&&data.you){ST.chatMsgs[gid]=ST.chatMsgs[gid].filter(function(x){return !x.uploading;});}
+            else if(!data.imgUrl){ST.chatMsgs[gid]=ST.chatMsgs[gid].filter(function(x){return !x.id.startsWith("tmp-")||x.text!==data.text;});}
             var cidx=ST.chatMsgs[gid].findIndex(function(x){return x.id===data.id;});
             if(cidx>=0)ST.chatMsgs[gid][cidx]=data;
             else ST.chatMsgs[gid].push(data);
@@ -264,9 +265,9 @@ function doSync(){
           return ta-tb;
         });
         if(ST.tab==="chat"){
-            if(document.activeElement&&document.activeElement.type==="text"){
-              var activeId=ST.openChat;
-              setTimeout(function(){if(ST.openChat===activeId&&ST.tab==="chat")redraw();},200);
+            if(ST.openChat===dmId&&document.activeElement&&document.activeElement.tagName==="INPUT"){
+              // Input focused - just scroll, queue redraw for when they stop typing
+              setTimeout(function(){var els=document.querySelectorAll(".scr");els.forEach(function(l){l.scrollTop=l.scrollHeight;});},50);
             }else{redraw();}
           }
       });
@@ -294,7 +295,11 @@ function doSync(){
         snap.docChanges().forEach(function(change){
           var data=Object.assign({},change.doc.data(),{id:change.doc.id});
           if(change.type==="added"){
-            if(data.imgUrl){dm.msgs=dm.msgs.filter(function(x){return !x.uploading;});}else{dm.msgs=dm.msgs.filter(function(x){return !(x.id&&x.id.startsWith("tmp-")&&x.text===data.text);});}
+            // Clean up temp/uploading placeholders that match this incoming message
+            var myUid3=currentUser?currentUser.uid:localStorage.getItem("ku_uid");
+            var isMine=(data.av===ST.avatar&&data.name===(ST.name||"You"));
+            if(data.imgUrl&&isMine){dm.msgs=dm.msgs.filter(function(x){return !x.uploading;});}
+            else if(!data.imgUrl){dm.msgs=dm.msgs.filter(function(x){return !(x.id&&x.id.startsWith("tmp-")&&x.text===data.text);});}
             if(!dm.msgs.find(function(x){return x.id===data.id;})){
               data.you=(data.name===(ST.name||"You")&&data.av===ST.avatar);
               dm.msgs.push(data);dm.last=data.text||"📷";dm.lt="Just now";
@@ -334,11 +339,7 @@ function doSync(){
             if(existing){existing.last=data.last||"";existing.lt=data.lt||"";}
           }
         });
-        if(ST.tab==="chat"&&document.activeElement&&document.activeElement.type!=="text")redraw();
-        else if(ST.tab==="chat"){
-          // Defer redraw so typing isn't interrupted - just update message list
-          setTimeout(function(){if(ST.tab==="chat")redraw();},300);
-        }
+        if(ST.tab==="chat"&&(!document.activeElement||document.activeElement.tagName!=="INPUT"))redraw();
       },function(e){console.log("userDms listener failed",e);});
     unsubscribers.push(dmListUnsub);
   }
