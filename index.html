@@ -1334,6 +1334,7 @@ function buildChatView(t,grp){
     if(myUid){setTimeout(function(){
       db.collection("userDms").doc(cid).update({["seenBy."+myUid]:firebase.firestore.FieldValue.serverTimestamp()}).catch(function(){});
     },1000);}
+  }
   var hdr=d({css:{background:t.cb,padding:"10px 13px",display:"flex",alignItems:"center",gap:"10px",borderBottom:"1px solid "+t.ap,flexShrink:0}});
   var bb=b({css:{background:t.ap,border:"none",borderRadius:"50px",padding:"7px 13px",fontSize:"13px",fontWeight:700,color:t.ad,cursor:"pointer",fontFamily:"inherit"}},"Back");
   bb.addEventListener("click",function(){ST.openChat=null;redraw();});hdr.appendChild(bb);
