@@ -265,9 +265,13 @@ function doSync(){
           return ta-tb;
         });
         if(ST.tab==="chat"){
-            // Always redraw - redraw() now preserves input focus
-            redraw();
-            setTimeout(function(){var els=document.querySelectorAll(".scr");els.forEach(function(l){l.scrollTop=l.scrollHeight;});},80);
+            // If this chat is open and input is focused, skip full redraw
+            if(ST.openChat===dmId&&document.activeElement&&document.activeElement.tagName==="INPUT"){
+              setTimeout(function(){var els=document.querySelectorAll(".scr");els.forEach(function(l){l.scrollTop=l.scrollHeight;});},80);
+            } else {
+              redraw();
+              setTimeout(function(){var els=document.querySelectorAll(".scr");els.forEach(function(l){l.scrollTop=l.scrollHeight;});},80);
+            }
           }
       });
     unsubscribers.push(unsub);
@@ -613,22 +617,10 @@ function timeAgo(ts){
 
 function redraw(){
   try{
-    // Only restore focus if we are actively in an open chat
-    var wasChatInput=ST.openChat&&ST.tab==="chat"&&
-      document.activeElement&&document.activeElement.tagName==="INPUT"&&
-      document.activeElement.placeholder&&document.activeElement.placeholder.startsWith("Message ");
     var old=document.getElementById("app");
     var next=buildApp();
     if(old)old.replaceWith(next);
     else document.body.appendChild(next);
-    // Restore focus only if still in same chat
-    if(wasChatInput&&ST.openChat&&ST.tab==="chat"){
-      var newInput=document.querySelector("input[placeholder^='Message ']");
-      if(newInput){
-        newInput.focus();
-        newInput.setSelectionRange(newInput.value.length,newInput.value.length);
-      }
-    }
   }catch(err){
     var e2=document.getElementById("app");
     if(e2)e2.innerHTML='<div style="padding:32px;font-family:sans-serif;color:#C4714A;font-size:13px;"><b>Error:</b> '+err.message+'<br><pre style="font-size:10px;margin-top:8px;white-space:pre-wrap">'+err.stack+'</pre></div>';
@@ -1398,7 +1390,9 @@ function buildChatView(t,grp){
     } else if(msg.videoUrl){
       var vidBubble=d({css:{borderRadius:iy?"16px 16px 3px 16px":"16px 16px 16px 3px",overflow:"hidden",boxShadow:"0 1px 5px rgba(0,0,0,.12)",maxWidth:"260px",background:"#000"}});
       var vid=document.createElement("video");vid.src=msg.videoUrl;vid.controls=true;vid.preload="metadata";
-      vid.style.cssText="width:100%;max-height:280px;display:block;";
+      vid.setAttribute("playsinline","");
+      vid.setAttribute("webkit-playsinline","");
+      vid.style.cssText="width:100%;max-height:280px;display:block;background:#000;";
       vidBubble.appendChild(vid);
       if(msg.text){var vcap=d({css:{padding:"7px 10px",fontSize:"13px",color:"white",lineHeight:"1.4"}},msg.text);vidBubble.appendChild(vcap);}
       mb.appendChild(vidBubble);bubbleEl=vidBubble;
@@ -1459,8 +1453,8 @@ function buildChatView(t,grp){
     row.appendChild(mb);list.appendChild(row);
   });
   wrap.appendChild(list);
-  // Input bar with camera button
-  var inp=d({css:{padding:"8px 11px 14px",borderTop:"1px solid "+t.ap,background:t.cb,flexShrink:0,display:"flex",gap:"7px",alignItems:"flex-end"}});
+  // Input bar - fixed at bottom, outside redraw cycle to prevent typing interruption
+  var inp=d({css:{padding:"8px 11px 14px",borderTop:"1px solid "+t.ap,background:t.cb,flexShrink:0,display:"flex",gap:"7px",alignItems:"flex-end",position:"sticky",bottom:"0",zIndex:10}});
   // Hidden file input for photos
   var photoFi=document.createElement("input");photoFi.type="file";photoFi.accept="image/*";photoFi.style.display="none";
   photoFi.addEventListener("change",function(){
