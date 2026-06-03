@@ -288,7 +288,8 @@ function doSync(){
         if(!dm)return;
         var data=doc.data();
         dm.seenBy=data.seenBy||{};
-        if(ST.tab==="chat"&&ST.openChat===dmId)redraw();
+        // Don't redraw from seenBy changes - avoids keyboard dismissal
+        // Seen indicator updates on next natural redraw
       },function(){});
     unsubscribers.push(seenUnsub);
     var unsub=db.collection("dms").doc(dmId).collection("msgs")
@@ -342,7 +343,9 @@ function doSync(){
             if(existing){existing.last=data.last||"";existing.lt=data.lt||"";}
           }
         });
-        if(ST.tab==="chat"&&(!document.activeElement||document.activeElement.tagName!=="INPUT"))redraw();
+        if(ST.tab==="chat"&&(!document.activeElement||document.activeElement.tagName!=="INPUT")){
+          redraw();
+        }
       },function(e){console.log("userDms listener failed",e);});
     unsubscribers.push(dmListUnsub);
   }
@@ -1327,7 +1330,10 @@ function buildChatView(t,grp){
   var cid=ST.openChat;
   // Clear unread for this chat now that it's open
   if(dm){dm.unread=0;var myUid=currentUser?currentUser.uid:localStorage.getItem("ku_uid");
-    if(myUid)db.collection("userDms").doc(cid).update({["seenBy."+myUid]:firebase.firestore.FieldValue.serverTimestamp()}).catch(function(){});}
+    // Defer seenBy write so it doesn't trigger listener during keyboard open
+    if(myUid){setTimeout(function(){
+      db.collection("userDms").doc(cid).update({["seenBy."+myUid]:firebase.firestore.FieldValue.serverTimestamp()}).catch(function(){});
+    },1000);}
   var hdr=d({css:{background:t.cb,padding:"10px 13px",display:"flex",alignItems:"center",gap:"10px",borderBottom:"1px solid "+t.ap,flexShrink:0}});
   var bb=b({css:{background:t.ap,border:"none",borderRadius:"50px",padding:"7px 13px",fontSize:"13px",fontWeight:700,color:t.ad,cursor:"pointer",fontFamily:"inherit"}},"Back");
   bb.addEventListener("click",function(){ST.openChat=null;redraw();});hdr.appendChild(bb);
