@@ -340,7 +340,12 @@ function doSync(){
           } else if(change.type==="modified"){
             // Update last message preview
             var existing=ST.dms.find(function(x){return x.id===dmId;});
-            if(existing){existing.last=data.last||"";existing.lt=data.lt||"";}
+            if(existing){
+              existing.last=data.last||"";
+              // Sanitize lt - if it looks like a uid (long alphanum) ignore it
+              var rawLt=data.lt||"";
+              existing.lt=/^[A-Za-z0-9]{20,}$/.test(rawLt)?"Just now":rawLt;
+            }
           }
         });
         if(ST.tab==="chat"&&(!document.activeElement||document.activeElement.tagName!=="INPUT")){
@@ -1299,7 +1304,8 @@ function buildChat(t){
     var gtop=d({css:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"6px"}});
     gtop.appendChild(d({css:{fontSize:"14px",fontWeight:hasUnread?800:700,color:"#3D2314"}},dm.members.map(function(m){return m.name;}).join(", ")));
     var timeEl=d({css:{display:"flex",alignItems:"center",gap:"5px",flexShrink:0}});
-    timeEl.appendChild(d({css:{fontSize:"10px",color:"#9B7B62"}},dm.lt));
+    var ltDisplay=dm.lt&&dm.lt.length>20?"Just now":dm.lt||"";
+    timeEl.appendChild(d({css:{fontSize:"10px",color:"#9B7B62"}},ltDisplay));
     if(hasUnread){var badge=d({css:{background:"#C4714A",color:"white",borderRadius:"50px",padding:"1px 7px",fontSize:"11px",fontWeight:800,minWidth:"18px",textAlign:"center"}},String(dm.unread));timeEl.appendChild(badge);}
     gtop.appendChild(timeEl);
     gd.appendChild(gtop);
@@ -1387,10 +1393,12 @@ function buildChatView(t,grp){
     if(!iy)mb.appendChild(d({css:{fontSize:"10px",fontWeight:700,color:t.ad,marginBottom:"2px",paddingLeft:"2px"}},msg.name));
     var bubbleEl=null;
     if(msg.imgUrl){
-      var photoBubble=d({css:{borderRadius:iy?"16px 16px 3px 16px":"16px 16px 16px 3px",overflow:"hidden",cursor:"pointer",boxShadow:"0 1px 5px rgba(0,0,0,.12)",maxWidth:"220px",background:iy?t.a:"white",border:iy?"none":"1px solid "+t.ap}});
+      var photoBubble=d({css:{borderRadius:iy?"16px 16px 3px 16px":"16px 16px 16px 3px",overflow:"hidden",cursor:"pointer",boxShadow:"0 1px 5px rgba(0,0,0,.12)",maxWidth:"220px",background:iy?t.a:"white",border:iy?"none":"1px solid "+t.ap,WebkitTouchCallout:"none",userSelect:"none"}});
+      photoBubble.addEventListener("contextmenu",function(e){e.preventDefault();});
       var pimg=document.createElement("img");pimg.src=msg.imgUrl;
-      pimg.style.cssText="width:100%;max-height:240px;object-fit:cover;display:block;";
+      pimg.style.cssText="width:100%;max-height:240px;object-fit:cover;display:block;-webkit-touch-callout:none;user-select:none;";
       pimg.addEventListener("click",function(){showFullScreen(msg.imgUrl);});
+      pimg.addEventListener("contextmenu",function(e){e.preventDefault();});
       photoBubble.appendChild(pimg);
       if(msg.text){var capEl=d({css:{padding:"7px 10px",fontSize:"13px",color:iy?"white":"#3D2314",lineHeight:"1.4"}},msg.text);photoBubble.appendChild(capEl);}
       mb.appendChild(photoBubble);bubbleEl=photoBubble;
@@ -1446,7 +1454,8 @@ function buildChatView(t,grp){
       mb.appendChild(rxRow);
     }
     var tsRow=d({css:{display:"flex",alignItems:"center",gap:"4px",justifyContent:iy?"flex-end":"flex-start",marginTop:"2px"}});
-    tsRow.appendChild(d({css:{fontSize:"9px",color:"#9B7B62"}},msg.createdAt?timeAgo(msg.createdAt):msg.time));
+    var msgTime=msg.createdAt?timeAgo(msg.createdAt):(msg.sentAt?timeAgo(msg.sentAt):(msg.time||"Just now"));
+    tsRow.appendChild(d({css:{fontSize:"9px",color:"#9B7B62"}},msgTime));
     // Show "Seen" under the last message you sent if the other person has seen it
     if(iy&&dm&&dm.seenBy){
       var myUid=currentUser?currentUser.uid:localStorage.getItem("ku_uid");
@@ -1624,7 +1633,7 @@ function sendChatVideo(gid,file,t){
 function sendChat(gid){
   var iv=ST.chatIn[gid]||"";if(!iv.trim())return;
   var sUid=currentUser?currentUser.uid:(localStorage.getItem("ku_uid")||"anon");
-  var msg={av:ST.avatar,name:ST.name||"You",text:iv.trim(),time:"Just now",you:true,senderUid:sUid};
+  var msg={av:ST.avatar,name:ST.name||"You",text:iv.trim(),time:"Just now",sentAt:Date.now(),you:true,senderUid:sUid};
   ST.chatIn[gid]="";
   var dm=ST.dms&&ST.dms.find(function(x){return x.id===gid;});
   // Optimistic: show message immediately before Firestore confirms
