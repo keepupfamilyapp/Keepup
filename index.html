@@ -265,10 +265,9 @@ function doSync(){
           return ta-tb;
         });
         if(ST.tab==="chat"){
-            if(ST.openChat===dmId&&document.activeElement&&document.activeElement.tagName==="INPUT"){
-              // Input focused - just scroll, queue redraw for when they stop typing
-              setTimeout(function(){var els=document.querySelectorAll(".scr");els.forEach(function(l){l.scrollTop=l.scrollHeight;});},50);
-            }else{redraw();}
+            // Always redraw - redraw() now preserves input focus
+            redraw();
+            setTimeout(function(){var els=document.querySelectorAll(".scr");els.forEach(function(l){l.scrollTop=l.scrollHeight;});},80);
           }
       });
     unsubscribers.push(unsub);
@@ -614,10 +613,22 @@ function timeAgo(ts){
 
 function redraw(){
   try{
+    // Preserve chat input state across redraws
+    var chatInputVal=null;
+    var wasChatInput=document.activeElement&&document.activeElement.tagName==="INPUT"&&document.activeElement.placeholder&&document.activeElement.placeholder.startsWith("Message ");
+    if(wasChatInput){chatInputVal=document.activeElement.value;}
     var old=document.getElementById("app");
     var next=buildApp();
     if(old)old.replaceWith(next);
     else document.body.appendChild(next);
+    // Restore chat input focus after redraw
+    if(wasChatInput){
+      var newInput=document.querySelector("input[placeholder^='Message ']");
+      if(newInput){
+        newInput.focus();
+        newInput.setSelectionRange(newInput.value.length,newInput.value.length);
+      }
+    }
   }catch(err){
     var e2=document.getElementById("app");
     if(e2)e2.innerHTML='<div style="padding:32px;font-family:sans-serif;color:#C4714A;font-size:13px;"><b>Error:</b> '+err.message+'<br><pre style="font-size:10px;margin-top:8px;white-space:pre-wrap">'+err.stack+'</pre></div>';
