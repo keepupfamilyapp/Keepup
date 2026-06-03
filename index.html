@@ -1395,6 +1395,18 @@ function buildChatView(t,grp){
       photoBubble.appendChild(pimg);
       if(msg.text){var capEl=d({css:{padding:"7px 10px",fontSize:"13px",color:iy?"white":"#3D2314",lineHeight:"1.4"}},msg.text);photoBubble.appendChild(capEl);}
       mb.appendChild(photoBubble);bubbleEl=photoBubble;
+    } else if(msg.videoUrl){
+      var vidBubble=d({css:{borderRadius:iy?"16px 16px 3px 16px":"16px 16px 16px 3px",overflow:"hidden",boxShadow:"0 1px 5px rgba(0,0,0,.12)",maxWidth:"260px",background:"#000"}});
+      var vid=document.createElement("video");vid.src=msg.videoUrl;vid.controls=true;vid.preload="metadata";
+      vid.style.cssText="width:100%;max-height:280px;display:block;";
+      vidBubble.appendChild(vid);
+      if(msg.text){var vcap=d({css:{padding:"7px 10px",fontSize:"13px",color:"white",lineHeight:"1.4"}},msg.text);vidBubble.appendChild(vcap);}
+      mb.appendChild(vidBubble);bubbleEl=vidBubble;
+    } else if(msg.uploadingVideo){
+      var upVidBubble=d({css:{padding:"12px 14px",borderRadius:iy?"16px 16px 3px 16px":"16px 16px 16px 3px",background:iy?t.a+"bb":"rgba(0,0,0,.06)",display:"flex",alignItems:"center",gap:"8px",minWidth:"140px"}});
+      var upVidSpin=d({css:{fontSize:"18px",animation:"float 1s ease-in-out infinite"}});upVidSpin.textContent="\uD83C\uDFA5";upVidBubble.appendChild(upVidSpin);
+      upVidBubble.appendChild(d({css:{fontSize:"12px",color:iy?"white":"#6B4C35",fontWeight:700}},"Sending video..."));
+      mb.appendChild(upVidBubble);bubbleEl=upVidBubble;
     } else if(msg.uploading){
       var upBubble=d({css:{padding:"12px 14px",borderRadius:iy?"16px 16px 3px 16px":"16px 16px 16px 3px",background:iy?t.a+"bb":"rgba(0,0,0,.06)",display:"flex",alignItems:"center",gap:"8px",minWidth:"120px"}});
       var upSpin=d({css:{fontSize:"18px",animation:"float 1s ease-in-out infinite"}});upSpin.textContent="\uD83D\uDCF8";upBubble.appendChild(upSpin);
@@ -1472,11 +1484,42 @@ function buildChatView(t,grp){
     ov.appendChild(sh);document.body.appendChild(ov);
   });
   inp.appendChild(photoFi);
+  // Video file input
+  var videoFi=document.createElement("input");videoFi.type="file";videoFi.accept="video/*";videoFi.style.display="none";
+  videoFi.addEventListener("change",function(){
+    var f=this.files&&this.files[0];videoFi.value="";
+    if(!f)return;
+    // Size check - warn if over 50MB
+    if(f.size>50*1024*1024){alert("Video is too large. Please pick a shorter clip (under 50MB).");return;}
+    var previewUrl=URL.createObjectURL(f);
+    var ov=d({css:{position:"fixed",inset:"0",background:"rgba(0,0,0,.6)",zIndex:300,display:"flex",alignItems:"flex-end"}});
+    var sh=d({css:{background:"white",borderRadius:"20px 20px 0 0",padding:"18px 18px 32px",width:"100%",boxSizing:"border-box"}});
+    sh.appendChild(d({css:{fontSize:"16px",fontWeight:800,color:"#3D2314",marginBottom:"12px",textAlign:"center"}},"Send this video?"));
+    var pvid=document.createElement("video");pvid.src=previewUrl;pvid.controls=true;
+    pvid.style.cssText="width:100%;max-height:220px;border-radius:12px;display:block;margin-bottom:14px;background:#000;";
+    sh.appendChild(pvid);
+    // File size info
+    var sizeMb=(f.size/1024/1024).toFixed(1);
+    sh.appendChild(d({css:{fontSize:"11px",color:"#9B7B62",textAlign:"center",marginBottom:"10px"}},sizeMb+"MB \u2022 Upload may take a moment"));
+    var row=d({css:{display:"flex",gap:"10px"}});
+    var cBtn=b({css:{flex:1,padding:"13px",borderRadius:"50px",background:"#F0EDE8",border:"none",fontSize:"15px",fontWeight:700,color:"#6B4C35",cursor:"pointer",fontFamily:"inherit"}},"Cancel");
+    var sBtn=b({css:{flex:1,padding:"13px",borderRadius:"50px",background:t.a,border:"none",fontSize:"15px",fontWeight:700,color:"white",cursor:"pointer",fontFamily:"inherit"}},"\uD83C\uDFA5 Send");
+    cBtn.addEventListener("click",function(){ov.remove();URL.revokeObjectURL(previewUrl);});
+    sBtn.addEventListener("click",function(){ov.remove();URL.revokeObjectURL(previewUrl);sendChatVideo(cid,f,t);});
+    row.appendChild(cBtn);row.appendChild(sBtn);sh.appendChild(row);
+    ov.appendChild(sh);document.body.appendChild(ov);
+  });
+  inp.appendChild(videoFi);
   // Camera button
   var camBtn=b({css:{width:"38px",height:"38px",borderRadius:"50%",background:t.ap,border:"none",fontSize:"18px",cursor:"pointer",flexShrink:0,fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",color:t.ad}});
   camBtn.textContent="\uD83D\uDCF7";
   camBtn.addEventListener("click",function(){photoFi.click();});
   inp.appendChild(camBtn);
+  // Video button
+  var vidBtn=b({css:{width:"38px",height:"38px",borderRadius:"50%",background:t.ap,border:"none",fontSize:"18px",cursor:"pointer",flexShrink:0,fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",color:t.ad}});
+  vidBtn.textContent="\uD83C\uDFA5";
+  vidBtn.addEventListener("click",function(){videoFi.click();});
+  inp.appendChild(vidBtn);
   var ci=el("input",{type:"text",placeholder:"Message "+chatName+"...",css:{flex:1,padding:"10px 13px",borderRadius:"22px",border:"1.5px solid "+t.ap,background:t.bg,fontSize:"14px",color:"#3D2314",outline:"none",fontFamily:"inherit"}});
   ci.value=ST.chatIn[cid]||"";
   ci.addEventListener("input",function(){if(!ST.chatIn)ST.chatIn={};ST.chatIn[cid]=this.value;});
@@ -1526,6 +1569,54 @@ function sendChatPhoto(gid,file,t){
       else{ST.chatMsgs[gid]=ST.chatMsgs[gid].filter(function(x){return x.id!==tempId;});}
       redraw();
       alert("Photo failed to send. Check your connection.");
+    });
+}
+
+function sendChatVideo(gid,file,t){
+  if(!currentUser){alert("Still signing you in, try again in a moment.");return;}
+  var dm=ST.dms&&ST.dms.find(function(x){return x.id===gid;});
+  var tempId="chatvideo-"+Date.now();
+  var tempMsg={id:tempId,av:ST.avatar,name:ST.name||"You",text:"",videoUrl:null,uploadingVideo:true,time:"Just now",you:true};
+  if(dm){dm.msgs.push(tempMsg);}
+  else{if(!ST.chatMsgs[gid])ST.chatMsgs[gid]=[];ST.chatMsgs[gid].push(tempMsg);}
+  redraw();
+  setTimeout(function(){var els=document.querySelectorAll(".scr");els.forEach(function(l){l.scrollTop=l.scrollHeight;});},50);
+  var uid=currentUser.uid;
+  var ext=file.name.split(".").pop()||"mp4";
+  var uploadTask=storage.ref("chat-videos/"+uid+"/"+Date.now()+"."+ext).put(file);
+  // Show upload progress
+  uploadTask.on("state_changed",function(snap){
+    var pct=Math.round(snap.bytesTransferred/snap.totalBytes*100);
+    var dm2=ST.dms&&ST.dms.find(function(x){return x.id===gid;});
+    var msgs2=dm2?dm2.msgs:(ST.chatMsgs[gid]||[]);
+    var tmp=msgs2.find(function(x){return x.id===tempId;});
+    if(tmp){tmp.progress=pct;}
+  });
+  uploadTask.then(function(snap){return snap.ref.getDownloadURL();})
+    .then(function(url){
+      var msg={av:ST.avatar,name:ST.name||"You",text:"",videoUrl:url,time:"Just now",you:true};
+      if(dm){dm.msgs=dm.msgs.filter(function(x){return x.id!==tempId;});}
+      else{ST.chatMsgs[gid]=ST.chatMsgs[gid].filter(function(x){return x.id!==tempId;});}
+      if(dm){
+        postToDm(gid,Object.assign({},msg,{you:false})).then(function(){
+          db.collection("userDms").doc(gid).update({last:"\uD83C\uDFA5 Video",lt:"Just now",updatedAt:firebase.firestore.FieldValue.serverTimestamp()}).catch(function(){});
+        }).catch(function(){
+          dm.msgs.push(Object.assign({},msg,{id:Date.now()}));dm.last="\uD83C\uDFA5 Video";dm.lt="Just now";
+        });
+      } else {
+        postToChat(gid,Object.assign({},msg,{you:false})).catch(function(){
+          if(!ST.chatMsgs[gid])ST.chatMsgs[gid]=[];
+          ST.chatMsgs[gid].push(Object.assign({},msg,{id:Date.now()}));
+        });
+      }
+      redraw();
+      setTimeout(function(){var els=document.querySelectorAll(".scr");els.forEach(function(l){l.scrollTop=l.scrollHeight;});},80);
+    }).catch(function(e){
+      console.log("chat video upload failed",e);
+      if(dm){dm.msgs=dm.msgs.filter(function(x){return x.id!==tempId;});}
+      else{ST.chatMsgs[gid]=ST.chatMsgs[gid].filter(function(x){return x.id!==tempId;});}
+      redraw();
+      alert("Video failed to send. Try a shorter clip or check your connection.");
     });
 }
 
