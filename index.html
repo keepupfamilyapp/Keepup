@@ -613,16 +613,16 @@ function timeAgo(ts){
 
 function redraw(){
   try{
-    // Preserve chat input state across redraws
-    var chatInputVal=null;
-    var wasChatInput=document.activeElement&&document.activeElement.tagName==="INPUT"&&document.activeElement.placeholder&&document.activeElement.placeholder.startsWith("Message ");
-    if(wasChatInput){chatInputVal=document.activeElement.value;}
+    // Only restore focus if we are actively in an open chat
+    var wasChatInput=ST.openChat&&ST.tab==="chat"&&
+      document.activeElement&&document.activeElement.tagName==="INPUT"&&
+      document.activeElement.placeholder&&document.activeElement.placeholder.startsWith("Message ");
     var old=document.getElementById("app");
     var next=buildApp();
     if(old)old.replaceWith(next);
     else document.body.appendChild(next);
-    // Restore chat input focus after redraw
-    if(wasChatInput){
+    // Restore focus only if still in same chat
+    if(wasChatInput&&ST.openChat&&ST.tab==="chat"){
       var newInput=document.querySelector("input[placeholder^='Message ']");
       if(newInput){
         newInput.focus();
