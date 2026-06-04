@@ -192,6 +192,49 @@ function fetchAllFeeds(){
     });
 }
 
+function showFullScreenVideo(url){
+  var ov=document.createElement("div");
+  ov.style.cssText="position:fixed;inset:0;background:#000;z-index:300;display:flex;align-items:center;justify-content:center;flex-direction:column;";
+  // Loading state
+  var spinner=document.createElement("div");
+  spinner.style.cssText="color:rgba(255,255,255,.6);font-size:48px;margin-bottom:12px;";
+  spinner.textContent="\uD83C\uDFA5";
+  var loadTxt=document.createElement("div");
+  loadTxt.style.cssText="color:rgba(255,255,255,.5);font-size:13px;";
+  loadTxt.textContent="Loading video...";
+  ov.appendChild(spinner);ov.appendChild(loadTxt);
+  // Close button
+  var closeBtn=document.createElement("button");
+  closeBtn.style.cssText="position:absolute;top:16px;right:16px;background:rgba(255,255,255,.15);border:none;color:white;font-size:18px;width:36px;height:36px;border-radius:50%;cursor:pointer;z-index:10;display:flex;align-items:center;justify-content:center;";
+  closeBtn.textContent="\u2715";
+  closeBtn.addEventListener("click",function(){vid.pause();vid.src="";ov.remove();});
+  ov.appendChild(closeBtn);
+  document.body.appendChild(ov);
+  // Create video element only after overlay is shown
+  setTimeout(function(){
+    var vid=document.createElement("video");
+    vid.controls=true;
+    vid.preload="metadata";
+    vid.setAttribute("playsinline","");
+    vid.setAttribute("webkit-playsinline","");
+    vid.style.cssText="width:100%;max-height:100vh;max-width:100vw;object-fit:contain;display:none;";
+    vid.addEventListener("loadedmetadata",function(){
+      spinner.remove();loadTxt.remove();
+      vid.style.display="block";
+    });
+    vid.addEventListener("error",function(){
+      loadTxt.textContent="Could not load video";
+      spinner.textContent="\u26A0\uFE0F";
+    });
+    vid.src=url;
+    ov.appendChild(vid);
+  },100);
+  // Tap outside video to close
+  ov.addEventListener("click",function(e){
+    if(e.target===ov){var v=ov.querySelector("video");if(v){v.pause();v.src="";}ov.remove();}
+  });
+}
+
 function syncOn(){
   if(!currentUser)return;
   unsubscribers.forEach(function(u){u();});unsubscribers=[];
@@ -1433,13 +1476,20 @@ function buildChatView(t,grp){
       if(msg.text){var capEl=d({css:{padding:"7px 10px",fontSize:"13px",color:iy?"white":"#3D2314",lineHeight:"1.4"}},msg.text);photoBubble.appendChild(capEl);}
       mb.appendChild(photoBubble);bubbleEl=photoBubble;
     } else if(msg.videoUrl){
-      var vidBubble=d({css:{borderRadius:iy?"16px 16px 3px 16px":"16px 16px 16px 3px",overflow:"hidden",boxShadow:"0 1px 5px rgba(0,0,0,.12)",maxWidth:"260px",background:"#000"}});
-      var vid=document.createElement("video");vid.src=msg.videoUrl;vid.controls=true;vid.preload="metadata";
-      vid.setAttribute("playsinline","");
-      vid.setAttribute("webkit-playsinline","");
-      vid.style.cssText="width:100%;max-height:280px;display:block;background:#000;";
-      vidBubble.appendChild(vid);
-      if(msg.text){var vcap=d({css:{padding:"7px 10px",fontSize:"13px",color:"white",lineHeight:"1.4"}},msg.text);vidBubble.appendChild(vcap);}
+      // Show play button thumbnail instead of inline video to prevent memory crash
+      var vidBubble=d({css:{borderRadius:iy?"16px 16px 3px 16px":"16px 16px 16px 3px",overflow:"hidden",boxShadow:"0 1px 5px rgba(0,0,0,.12)",maxWidth:"240px",background:"#1a1a1a",cursor:"pointer",position:"relative"}});
+      vidBubble.addEventListener("contextmenu",function(e){e.preventDefault();});
+      // Dark preview area with play button
+      var vidThumb=d({css:{width:"100%",height:"160px",background:"linear-gradient(135deg,#2a2a2a,#1a1a1a)",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:"8px"}});
+      var playBtn=d({css:{width:"56px",height:"56px",borderRadius:"50%",background:"rgba(255,255,255,.15)",border:"2px solid rgba(255,255,255,.4)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"24px"}});
+      playBtn.textContent="\u25B6\uFE0F";
+      var vidLabel=d({css:{fontSize:"11px",color:"rgba(255,255,255,.5)",fontWeight:600}});
+      vidLabel.textContent="\uD83C\uDFA5 Tap to play video";
+      vidThumb.appendChild(playBtn);vidThumb.appendChild(vidLabel);
+      vidBubble.appendChild(vidThumb);
+      if(msg.text){var vcap=d({css:{padding:"7px 10px",fontSize:"13px",color:"rgba(255,255,255,.8)",lineHeight:"1.4"}},msg.text);vidBubble.appendChild(vcap);}
+      // Tap opens fullscreen video player
+      vidBubble.addEventListener("click",function(){showFullScreenVideo(msg.videoUrl);});
       mb.appendChild(vidBubble);bubbleEl=vidBubble;
     } else if(msg.uploadingVideo){
       var upVidBubble=d({css:{padding:"12px 14px",borderRadius:iy?"16px 16px 3px 16px":"16px 16px 16px 3px",background:iy?t.a+"bb":"rgba(0,0,0,.06)",display:"flex",alignItems:"center",gap:"8px",minWidth:"140px"}});
