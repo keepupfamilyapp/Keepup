@@ -1555,7 +1555,9 @@ function buildChatView(t,grp){
       photoBubble.addEventListener("contextmenu",function(e){e.preventDefault();});
       var pimg=document.createElement("img");pimg.src=msg.imgUrl;
       pimg.loading="lazy";pimg.decoding="async";
-      pimg.style.cssText="width:100%;max-height:200px;object-fit:cover;display:block;-webkit-touch-callout:none;user-select:none;";
+      // Reserve fixed height before load to prevent layout reflow/glitch
+      pimg.style.cssText="width:220px;height:180px;object-fit:cover;display:block;-webkit-touch-callout:none;user-select:none;background:#f0ede8;";
+      pimg.addEventListener("load",function(){this.style.height="";this.style.width="100%";});
       pimg.addEventListener("click",function(){showFullScreen(msg.imgUrl);});
       pimg.addEventListener("contextmenu",function(e){e.preventDefault();});
       photoBubble.appendChild(pimg);
