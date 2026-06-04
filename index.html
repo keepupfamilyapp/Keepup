@@ -308,8 +308,7 @@ function doSync(){
           return ta-tb;
         });
         if(ST.tab==="chat"){
-            // If this chat is open and input is focused, skip full redraw
-            if(ST.openChat===dmId&&document.activeElement&&document.activeElement.tagName==="INPUT"){
+            if(ST.openChat===gid&&document.activeElement&&document.activeElement.tagName==="INPUT"){
               setTimeout(function(){var els=document.querySelectorAll(".scr");els.forEach(function(l){l.scrollTop=l.scrollHeight;});},80);
             } else {
               redraw();
@@ -1413,9 +1412,13 @@ function buildChatView(t,grp){
     em.appendChild(d({css:{fontSize:"12px"}},"Say hello to "+chatName));list.appendChild(em);
   }
   // Sort messages oldest first so newest appears at bottom like normal chat
+  var _now=Date.now();
   msgs=msgs.slice().sort(function(a,b){
-    var ta=a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():(a.sentAt||0);
-    var tb=b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():(b.sentAt||0);
+    // uploading/temp msgs always go to bottom
+    if(a.uploading||a.uploadingVideo||(a.id&&a.id.startsWith("tmp-"))||(a.id&&a.id.startsWith("chat")))return 1;
+    if(b.uploading||b.uploadingVideo||(b.id&&b.id.startsWith("tmp-"))||(b.id&&b.id.startsWith("chat")))return -1;
+    var ta=a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():(a.sentAt||_now);
+    var tb=b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():(b.sentAt||_now);
     return ta-tb;
   });
   if(!ST.chatReactions)ST.chatReactions={};
@@ -1676,7 +1679,7 @@ function sendChatPhoto(gid,file,t){
   if(!currentUser){alert("Still signing you in, try again in a moment.");return;}
   var dm=ST.dms&&ST.dms.find(function(x){return x.id===gid;});
   var tempId="chatphoto-"+Date.now();
-  var tempMsg={id:tempId,av:ST.avatar,name:ST.name||"You",text:"",imgUrl:null,uploading:true,time:"Just now",you:true};
+  var tempMsg={id:tempId,av:ST.avatar,name:ST.name||"You",text:"",imgUrl:null,uploading:true,time:"Just now",sentAt:Date.now(),you:true};
   if(dm){dm.msgs.push(tempMsg);}
   else{if(!ST.chatMsgs[gid])ST.chatMsgs[gid]=[];ST.chatMsgs[gid].push(tempMsg);}
   redraw();
@@ -1716,7 +1719,7 @@ function sendChatVideo(gid,file,t){
   if(!currentUser){alert("Still signing you in, try again in a moment.");return;}
   var dm=ST.dms&&ST.dms.find(function(x){return x.id===gid;});
   var tempId="chatvideo-"+Date.now();
-  var tempMsg={id:tempId,av:ST.avatar,name:ST.name||"You",text:"",videoUrl:null,uploadingVideo:true,time:"Just now",you:true};
+  var tempMsg={id:tempId,av:ST.avatar,name:ST.name||"You",text:"",videoUrl:null,uploadingVideo:true,time:"Just now",sentAt:Date.now(),you:true};
   if(dm){dm.msgs.push(tempMsg);}
   else{if(!ST.chatMsgs[gid])ST.chatMsgs[gid]=[];ST.chatMsgs[gid].push(tempMsg);}
   redraw();
