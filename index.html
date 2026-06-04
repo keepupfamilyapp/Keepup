@@ -329,30 +329,17 @@ function doSync(){
       // If chat is open, only rebuild the message list - not the whole page
       var existingList=document.getElementById("chat-msg-list");
       if(existingList&&ST.openChat&&ST.tab==="chat"){
-        var savedScroll=existingList.scrollTop;
-        var wasAtBottom=existingList.scrollHeight-existingList.scrollTop-existingList.clientHeight<60;
-        // Rebuild just the message rows
-        var t2=th(ST.group);
-        var grp2=ST.groups.find(function(g){return g.id===ST.group;})||ST.groups[0];
-        var dm2=ST.dms&&ST.dms.find(function(x){return x.id===ST.openChat;});
-        var msgs2=dm2?dm2.msgs:(ST.chatMsgs[grp2?grp2.id:"imm"]||[]);
-        // Sort
-        var _now2=Date.now();
-        msgs2=msgs2.slice().sort(function(a,b){
-          if(a.uploading||a.uploadingVideo||(a.id&&(a.id.startsWith("tmp-")||a.id.startsWith("chat"))))return 1;
-          if(b.uploading||b.uploadingVideo||(b.id&&(b.id.startsWith("tmp-")||b.id.startsWith("chat"))))return -1;
-          var ta=a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():(a.sentAt||_now2);
-          var tb=b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():(b.sentAt||_now2);
-          return ta-tb;
-        });
-        // Only do full redraw if message count changed significantly
-        var oldCount=existingList.querySelectorAll(".msg-row").length;
-        if(Math.abs(msgs2.length-oldCount)>2){
+        var wasAtBottom=existingList.scrollHeight-existingList.scrollTop-existingList.clientHeight<100;
+        // Only full redraw if input is not focused
+        if(!document.activeElement||document.activeElement.tagName!=="INPUT"){
+          var savedTop=existingList.scrollTop;
           redraw();
-        } else {
-          // Just scroll to bottom for minor updates
-          if(wasAtBottom)existingList.scrollTop=existingList.scrollHeight;
-          else existingList.scrollTop=savedScroll;
+          // Restore scroll position after redraw
+          var newList=document.getElementById("chat-msg-list");
+          if(newList){
+            if(wasAtBottom)newList.scrollTop=newList.scrollHeight;
+            else newList.scrollTop=savedTop;
+          }
         }
       } else {
         redraw();
@@ -434,7 +421,11 @@ function doSync(){
             }
           }
         });
-        if(ST.tab==="chat"&&(!document.activeElement||document.activeElement.tagName!=="INPUT")){
+        // Only redraw from userDms changes if NOT in an open chat
+        // watchDm handles all updates when chat is open to avoid double redraws
+        if(ST.tab==="chat"&&ST.openChat){
+          // Do nothing - watchDm handles this
+        } else if(ST.tab==="chat"){
           redraw();
         }
       },function(e){console.log("userDms listener failed",e);});
