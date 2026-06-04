@@ -321,6 +321,15 @@ function doSync(){
   ST.groups.forEach(function(g){watchChat(g.id);});
 
   // Listen to DM messages
+  var _redrawTimer=null;
+  function debouncedRedraw(){
+    if(_redrawTimer)clearTimeout(_redrawTimer);
+    _redrawTimer=setTimeout(function(){
+      _redrawTimer=null;
+      redraw();
+      setTimeout(function(){var els=document.querySelectorAll(".scr");els.forEach(function(l){l.scrollTop=l.scrollHeight;});},80);
+    },150);
+  }
   function watchDm(dmId){
     // Listen to seenBy field on the DM meta doc
     var seenUnsub=db.collection("userDms").doc(dmId)
@@ -353,7 +362,13 @@ function doSync(){
             }
           }
         });
-        if(ST.tab==="chat")redraw();
+        if(ST.tab==="chat"){
+          if(document.activeElement&&document.activeElement.tagName==="INPUT"){
+            setTimeout(function(){var els=document.querySelectorAll(".scr");els.forEach(function(l){l.scrollTop=l.scrollHeight;});},80);
+          } else {
+            debouncedRedraw();
+          }
+        }
       });
     unsubscribers.push(unsub);
   }
@@ -1703,9 +1718,8 @@ function sendChatPhoto(gid,file,t){
           ST.chatMsgs[gid].push(Object.assign({},msg,{id:Date.now()}));
         });
       }
-      // No broadcastNotif for DM photos - keep DMs private
-      redraw();
-      setTimeout(function(){var els=document.querySelectorAll(".scr");els.forEach(function(l){l.scrollTop=l.scrollHeight;});},80);
+      // Listener will redraw when Firestore confirms - no double redraw needed
+      setTimeout(function(){var els=document.querySelectorAll(".scr");els.forEach(function(l){l.scrollTop=l.scrollHeight;});},300);
     }).catch(function(e){
       console.log("chat photo upload failed",e);
       if(dm){dm.msgs=dm.msgs.filter(function(x){return x.id!==tempId;});}
@@ -1752,8 +1766,7 @@ function sendChatVideo(gid,file,t){
           ST.chatMsgs[gid].push(Object.assign({},msg,{id:Date.now()}));
         });
       }
-      redraw();
-      setTimeout(function(){var els=document.querySelectorAll(".scr");els.forEach(function(l){l.scrollTop=l.scrollHeight;});},80);
+      setTimeout(function(){var els=document.querySelectorAll(".scr");els.forEach(function(l){l.scrollTop=l.scrollHeight;});},300);
     }).catch(function(e){
       console.log("chat video upload failed",e);
       if(dm){dm.msgs=dm.msgs.filter(function(x){return x.id!==tempId;});}
