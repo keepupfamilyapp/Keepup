@@ -533,11 +533,26 @@ function showFullScreen(url){
   var ov=document.createElement("div");
   ov.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.97);z-index:200;overflow:hidden;touch-action:none;";
   var wrapper=document.createElement("div");
-  wrapper.style.cssText="width:100%;height:100%;display:flex;align-items:center;justify-content:center;overflow:hidden;";
+  wrapper.style.cssText="width:100%;height:100%;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;";
+  // Loading spinner while image loads
+  var spinner=document.createElement("div");
+  spinner.style.cssText="position:absolute;color:rgba(255,255,255,.5);font-size:32px;animation:float 1s ease-in-out infinite;";
+  spinner.textContent="\uD83D\uDCF7";
+  wrapper.appendChild(spinner);
   var img=document.createElement("img");
-  img.src=url;
-  img.style.cssText="max-width:100%;max-height:100%;object-fit:contain;transform-origin:center center;transition:transform .1s ease;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;";
+  img.style.cssText="max-width:100%;max-height:100%;object-fit:contain;transform-origin:center center;transition:transform .1s ease;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;opacity:0;transition:opacity .3s ease;";
   img.addEventListener("contextmenu",function(e){e.preventDefault();});
+  // Only show image once loaded to prevent memory spike
+  img.addEventListener("load",function(){
+    spinner.remove();
+    img.style.opacity="1";
+  });
+  img.addEventListener("error",function(){
+    spinner.textContent="\u26A0\uFE0F";
+    spinner.style.animation="none";
+  });
+  // Set src after attaching handlers
+  img.src=url;
   wrapper.appendChild(img);ov.appendChild(wrapper);
 
   // Pinch to zoom
@@ -1410,7 +1425,8 @@ function buildChatView(t,grp){
       var photoBubble=d({css:{borderRadius:iy?"16px 16px 3px 16px":"16px 16px 16px 3px",overflow:"hidden",cursor:"pointer",boxShadow:"0 1px 5px rgba(0,0,0,.12)",maxWidth:"220px",background:iy?t.a:"white",border:iy?"none":"1px solid "+t.ap,WebkitTouchCallout:"none",userSelect:"none"}});
       photoBubble.addEventListener("contextmenu",function(e){e.preventDefault();});
       var pimg=document.createElement("img");pimg.src=msg.imgUrl;
-      pimg.style.cssText="width:100%;max-height:240px;object-fit:cover;display:block;-webkit-touch-callout:none;user-select:none;";
+      pimg.loading="lazy";pimg.decoding="async";
+      pimg.style.cssText="width:100%;max-height:200px;object-fit:cover;display:block;-webkit-touch-callout:none;user-select:none;";
       pimg.addEventListener("click",function(){showFullScreen(msg.imgUrl);});
       pimg.addEventListener("contextmenu",function(e){e.preventDefault();});
       photoBubble.appendChild(pimg);
