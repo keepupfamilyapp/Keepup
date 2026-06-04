@@ -1585,8 +1585,11 @@ function buildChatView(t,grp){
   videoFi.addEventListener("change",function(){
     var f=this.files&&this.files[0];videoFi.value="";
     if(!f)return;
-    // Size check - warn if over 50MB
-    if(f.size>50*1024*1024){alert("Video is too large. Please pick a shorter clip (under 50MB).");return;}
+    // Size check - 15MB limit for mobile performance
+    if(f.size>15*1024*1024){
+      alert("Video is too large ("+( f.size/1024/1024).toFixed(0)+"MB). Please trim it to under 15MB. Tip: videos under 30 seconds work best.");
+      return;
+    }
     var previewUrl=URL.createObjectURL(f);
     var ov=d({css:{position:"fixed",inset:"0",background:"rgba(0,0,0,.6)",zIndex:300,display:"flex",alignItems:"flex-end"}});
     var sh=d({css:{background:"white",borderRadius:"20px 20px 0 0",padding:"18px 18px 32px",width:"100%",boxSizing:"border-box"}});
@@ -1596,7 +1599,9 @@ function buildChatView(t,grp){
     sh.appendChild(pvid);
     // File size info
     var sizeMb=(f.size/1024/1024).toFixed(1);
-    sh.appendChild(d({css:{fontSize:"11px",color:"#9B7B62",textAlign:"center",marginBottom:"10px"}},sizeMb+"MB \u2022 Upload may take a moment"));
+    var sizeColor=parseFloat(sizeMb)>10?"#C4714A":"#9B7B62";
+    sh.appendChild(d({css:{fontSize:"11px",color:sizeColor,textAlign:"center",marginBottom:"10px",fontWeight:parseFloat(sizeMb)>10?700:400}},
+      sizeMb+"MB"+(parseFloat(sizeMb)>10?" \u26A0\uFE0F Large file - may be slow":" \u2022 Upload may take a moment")));
     var row=d({css:{display:"flex",gap:"10px"}});
     var cBtn=b({css:{flex:1,padding:"13px",borderRadius:"50px",background:"#F0EDE8",border:"none",fontSize:"15px",fontWeight:700,color:"#6B4C35",cursor:"pointer",fontFamily:"inherit"}},"Cancel");
     var sBtn=b({css:{flex:1,padding:"13px",borderRadius:"50px",background:t.a,border:"none",fontSize:"15px",fontWeight:700,color:"white",cursor:"pointer",fontFamily:"inherit"}},"\uD83C\uDFA5 Send");
