@@ -326,8 +326,37 @@ function doSync(){
     if(_redrawTimer)clearTimeout(_redrawTimer);
     _redrawTimer=setTimeout(function(){
       _redrawTimer=null;
-      redraw();
-      setTimeout(function(){var els=document.querySelectorAll(".scr");els.forEach(function(l){l.scrollTop=l.scrollHeight;});},80);
+      // If chat is open, only rebuild the message list - not the whole page
+      var existingList=document.getElementById("chat-msg-list");
+      if(existingList&&ST.openChat&&ST.tab==="chat"){
+        var savedScroll=existingList.scrollTop;
+        var wasAtBottom=existingList.scrollHeight-existingList.scrollTop-existingList.clientHeight<60;
+        // Rebuild just the message rows
+        var t2=th(ST.group);
+        var grp2=ST.groups.find(function(g){return g.id===ST.group;})||ST.groups[0];
+        var dm2=ST.dms&&ST.dms.find(function(x){return x.id===ST.openChat;});
+        var msgs2=dm2?dm2.msgs:(ST.chatMsgs[grp2?grp2.id:"imm"]||[]);
+        // Sort
+        var _now2=Date.now();
+        msgs2=msgs2.slice().sort(function(a,b){
+          if(a.uploading||a.uploadingVideo||(a.id&&(a.id.startsWith("tmp-")||a.id.startsWith("chat"))))return 1;
+          if(b.uploading||b.uploadingVideo||(b.id&&(b.id.startsWith("tmp-")||b.id.startsWith("chat"))))return -1;
+          var ta=a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():(a.sentAt||_now2);
+          var tb=b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():(b.sentAt||_now2);
+          return ta-tb;
+        });
+        // Only do full redraw if message count changed significantly
+        var oldCount=existingList.querySelectorAll(".msg-row").length;
+        if(Math.abs(msgs2.length-oldCount)>2){
+          redraw();
+        } else {
+          // Just scroll to bottom for minor updates
+          if(wasAtBottom)existingList.scrollTop=existingList.scrollHeight;
+          else existingList.scrollTop=savedScroll;
+        }
+      } else {
+        redraw();
+      }
     },150);
   }
   function watchDm(dmId){
@@ -1419,7 +1448,7 @@ function buildChatView(t,grp){
   var ic=d({css:{width:"34px",height:"34px",borderRadius:"50%",background:t.ap,border:"2px solid "+t.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"18px",flexShrink:0}});ic.textContent=chatIcon;hdr.appendChild(ic);
   var hi=d({css:{flex:1}});hi.appendChild(d({css:{fontSize:"15px",fontWeight:700,color:"#3D2314"}},chatName));hi.appendChild(d({css:{fontSize:"11px",color:t.al}},chatSub));
   hdr.appendChild(hi);wrap.appendChild(hdr);
-  var list=d({cls:"scr",css:{padding:"12px 13px 8px",display:"flex",flexDirection:"column",gap:"8px",background:t.bg,WebkitUserSelect:"none",userSelect:"none",WebkitTouchCallout:"none"}});
+  var list=d({id:"chat-msg-list",cls:"scr",css:{padding:"12px 13px 8px",display:"flex",flexDirection:"column",gap:"8px",background:t.bg,WebkitUserSelect:"none",userSelect:"none",WebkitTouchCallout:"none"}});
   if(!msgs.length){
     var em=d({css:{textAlign:"center",padding:"40px 20px",color:"#9B7B62"}});
     var eic=d({css:{fontSize:"40px",marginBottom:"8px"}});eic.textContent=chatIcon;em.appendChild(eic);
@@ -1516,7 +1545,7 @@ function buildChatView(t,grp){
     var iy=msg.you;
     var msgId=msg.id||("m"+Math.random());
     var rxs=(ST.chatReactions&&ST.chatReactions[msgId])||[];
-    var row=d({css:{display:"flex",flexDirection:iy?"row-reverse":"row",alignItems:"flex-end",gap:"6px",marginBottom:"2px"}});
+    var row=d({cls:"msg-row",css:{display:"flex",flexDirection:iy?"row-reverse":"row",alignItems:"flex-end",gap:"6px",marginBottom:"2px"}});
     if(!iy){var ma=d({css:{width:"26px",height:"26px",borderRadius:"50%",background:t.ap,border:"1.5px solid "+t.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"13px",flexShrink:0}});ma.textContent=msg.av;row.appendChild(ma);}
     var mb=d({css:{maxWidth:"72%",position:"relative"}});
     if(!iy)mb.appendChild(d({css:{fontSize:"10px",fontWeight:700,color:t.ad,marginBottom:"2px",paddingLeft:"2px"}},msg.name));
@@ -1718,8 +1747,9 @@ function sendChatPhoto(gid,file,t){
           ST.chatMsgs[gid].push(Object.assign({},msg,{id:Date.now()}));
         });
       }
-      // Listener will redraw when Firestore confirms - no double redraw needed
-      setTimeout(function(){var els=document.querySelectorAll(".scr");els.forEach(function(l){l.scrollTop=l.scrollHeight;});},300);
+      // Scroll to bottom - listener handles the redraw when Firestore confirms
+      var chatList=document.getElementById("chat-msg-list");
+      if(chatList)chatList.scrollTop=chatList.scrollHeight;
     }).catch(function(e){
       console.log("chat photo upload failed",e);
       if(dm){dm.msgs=dm.msgs.filter(function(x){return x.id!==tempId;});}
@@ -1766,7 +1796,8 @@ function sendChatVideo(gid,file,t){
           ST.chatMsgs[gid].push(Object.assign({},msg,{id:Date.now()}));
         });
       }
-      setTimeout(function(){var els=document.querySelectorAll(".scr");els.forEach(function(l){l.scrollTop=l.scrollHeight;});},300);
+      var chatList2=document.getElementById("chat-msg-list");
+      if(chatList2)chatList2.scrollTop=chatList2.scrollHeight;
     }).catch(function(e){
       console.log("chat video upload failed",e);
       if(dm){dm.msgs=dm.msgs.filter(function(x){return x.id!==tempId;});}
