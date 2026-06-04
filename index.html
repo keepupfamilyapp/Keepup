@@ -1424,11 +1424,9 @@ function buildChatView(t,grp){
   function showReactionPicker(msgId,anchorEl,iy,touchY,touchX){
     var existing=document.getElementById("rx-picker");
     if(existing){existing.remove();if(existing.dataset.for===msgId)return;}
-    var picker=d({id:"rx-picker",css:{position:"fixed",zIndex:200,background:"white",borderRadius:"50px",padding:"6px 10px",display:"flex",gap:"4px",boxShadow:"0 4px 24px rgba(0,0,0,.22)",border:"1px solid #F5DDD1",animation:"fadeUp .15s ease"}});
+    var picker=d({id:"rx-picker",css:{position:"fixed",zIndex:200,background:"white",borderRadius:"50px",padding:"6px 10px",display:"flex",gap:"4px",alignItems:"center",boxShadow:"0 4px 24px rgba(0,0,0,.22)",border:"1px solid #F5DDD1",animation:"fadeUp .15s ease"}});
     picker.dataset.for=msgId;
-    // Use touch position for accurate placement
     var rect=anchorEl.getBoundingClientRect();
-    // Use touch coords (most accurate) or fall back to element rect
     var anchorY=touchY!=null?touchY:rect.top+rect.height/2;
     var anchorX=touchX!=null?touchX:rect.left+rect.width/2;
     var pickerH=54;
@@ -1451,8 +1449,49 @@ function buildChatView(t,grp){
       });
       picker.appendChild(eb);
     });
+    // Delete button - only for your own messages
+    if(iy){
+      var sep=d({css:{width:"1px",height:"28px",background:"#F0EDE8",flexShrink:0}});
+      picker.appendChild(sep);
+      var delBtn=b({css:{fontSize:"18px",background:"none",border:"none",cursor:"pointer",padding:"2px 4px",borderRadius:"50%",fontFamily:"inherit",opacity:".7"}},"\uD83D\uDDD1\uFE0F");
+      delBtn.addEventListener("click",function(){
+        picker.remove();
+        deleteMessage(msgId,cid,dm);
+      });
+      picker.appendChild(delBtn);
+    }
     document.body.appendChild(picker);
     setTimeout(function(){document.addEventListener("click",function h(){picker.remove();document.removeEventListener("click",h);},{once:true});},100);
+  }
+
+  function deleteMessage(msgId,chatId,isDm){
+    // Confirm dialog
+    var ov=d({css:{position:"fixed",inset:"0",background:"rgba(0,0,0,.5)",zIndex:300,display:"flex",alignItems:"flex-end"}});
+    var sh=d({css:{background:"white",borderRadius:"20px 20px 0 0",padding:"20px 20px 32px",width:"100%",boxSizing:"border-box"}});
+    sh.appendChild(d({css:{fontSize:"16px",fontWeight:800,color:"#3D2314",marginBottom:"6px",textAlign:"center"}},"Delete message?"));
+    sh.appendChild(d({css:{fontSize:"13px",color:"#9B7B62",textAlign:"center",marginBottom:"16px"}},"This will remove it for everyone."));
+    var row=d({css:{display:"flex",gap:"10px"}});
+    var cBtn=b({css:{flex:1,padding:"13px",borderRadius:"50px",background:"#F0EDE8",border:"none",fontSize:"15px",fontWeight:700,color:"#6B4C35",cursor:"pointer",fontFamily:"inherit"}},"Cancel");
+    var dBtn=b({css:{flex:1,padding:"13px",borderRadius:"50px",background:"#C0392B",border:"none",fontSize:"15px",fontWeight:700,color:"white",cursor:"pointer",fontFamily:"inherit"}},"Delete");
+    cBtn.addEventListener("click",function(){ov.remove();});
+    dBtn.addEventListener("click",function(){
+      ov.remove();
+      // Remove from local state immediately
+      if(isDm){
+        isDm.msgs=isDm.msgs.filter(function(x){return x.id!==msgId;});
+      } else {
+        if(ST.chatMsgs[chatId])ST.chatMsgs[chatId]=ST.chatMsgs[chatId].filter(function(x){return x.id!==msgId;});
+      }
+      redraw();
+      // Delete from Firestore
+      if(isDm){
+        db.collection("dms").doc(chatId).collection("msgs").doc(msgId).delete().catch(function(e){console.log("delete failed",e);});
+      } else {
+        db.collection("chat").doc(msgId).delete().catch(function(e){console.log("delete failed",e);});
+      }
+    });
+    row.appendChild(cBtn);row.appendChild(dBtn);sh.appendChild(row);
+    ov.appendChild(sh);document.body.appendChild(ov);
   }
 
   msgs.forEach(function(msg){
