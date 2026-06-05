@@ -677,7 +677,7 @@ function th(id){return TH[id]||TH.imm;}
 var ST={
   boarded:false,obStep:0,obName:"",obAvatar:"\uD83D\uDC69",obPhoto:null,
   obGrpName:"",obGrpEmoji:"\u2764\uFE0F",obGrpPhoto:null,joinInvite:false,fbMembers:{},
-  editingGroup:null,editingBirthdays:false,creatingGroup:false,showGroupSwitcher:false,navExpanded:false,showTutorial:false,tutorialStep:0,replyTo:null,
+  editingGroup:null,editingBirthdays:false,creatingGroup:false,showGroupSwitcher:false,navExpanded:false,showTutorial:false,tutorialStep:0,replyTo:null,profileWallpaper:null,
   tab:"feed",group:"imm",name:"Sean",avatar:"\uD83D\uDC68",feedLoading:false,
   openChat:null,
   chatMsgs:{imm:[]},
@@ -2107,13 +2107,89 @@ function buildEvCard(ev,gt){
 
 function buildProfile(t){
   var wrap=d({cls:"scr",css:{padding:"0 0 80px"}});
-  var banner=d({css:{background:"linear-gradient(160deg,"+t.ad+","+t.a+")",padding:"36px 18px 52px",display:"flex",flexDirection:"column",alignItems:"center"}});
-  var av=d({css:{width:"80px",height:"80px",borderRadius:"50%",background:"rgba(255,255,255,.2)",border:"3px solid rgba(255,255,255,.5)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"38px",marginBottom:"10px",overflow:"hidden"}});
+  // Banner with optional wallpaper
+  var bannerCss={padding:"36px 18px 52px",display:"flex",flexDirection:"column",alignItems:"center",position:"relative"};
+  if(ST.profileWallpaper){
+    bannerCss.backgroundImage="url("+ST.profileWallpaper+")";
+    bannerCss.backgroundSize="cover";
+    bannerCss.backgroundPosition="center";
+  } else {
+    bannerCss.background="linear-gradient(160deg,"+t.ad+","+t.a+")";
+  }
+  var banner=d({css:bannerCss});
+  // Dark overlay for readability when wallpaper is set
+  if(ST.profileWallpaper){
+    var overlay=d({css:{position:"absolute",inset:"0",background:"rgba(0,0,0,.35)"}});
+    banner.appendChild(overlay);
+  }
+  // Avatar
+  var avWrap=d({css:{position:"relative",marginBottom:"10px",zIndex:1}});
+  var av=d({css:{width:"80px",height:"80px",borderRadius:"50%",background:"rgba(255,255,255,.2)",border:"3px solid rgba(255,255,255,.6)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"38px",overflow:"hidden",cursor:"pointer"}});
   if(ST.avatar&&ST.avatar.startsWith("data:")){var avImg=el("img",{css:{width:"100%",height:"100%",objectFit:"cover",display:"block"}});avImg.src=ST.avatar;av.appendChild(avImg);}
   else av.textContent=ST.avatar;
-  banner.appendChild(av);
-  banner.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"22px",fontWeight:600,color:"white",marginBottom:"2px"}},ST.name||"Your Name"));
-  banner.appendChild(d({css:{fontSize:"13px",color:"rgba(255,255,255,.75)"}},"Keep Up member"));
+  // Tap avatar to change it
+  var avFi=document.createElement("input");avFi.type="file";avFi.accept="image/*";avFi.style.display="none";
+  avFi.addEventListener("change",function(){
+    var f=this.files&&this.files[0];avFi.value="";
+    if(!f)return;
+    var reader=new FileReader();
+    reader.onload=function(e){
+      ST.avatar=e.target.result;
+      // Save to Firebase
+      if(currentUser){
+        db.collection("members").doc(currentUser.uid).update({av:e.target.result}).catch(function(){});
+        storage.ref("avatars/"+currentUser.uid+".jpg").putString(e.target.result,"data_url")
+          .then(function(snap){return snap.ref.getDownloadURL();})
+          .then(function(url){ST.avatar=url;db.collection("members").doc(currentUser.uid).update({av:url}).catch(function(){});redraw();})
+          .catch(function(){redraw();});
+      }
+      redraw();
+    };
+    reader.readAsDataURL(f);
+  });
+  av.addEventListener("click",function(){avFi.click();});
+  avWrap.appendChild(avFi);avWrap.appendChild(av);
+  // Small camera badge on avatar
+  var avBadge=d({css:{position:"absolute",bottom:"0",right:"0",width:"22px",height:"22px",borderRadius:"50%",background:"white",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"12px",boxShadow:"0 1px 4px rgba(0,0,0,.2)",cursor:"pointer"}});
+  avBadge.textContent="\uD83D\uDCF7";avBadge.addEventListener("click",function(){avFi.click();});
+  avWrap.appendChild(avBadge);
+  banner.appendChild(avWrap);
+  // Editable name
+  var nameRow=d({css:{display:"flex",alignItems:"center",gap:"6px",marginBottom:"2px",zIndex:1,position:"relative"}});
+  var nameEl=d({css:{fontFamily:"Lora,serif",fontSize:"22px",fontWeight:600,color:"white"}},ST.name||"Your Name");
+  var nameEditBtn=b({css:{background:"rgba(255,255,255,.2)",border:"none",color:"white",fontSize:"12px",padding:"2px 8px",borderRadius:"50px",cursor:"pointer",fontFamily:"inherit"}},"Edit");
+  nameEditBtn.addEventListener("click",function(){
+    var newName=prompt("Your name:",ST.name||"");
+    if(newName&&newName.trim()){
+      ST.name=newName.trim();
+      if(currentUser)db.collection("members").doc(currentUser.uid).update({name:ST.name}).catch(function(){});
+      redraw();
+    }
+  });
+  nameRow.appendChild(nameEl);nameRow.appendChild(nameEditBtn);
+  banner.appendChild(nameRow);
+  banner.appendChild(d({css:{fontSize:"13px",color:"rgba(255,255,255,.75)",zIndex:1,position:"relative"}},"Keep Up member"));
+  // Wallpaper button
+  var wallFi=document.createElement("input");wallFi.type="file";wallFi.accept="image/*";wallFi.style.display="none";
+  wallFi.addEventListener("change",function(){
+    var f=this.files&&this.files[0];wallFi.value="";
+    if(!f)return;
+    var reader=new FileReader();
+    reader.onload=function(e){
+      ST.profileWallpaper=e.target.result;
+      if(currentUser){
+        storage.ref("wallpapers/"+currentUser.uid+".jpg").putString(e.target.result,"data_url")
+          .then(function(snap){return snap.ref.getDownloadURL();})
+          .then(function(url){ST.profileWallpaper=url;db.collection("members").doc(currentUser.uid).update({wallpaper:url}).catch(function(){});redraw();})
+          .catch(function(){redraw();});
+      }
+      redraw();
+    };
+    reader.readAsDataURL(f);
+  });
+  var wallBtn=b({css:{position:"absolute",bottom:"10px",right:"12px",background:"rgba(255,255,255,.2)",border:"1px solid rgba(255,255,255,.4)",color:"white",fontSize:"11px",fontWeight:700,padding:"4px 10px",borderRadius:"50px",cursor:"pointer",fontFamily:"inherit",zIndex:1,backdropFilter:"blur(4px)"}},"\uD83D\uDDBC\uFE0F Wallpaper");
+  wallBtn.addEventListener("click",function(){wallFi.click();});
+  banner.appendChild(wallFi);banner.appendChild(wallBtn);
   wrap.appendChild(banner);
   var body=d({css:{padding:"16px 16px 0",marginTop:"-22px"}});
   var gc=d({css:{background:"#FFF9F2",borderRadius:"18px",overflow:"hidden",boxShadow:"0 2px 12px rgba(0,0,0,.08)",marginBottom:"12px"}});
@@ -2960,6 +3036,7 @@ auth.onAuthStateChanged(function(user){
         // Restore profile from Firebase
         if(m.name){ST.name=m.name;localStorage.setItem("ku_name",m.name);}
         if(m.av){ST.avatar=m.av;localStorage.setItem("ku_av",m.av);}
+        if(m.wallpaper){ST.profileWallpaper=m.wallpaper;}
         if(m.groupLabel){
           ST.groups[0].label=m.groupLabel;
           ST.groups[0].icon=m.groupIcon||ST.groups[0].icon;
