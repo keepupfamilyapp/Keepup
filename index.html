@@ -263,12 +263,15 @@ function showSendToChatPicker(feedItem){
     (function(grpId,grpName){
       row.addEventListener("click",function(){
         ov.remove();
+        var tmpId2="tmp-s2c-"+Date.now();
         var msg={av:ST.avatar,name:ST.name||"You",text:feedItem.cap||"",imgUrl:feedItem.imgUrl,sharedFrom:"feed",sharedName:feedItem.name,time:"Just now",sentAt:Date.now(),you:true,senderUid:currentUser?currentUser.uid:"anon"};
         if(!ST.chatMsgs[grpId])ST.chatMsgs[grpId]=[];
-        ST.chatMsgs[grpId].push(Object.assign({},msg,{id:"tmp-"+Date.now()}));
+        ST.chatMsgs[grpId].push(Object.assign({},msg,{id:tmpId2}));
         ST.tab="chat";ST.openChat=null;
         redraw();
-        postToChat(grpId,Object.assign({},msg,{you:false})).catch(function(){});
+        postToChat(grpId,Object.assign({},msg,{you:false})).then(function(){
+          ST.chatMsgs[grpId]=ST.chatMsgs[grpId].filter(function(x){return x.id!==tmpId2;});
+        }).catch(function(){});
       });
     })(g.id,g.label);
     list.appendChild(row);
@@ -283,11 +286,15 @@ function showSendToChatPicker(feedItem){
     (function(dmObj){
       row.addEventListener("click",function(){
         ov.remove();
+        var tmpId="tmp-s2c-"+Date.now();
         var msg={av:ST.avatar,name:ST.name||"You",text:feedItem.cap||"",imgUrl:feedItem.imgUrl,sharedFrom:"feed",sharedName:feedItem.name,time:"Just now",sentAt:Date.now(),you:true};
-        dmObj.msgs.push(Object.assign({},msg,{id:"tmp-"+Date.now()}));
+        dmObj.msgs.push(Object.assign({},msg,{id:tmpId}));
         ST.tab="chat";ST.openChat=dmObj.id;
         redraw();
-        postToDm(dmObj.id,Object.assign({},msg,{you:false})).catch(function(){});
+        postToDm(dmObj.id,Object.assign({},msg,{you:false})).then(function(){
+          // Remove temp after Firestore confirms
+          dmObj.msgs=dmObj.msgs.filter(function(x){return x.id!==tmpId;});
+        }).catch(function(){});
       });
     })(dm);
     list.appendChild(row);
@@ -411,8 +418,16 @@ function doSync(){
           if(change.type==="added"||change.type==="modified"){
             data.you=(data.name===(ST.name||"You")&&data.av===ST.avatar);
             // Remove matching optimistic temp message
-            if(data.imgUrl&&data.you){ST.chatMsgs[gid]=ST.chatMsgs[gid].filter(function(x){return !x.uploading;});}
-            else if(!data.imgUrl){ST.chatMsgs[gid]=ST.chatMsgs[gid].filter(function(x){return !x.id.startsWith("tmp-")||x.text!==data.text;});}
+            if(data.imgUrl&&data.you){
+              ST.chatMsgs[gid]=ST.chatMsgs[gid].filter(function(x){
+                if(x.uploading)return false;
+                if(x.id&&x.id.startsWith("tmp-s2c-"))return false;
+                if(x.id&&x.id.startsWith("tmp-")&&x.imgUrl===data.imgUrl)return false;
+                return true;
+              });
+            } else if(!data.imgUrl){
+              ST.chatMsgs[gid]=ST.chatMsgs[gid].filter(function(x){return !x.id.startsWith("tmp-")||x.text!==data.text;});
+            }
             var cidx=ST.chatMsgs[gid].findIndex(function(x){return x.id===data.id;});
             if(cidx>=0)ST.chatMsgs[gid][cidx]=data;
             else ST.chatMsgs[gid].push(data);
@@ -487,8 +502,18 @@ function doSync(){
             // Clean up temp/uploading placeholders that match this incoming message
             var myUid3=currentUser?currentUser.uid:localStorage.getItem("ku_uid");
             var isMine=(data.av===ST.avatar&&data.name===(ST.name||"You"));
-            if(data.imgUrl&&isMine){dm.msgs=dm.msgs.filter(function(x){return !x.uploading;});}
-            else if(!data.imgUrl){dm.msgs=dm.msgs.filter(function(x){return !(x.id&&x.id.startsWith("tmp-")&&x.text===data.text);});}
+            if(data.imgUrl&&isMine){
+              // Strip any temp/optimistic photo messages from me
+              dm.msgs=dm.msgs.filter(function(x){
+                if(!isMine)return true;
+                if(x.uploading)return false;
+                if(x.id&&x.id.startsWith("tmp-")&&x.imgUrl===data.imgUrl)return false;
+                if(x.id&&x.id.startsWith("tmp-s2c-"))return false;
+                return true;
+              });
+            } else if(!data.imgUrl){
+              dm.msgs=dm.msgs.filter(function(x){return !(x.id&&x.id.startsWith("tmp-")&&x.text===data.text);});
+            }
             if(!dm.msgs.find(function(x){return x.id===data.id;})){
               data.you=(data.name===(ST.name||"You")&&data.av===ST.avatar);
               dm.msgs.push(data);dm.last=data.text||"📷";dm.lt=data.createdAt&&data.createdAt.toMillis?data.createdAt.toMillis():Date.now();
