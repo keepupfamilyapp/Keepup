@@ -1143,9 +1143,14 @@ function buildApp(){
   // Floating nav - home button bottom left, options slide right
   var navFloat=d({css:{position:"fixed",bottom:"20px",left:"20px",zIndex:45,display:ST.openChat?"none":"flex",flexDirection:"row",alignItems:"center",gap:"8px",WebkitUserSelect:"none",userSelect:"none"}});
   var homeBtn=b({css:{width:"52px",height:"52px",borderRadius:"50%",background:ST.tab==="feed"?t.a:"white",border:"none",fontSize:"22px",boxShadow:"0 4px 20px rgba(0,0,0,.2)",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,WebkitUserSelect:"none",userSelect:"none",WebkitTouchCallout:"none"}});
-  var anyUnread=ST.groups.some(function(g){return hasUnread(g.id);});
-homeBtn.innerHTML="&#127968;"+(anyUnread?"<span style='position:absolute;top:-2px;right:-2px;width:9px;height:9px;background:#C0392B;border-radius:50%;border:2px solid white;display:block'></span>":"");
-homeBtn.style.position="relative";
+  // Count all unread - group chats + DMs
+  var totalUnread=0;
+  ST.groups.forEach(function(g){if(hasUnread(g.id))totalUnread++;});
+  (ST.dms||[]).forEach(function(dm){if(dm.unread&&dm.unread>0)totalUnread+=dm.unread;});
+  homeBtn.style.position="relative";
+  homeBtn.innerHTML="&#127968;"+(totalUnread>0
+    ?"<span style='position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;background:#C0392B;border-radius:50px;border:2px solid white;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:white;font-family:inherit;padding:0 4px;box-sizing:border-box;'>"+( totalUnread>99?"99+":String(totalUnread))+"</span>"
+    :"");
   homeBtn.addEventListener("click",function(){
     if(ST.tab!=="feed"){
       ST.tab="feed";ST.navExpanded=false;fetchAllFeeds();redraw();
@@ -1175,9 +1180,15 @@ homeBtn.style.position="relative";
   if(ST.navExpanded){
     var navPill=d({css:{background:"white",borderRadius:"50px",padding:"5px 6px",display:"flex",gap:"2px",boxShadow:"0 4px 20px rgba(0,0,0,.15)",animation:"fadeUp .2s ease"}});
     [["chat","&#128172;","Chat"],["calendar","&#128197;","Cal"],["profile","&#128100;","Me"]].forEach(function(n){
-      var nb=b({css:{display:"flex",flexDirection:"column",alignItems:"center",gap:"2px",padding:"5px 12px",borderRadius:"50px",background:ST.tab===n[0]?t.ap:"transparent",border:"none",cursor:"pointer",fontFamily:"inherit"}});
+      var nb=b({css:{display:"flex",flexDirection:"column",alignItems:"center",gap:"2px",padding:"5px 12px",borderRadius:"50px",background:ST.tab===n[0]?t.ap:"transparent",border:"none",cursor:"pointer",fontFamily:"inherit",position:"relative"}});
       nb.appendChild(d({html:n[1],css:{fontSize:"18px"}}));
       nb.appendChild(el("small",{css:{fontSize:"9px",color:ST.tab===n[0]?t.a:"#9B7B62",fontWeight:ST.tab===n[0]?800:600}},n[2]));
+      // Show unread count on Chat pill
+      if(n[0]==="chat"&&totalUnread>0){
+        var chatBadge=d({css:{position:"absolute",top:"2px",right:"6px",minWidth:"16px",height:"16px",background:"#C0392B",borderRadius:"50px",border:"1.5px solid white",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"9px",fontWeight:800,color:"white",padding:"0 3px",boxSizing:"border-box"}});
+        chatBadge.textContent=totalUnread>99?"99+":String(totalUnread);
+        nb.appendChild(chatBadge);
+      }
       nb.addEventListener("click",function(){ST.tab=n[0];ST.navExpanded=false;if(n[0]!=="chat")ST.openChat=null;redraw();});
       navPill.appendChild(nb);
     });
