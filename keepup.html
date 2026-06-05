@@ -263,12 +263,15 @@ function showSendToChatPicker(feedItem){
     (function(grpId,grpName){
       row.addEventListener("click",function(){
         ov.remove();
+        var tmpId2="tmp-s2c-"+Date.now();
         var msg={av:ST.avatar,name:ST.name||"You",text:feedItem.cap||"",imgUrl:feedItem.imgUrl,sharedFrom:"feed",sharedName:feedItem.name,time:"Just now",sentAt:Date.now(),you:true,senderUid:currentUser?currentUser.uid:"anon"};
         if(!ST.chatMsgs[grpId])ST.chatMsgs[grpId]=[];
-        ST.chatMsgs[grpId].push(Object.assign({},msg,{id:"tmp-"+Date.now()}));
+        ST.chatMsgs[grpId].push(Object.assign({},msg,{id:tmpId2}));
         ST.tab="chat";ST.openChat=null;
         redraw();
-        postToChat(grpId,Object.assign({},msg,{you:false})).catch(function(){});
+        postToChat(grpId,Object.assign({},msg,{you:false})).then(function(){
+          ST.chatMsgs[grpId]=ST.chatMsgs[grpId].filter(function(x){return x.id!==tmpId2;});
+        }).catch(function(){});
       });
     })(g.id,g.label);
     list.appendChild(row);
@@ -283,11 +286,15 @@ function showSendToChatPicker(feedItem){
     (function(dmObj){
       row.addEventListener("click",function(){
         ov.remove();
+        var tmpId="tmp-s2c-"+Date.now();
         var msg={av:ST.avatar,name:ST.name||"You",text:feedItem.cap||"",imgUrl:feedItem.imgUrl,sharedFrom:"feed",sharedName:feedItem.name,time:"Just now",sentAt:Date.now(),you:true};
-        dmObj.msgs.push(Object.assign({},msg,{id:"tmp-"+Date.now()}));
+        dmObj.msgs.push(Object.assign({},msg,{id:tmpId}));
         ST.tab="chat";ST.openChat=dmObj.id;
         redraw();
-        postToDm(dmObj.id,Object.assign({},msg,{you:false})).catch(function(){});
+        postToDm(dmObj.id,Object.assign({},msg,{you:false})).then(function(){
+          // Remove temp after Firestore confirms
+          dmObj.msgs=dmObj.msgs.filter(function(x){return x.id!==tmpId;});
+        }).catch(function(){});
       });
     })(dm);
     list.appendChild(row);
