@@ -1748,10 +1748,21 @@ function buildChatView(t,grp){
       photoBubble.addEventListener("contextmenu",function(e){e.preventDefault();});
       photoBubble.addEventListener("click",function(){showFullScreen(msg.imgUrl);});
       // Use background-image instead of img element - no reflow
+      // Try thumbnail first, fall back to original if not ready yet
       var thumbSrc=getThumbUrl(msg.imgUrl);
-      photoBubble.style.backgroundImage="url("+thumbSrc+")";
+      var testImg=new Image();
+      testImg.onload=function(){
+        photoBubble.style.backgroundImage="url("+thumbSrc+")";
+      };
+      testImg.onerror=function(){
+        // Thumb not ready yet - use original
+        photoBubble.style.backgroundImage="url("+msg.imgUrl+")";
+      };
+      // Set original immediately so something shows, thumb will replace if available
+      photoBubble.style.backgroundImage="url("+msg.imgUrl+")";
       photoBubble.style.backgroundSize="cover";
       photoBubble.style.backgroundPosition="center";
+      testImg.src=thumbSrc;
       if(msg.text){var capEl=d({css:{position:"absolute",bottom:"0",left:"0",right:"0",padding:"6px 10px",fontSize:"13px",color:"white",lineHeight:"1.4",background:"rgba(0,0,0,.4)"}},msg.text);photoBubble.appendChild(capEl);}
       mb.appendChild(photoBubble);bubbleEl=photoBubble;
     } else if(msg.videoUrl){
