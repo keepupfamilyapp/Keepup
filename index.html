@@ -360,6 +360,25 @@ function checkContextualChatReminders(){
   });
 }
 
+function getThumbUrl(url){
+  if(!url||!url.includes("chat-photos"))return url;
+  try{
+    // Convert storage URL to thumbnail path
+    // Original path: chat-photos%2Fuid%2Ffilename.ext
+    // Thumb path:   thumbs%2Fchat-photos%2Fuid%2Ffilename_600x600.webp
+    var thumbUrl=url
+      .replace(/chat-photos%2F/g,"thumbs%2Fchat-photos%2F")
+      .replace(/\.([a-zA-Z0-9]+)(%3F|\?)/,function(m,ext,sep){
+        return "_600x600.webp"+(sep||"?");
+      });
+    // If no query string, handle end of URL
+    if(thumbUrl===url){
+      thumbUrl=url.replace(/\.([a-zA-Z0-9]+)$/,"_600x600.webp");
+    }
+    return thumbUrl;
+  }catch(e){return url;}
+}
+
 function syncOn(){
   if(!currentUser)return;
   unsubscribers.forEach(function(u){u();});unsubscribers=[];
@@ -1729,7 +1748,8 @@ function buildChatView(t,grp){
       photoBubble.addEventListener("contextmenu",function(e){e.preventDefault();});
       photoBubble.addEventListener("click",function(){showFullScreen(msg.imgUrl);});
       // Use background-image instead of img element - no reflow
-      photoBubble.style.backgroundImage="url("+msg.imgUrl+")";
+      var thumbSrc=getThumbUrl(msg.imgUrl);
+      photoBubble.style.backgroundImage="url("+thumbSrc+")";
       photoBubble.style.backgroundSize="cover";
       photoBubble.style.backgroundPosition="center";
       if(msg.text){var capEl=d({css:{position:"absolute",bottom:"0",left:"0",right:"0",padding:"6px 10px",fontSize:"13px",color:"white",lineHeight:"1.4",background:"rgba(0,0,0,.4)"}},msg.text);photoBubble.appendChild(capEl);}
