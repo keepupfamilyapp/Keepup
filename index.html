@@ -1855,7 +1855,13 @@ function buildChatView(t,grp){
       var lastYourMsg=msgs.filter(function(x){return x.you;}).slice(-1)[0];
       if(lastYourMsg&&lastYourMsg===msg){
         var othersSeen=Object.keys(dm.seenBy).filter(function(k){return k!==myUid;});
-        if(othersSeen.length)tsRow.appendChild(d({css:{fontSize:"9px",color:"#C4714A",fontWeight:700}},"\u2713 Seen"));
+        var msgTime2=msg.createdAt&&msg.createdAt.toMillis?msg.createdAt.toMillis():(msg.sentAt||0);
+        var reallySeen=othersSeen.some(function(k){
+          var sat=dm.seenBy[k];
+          var sms=sat&&sat.toMillis?sat.toMillis():(typeof sat==="number"?sat:0);
+          return sms>msgTime2;
+        });
+        if(reallySeen)tsRow.appendChild(d({css:{fontSize:"9px",color:"#C4714A",fontWeight:700}},"\u2713 Seen"));
       }
     }
     mb.appendChild(tsRow);
@@ -1948,7 +1954,8 @@ function sendChatPhoto(gid,file,t){
           ST.chatMsgs[gid].push(Object.assign({},msg,{id:Date.now()}));
         });
       }
-      // Scroll to bottom - listener handles the redraw when Firestore confirms
+      // Redraw to remove temp bubble, then scroll
+      redraw();
       var chatList=document.getElementById("chat-msg-list");
       if(chatList)chatList.scrollTop=chatList.scrollHeight;
     }).catch(function(e){
