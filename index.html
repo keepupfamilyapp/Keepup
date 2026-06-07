@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Keep Up"/>
 <link rel="manifest" href="/Keepup/manifest.json"/>
 <link rel="apple-touch-icon" href="/Keepup/icon.svg"/>
-<title>Keep Up</title><!-- v2.1 -->
+<title>Keep Up</title><!-- v2.2 -->
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Lora:ital,wght@0,600;1,400&display=swap" rel="stylesheet"/>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
@@ -580,18 +580,24 @@ function doSync(){
             if(!ST.dms.find(function(x){return x.id===dmId;})){
               var myUid3=currentUser?currentUser.uid:localStorage.getItem("ku_uid");
             var savedUnread=(data.unreadBy&&myUid3&&data.unreadBy[myUid3])||0;
-            ST.dms.push({id:dmId,members:otherProfiles,last:data.last||"",lt:data.lt||"",msgs:[],unread:savedUnread});
+            // Check if already cleared locally - use lower of local vs Firestore
+            var existingDm=ST.dms.find(function(x){return x.id===dmId;});
+            var localUnread=existingDm?existingDm.unread:savedUnread;
+            var finalUnread=Math.min(localUnread,savedUnread);
+            ST.dms.push({id:dmId,members:otherProfiles,last:data.last||"",lt:data.lt||"",msgs:[],unread:finalUnread});
             }
             watchDm(dmId);
           } else if(change.type==="modified"){
-            // Update last message preview
             var existing=ST.dms.find(function(x){return x.id===dmId;});
             if(existing){
               existing.last=data.last||"";
-              // Sanitize lt - reject anything that looks like a uid or URL
               var rawLt=data.lt||"";
               var badLt=/^[A-Za-z0-9_-]{20,}$/.test(rawLt)||rawLt.startsWith("http");
               existing.lt=badLt?"":rawLt;
+              // Only update unread from Firestore if it increased (don't restore cleared counts)
+              var myUid5=currentUser?currentUser.uid:localStorage.getItem("ku_uid");
+              var remoteUnread=(data.unreadBy&&myUid5&&data.unreadBy[myUid5])||0;
+              if(remoteUnread>existing.unread)existing.unread=remoteUnread;
             }
           }
         });
