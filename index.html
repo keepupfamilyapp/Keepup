@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Keep Up"/>
 <link rel="manifest" href="/Keepup/manifest.json"/>
 <link rel="apple-touch-icon" href="/Keepup/icon.svg"/>
-<title>Keep Up</title>
+<title>Keep Up</title><!-- v2.1 -->
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Lora:ital,wght@0,600;1,400&display=swap" rel="stylesheet"/>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
@@ -1164,7 +1164,17 @@ function buildApp(){
   var grpIc=d({css:{fontSize:"14px"}});grpIc.textContent=grp.icon;grpBtn.appendChild(grpIc);
   grpBtn.appendChild(document.createTextNode(grp.label));
   if(ST.groups.length>1)grpBtn.appendChild(d({css:{fontSize:"10px",marginLeft:"2px",opacity:".7"}},"\u25BE"));
-  grpBtn.addEventListener("click",function(){ST.showGroupSwitcher=!ST.showGroupSwitcher;redraw();});
+  // Feed unread badge on group button
+  var feedUC=feedUnreadCount(grp.id);
+  if(feedUC>0){
+    var feedBadge=d({css:{background:"#C0392B",color:"white",borderRadius:"50px",padding:"1px 6px",fontSize:"10px",fontWeight:800,marginLeft:"4px"}});
+    feedBadge.textContent=feedUC>99?"99+":String(feedUC);
+    grpBtn.appendChild(feedBadge);
+  }
+  grpBtn.addEventListener("click",function(){
+    markFeedSeen(grp.id);
+    ST.showGroupSwitcher=!ST.showGroupSwitcher;redraw();
+  });
   bar.appendChild(grpBtn);
   var av=d({css:{width:"30px",height:"30px",borderRadius:"50%",background:t.ap,border:"2px solid "+t.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"15px",overflow:"hidden",cursor:"pointer",flexShrink:0}});
   if(ST.avatar&&ST.avatar.startsWith("data:")){var avImg=el("img",{css:{width:"100%",height:"100%",objectFit:"cover",display:"block"}});avImg.src=ST.avatar;av.appendChild(avImg);}
@@ -1181,8 +1191,10 @@ function buildApp(){
       var gt=th(g.id);var ia=g.id===ST.group;
       var gr=b({css:{display:"flex",alignItems:"center",gap:"10px",width:"100%",padding:"12px 16px",background:ia?gt.ap:"white",border:"none",borderBottom:"1px solid #F5DDD1",fontSize:"14px",fontWeight:ia?800:600,color:ia?gt.ad:"#3D2314",cursor:"pointer",fontFamily:"inherit",textAlign:"left"}});
       var gi=d({css:{fontSize:"18px"}});gi.textContent=g.icon;gr.appendChild(gi);gr.appendChild(document.createTextNode(g.label));
+      var gfuc=feedUnreadCount(g.id);
+      if(gfuc>0){var gbdg=d({css:{background:"#C0392B",color:"white",borderRadius:"50px",padding:"1px 7px",fontSize:"10px",fontWeight:800,marginLeft:"6px"}});gbdg.textContent=gfuc>99?"99+":String(gfuc);gr.appendChild(gbdg);}
       if(ia)gr.appendChild(d({css:{marginLeft:"auto",fontSize:"14px",color:gt.a}},"\u2713"));
-      gr.addEventListener("click",function(){ST.group=g.id;ST.showGroupSwitcher=false;fetchAllFeeds();redraw();});
+      gr.addEventListener("click",function(){markFeedSeen(g.id);ST.group=g.id;ST.showGroupSwitcher=false;fetchAllFeeds();redraw();});
       gsw.appendChild(gr);
     });
     bar.appendChild(gsw);
@@ -1190,7 +1202,10 @@ function buildApp(){
   wrap.appendChild(bar);
   // Group pills removed - using top bar group switcher instead
   var content;
-  if(ST.tab==="feed")content=buildFeed(t,grp);
+  if(ST.tab==="feed"){
+    setTimeout(function(){markFeedSeen(grp.id);},2000);
+    content=buildFeed(t,grp);
+  }
   else if(ST.tab==="chat")content=buildChat(t);
   else if(ST.tab==="calendar")content=buildCal(t);
   else content=buildProfile(t);
@@ -1242,9 +1257,11 @@ function buildApp(){
       nb.appendChild(d({html:n[1],css:{fontSize:"18px"}}));
       nb.appendChild(el("small",{css:{fontSize:"9px",color:ST.tab===n[0]?t.a:"#9B7B62",fontWeight:ST.tab===n[0]?800:600}},n[2]));
       // Show unread count on Chat pill
-      if(n[0]==="chat"&&totalUnread>0){
+      var pillCount=0;
+      if(n[0]==="chat")pillCount=totalUnread;
+      if(pillCount>0){
         var chatBadge=d({css:{position:"absolute",top:"2px",right:"6px",minWidth:"16px",height:"16px",background:"#C0392B",borderRadius:"50px",border:"1.5px solid white",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"9px",fontWeight:800,color:"white",padding:"0 3px",boxSizing:"border-box"}});
-        chatBadge.textContent=totalUnread>99?"99+":String(totalUnread);
+        chatBadge.textContent=pillCount>99?"99+":String(pillCount);
         nb.appendChild(chatBadge);
       }
       nb.addEventListener("click",function(){ST.tab=n[0];ST.navExpanded=false;if(n[0]!=="chat")ST.openChat=null;redraw();});
@@ -1585,6 +1602,17 @@ function buildItem(item,t){
   return wrap;
 }
 function hasUnread(gid){var seen=parseInt(localStorage.getItem("ku_seen_"+gid)||"0");var msgs=ST.chatMsgs[gid]||[];return msgs.some(function(m){var t=m.createdAt&&m.createdAt.toMillis?m.createdAt.toMillis():0;return t>seen&&!m.you;});}
+function feedUnreadCount(gid){
+  var seen=parseInt(localStorage.getItem("ku_feed_seen_"+gid)||"0");
+  var posts=ST.feed[gid]||[];
+  return posts.filter(function(p){
+    var t=p.createdAt&&p.createdAt.toMillis?p.createdAt.toMillis():(p.sentAt||0);
+    return t>seen&&p.av!==ST.avatar;
+  }).length;
+}
+function markFeedSeen(gid){
+  localStorage.setItem("ku_feed_seen_"+gid,Date.now());
+}
 function buildChat(t){
   if(ST.openChat){
     var isDm=ST.dms&&ST.dms.find(function(x){return x.id===ST.openChat;});
