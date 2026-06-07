@@ -732,7 +732,7 @@ var ST={
   chatIn:{},
   dms:[],
   newDm:false,dmSel:[],dmGrp:"imm",
-  addEv:false,calMonth:3,calYear:2026,calSelDay:null,
+  addEv:false,calMonth:new Date().getMonth(),calYear:new Date().getFullYear(),calSelDay:null,
   nEv:{title:"",month:"APR",day:"",time:"",loc:"",groupId:"imm"},
   compose:false,upOpen:false,upType:"photo",upStep:1,upCap:"",upCi:"",upImg:null,
   cmtOpen:null,cmtIn:"",rxPick:null,reactions:{},rsvp:{},
@@ -1398,10 +1398,6 @@ function buildFeed(t,grp){
     fabWrap.insertBefore(sub,videoRow);
   });
 
-  var checkinRow=makeQA("\uD83D\uDCCD","Check-in",function(){
-    hideAll();ST.upType="checkin";ST.upStep=3;ST.upCi="";ST.upOpen=true;redraw();
-  });
-
   var updateRow=makeQA("\u270F\uFE0F","Update",function(){
     hideAll();ST.upType="status";ST.upStep=1;ST.upCap="";ST.upOpen=true;redraw();
   });
@@ -1412,7 +1408,7 @@ function buildFeed(t,grp){
     if(qaVisible){hideAll();return;}
     qaVisible=true;
     fab.style.transform="rotate(45deg)";fab.textContent="\u2715";
-    [updateRow,checkinRow,videoRow,photoRow].forEach(function(r){fabWrap.insertBefore(r,fab);});
+    [updateRow,videoRow,photoRow].forEach(function(r){fabWrap.insertBefore(r,fab);});
   });
 
   document.addEventListener("touchstart",function(e){
@@ -1759,7 +1755,21 @@ function buildChatView(t,grp){
     var msgId=msg.id||("m"+Math.random());
     var rxs=(ST.chatReactions&&ST.chatReactions[msgId])||[];
     var row=d({id:"msg-"+msgId,cls:"msg-row",css:{display:"flex",flexDirection:iy?"row-reverse":"row",alignItems:"flex-end",gap:"6px",marginBottom:"2px"}});
-    if(!iy){var ma=d({css:{width:"26px",height:"26px",borderRadius:"50%",background:t.ap,border:"1.5px solid "+t.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"13px",flexShrink:0}});ma.textContent=msg.av;row.appendChild(ma);}
+    if(!iy){
+      var ma=d({css:{width:"26px",height:"26px",borderRadius:"50%",background:t.ap,border:"1.5px solid "+t.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"13px",flexShrink:0,overflow:"hidden"}});
+      var msgAv=msg.av||"\uD83D\uDC64";
+      if(msgAv.startsWith("http")||msgAv.startsWith("data:")){
+        var maImg=document.createElement("img");maImg.src=msgAv;
+        maImg.style.cssText="width:100%;height:100%;object-fit:cover;";
+        ma.appendChild(maImg);
+      } else if(msgAv.length>10||/^[A-Za-z0-9_-]{10,}$/.test(msgAv)){
+        // Looks like a uid - use default
+        ma.textContent="\uD83D\uDC64";
+      } else {
+        ma.textContent=msgAv;
+      }
+      row.appendChild(ma);
+    }
     var mb=d({css:{maxWidth:"72%",position:"relative"}});
     if(!iy)mb.appendChild(d({css:{fontSize:"10px",fontWeight:700,color:t.ad,marginBottom:"2px",paddingLeft:"2px"}},msg.name));
     var bubbleEl=null;
@@ -2511,30 +2521,41 @@ function buildUpload(t,grp){
     bb.addEventListener("click",onBack||function(){ST.upOpen=false;redraw();});
     h.appendChild(bb);h.appendChild(d({css:{fontSize:"16px",fontWeight:700,color:"#C4714A"}},title));h.appendChild(d({css:{width:"60px"}}));return h;
   }
-  // Status/Update post type - text only like old Facebook
+  // Update post - text + optional location
   if(ST.upType==="status"){
     sh.appendChild(upHdr("Share an Update",null));
     var sbody=d({cls:"scr",css:{padding:"16px 15px"}});
-    var sRow=d({css:{display:"flex",alignItems:"flex-start",gap:"12px",marginBottom:"16px"}});
-    var savEl=d({css:{width:"40px",height:"40px",borderRadius:"50%",background:t.ap,border:"2px solid "+t.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"20px",flexShrink:0}});savEl.textContent=ST.avatar;
+    var sRow=d({css:{display:"flex",alignItems:"flex-start",gap:"12px",marginBottom:"12px"}});
+    var savEl=d({css:{width:"40px",height:"40px",borderRadius:"50%",background:t.ap,border:"2px solid "+t.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"20px",flexShrink:0,overflow:"hidden"}});
+    if(ST.avatar&&ST.avatar.startsWith("http")){var sAvImg=document.createElement("img");sAvImg.src=ST.avatar;sAvImg.style.cssText="width:100%;height:100%;object-fit:cover;";savEl.appendChild(sAvImg);}else{savEl.textContent=ST.avatar;}
     sRow.appendChild(savEl);
-    var stArea=el("textarea",{placeholder:"What's on your mind, "+( ST.name||"friend")+"?",css:{flex:1,border:"none",background:"transparent",fontSize:"16px",color:"#3D2314",resize:"none",outline:"none",fontFamily:"inherit",lineHeight:"1.5",minHeight:"100px"}});
+    var stArea=el("textarea",{placeholder:"What's on your mind, "+(ST.name||"friend")+"?",css:{flex:1,border:"none",background:"transparent",fontSize:"16px",color:"#3D2314",resize:"none",outline:"none",fontFamily:"inherit",lineHeight:"1.5",minHeight:"100px"}});
     stArea.addEventListener("input",function(){ST.upCap=this.value;});
     stArea.value=ST.upCap||"";
     sRow.appendChild(stArea);
     sbody.appendChild(sRow);
+    // Optional location
+    var locRow=d({css:{display:"flex",alignItems:"center",gap:"8px",padding:"10px 12px",borderRadius:"12px",background:t.ap,marginBottom:"8px"}});
+    locRow.appendChild(d({css:{fontSize:"16px"}},"\uD83D\uDCCD"));
+    var locIn=el("input",{type:"text",placeholder:"Add a location (optional)",css:{flex:1,border:"none",background:"transparent",fontSize:"13px",color:"#3D2314",outline:"none",fontFamily:"inherit"}});
+    locIn.value=ST.upCi||"";
+    locIn.addEventListener("input",function(){ST.upCi=this.value;});
+    locRow.appendChild(locIn);
+    sbody.appendChild(locRow);
     sh.appendChild(sbody);
     var sfoot=d({css:{padding:"12px 15px 28px",borderTop:"1px solid "+t.ap,flexShrink:0}});
     var spost=b({css:{width:"100%",padding:"14px",borderRadius:"50px",background:t.a,border:"none",color:"white",fontSize:"15px",fontWeight:800,cursor:"pointer",fontFamily:"inherit"}},"Share Update");
     spost.addEventListener("click",function(){
       var txt=(ST.upCap||"").trim();
       if(!txt){alert("Write something first!");return;}
+      var loc=(ST.upCi||"").trim();
       var postAv=ST.avatar,postName=ST.name||"You",postGroup=grp.id;
-      var item={type:"checkin",av:postAv,name:postName,status:txt,groupId:postGroup,emoji:"\u270F\uFE0F",createdAt:firebase.firestore.FieldValue.serverTimestamp()};
+      var statusTxt=loc?txt+" \uD83D\uDCCD "+loc:txt;
+      var item={type:"checkin",av:postAv,name:postName,status:statusTxt,groupId:postGroup,emoji:loc?"\uD83D\uDCCD":"\u270F\uFE0F",createdAt:firebase.firestore.FieldValue.serverTimestamp()};
       postToFeed(item);
       if(!ST.feed[postGroup])ST.feed[postGroup]=[];
-      ST.feed[postGroup].unshift({id:"tmp-"+Date.now(),type:"checkin",av:postAv,name:postName,status:txt,groupId:postGroup,emoji:"\u270F\uFE0F",time:"Just now"});
-      ST.upOpen=false;ST.upCap="";
+      ST.feed[postGroup].unshift({id:"tmp-"+Date.now(),type:"checkin",av:postAv,name:postName,status:statusTxt,groupId:postGroup,emoji:loc?"\uD83D\uDCCD":"\u270F\uFE0F",time:"Just now"});
+      ST.upOpen=false;ST.upCap="";ST.upCi="";
       redraw();
     });
     sfoot.appendChild(spost);sh.appendChild(sfoot);
