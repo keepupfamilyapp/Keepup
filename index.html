@@ -561,7 +561,9 @@ function doSync(){
           var dmId=change.doc.id;
           var myUid2=currentUser?currentUser.uid:localStorage.getItem("ku_uid");
           var otherProfiles=(data.memberProfiles||[]).filter(function(p){
-            var safeAv=(p.av&&p.av.length<=8)?p.av:"\uD83D\uDC64";
+            var isUrl=p.av&&(p.av.startsWith("http")||p.av.startsWith("data:"));
+            var isEmoji=p.av&&p.av.length<=8;
+            var safeAv=(isUrl||isEmoji)?p.av:"\uD83D\uDC64";
             var safeName=(p.name&&p.name.length<40&&!/^[A-Za-z0-9_-]{20,}$/.test(p.name))?p.name:"Family member";
             p.av=safeAv;p.name=safeName;
             return p.uid!==myUid2;
@@ -578,9 +580,10 @@ function doSync(){
             var existing=ST.dms.find(function(x){return x.id===dmId;});
             if(existing){
               existing.last=data.last||"";
-              // Sanitize lt - if it looks like a uid (long alphanum) ignore it
+              // Sanitize lt - reject anything that looks like a uid or URL
               var rawLt=data.lt||"";
-              existing.lt=/^[A-Za-z0-9]{20,}$/.test(rawLt)?"Just now":rawLt;
+              var badLt=/^[A-Za-z0-9_-]{20,}$/.test(rawLt)||rawLt.startsWith("http");
+              existing.lt=badLt?"":rawLt;
             }
           }
         });
@@ -1607,7 +1610,10 @@ function buildChat(t){
   else{ST.dms.forEach(function(dm){
     var hasUnread=dm.unread&&dm.unread>0;
     var row=d({css:{display:"flex",alignItems:"center",gap:"10px",padding:"11px 12px",borderRadius:"15px",background:hasUnread?"#FFF3E8":"#FFF9F2",border:"1.5px solid "+(hasUnread?"#E8956D":"#F5DDD1"),cursor:"pointer",marginBottom:"7px"}});
-    var av=d({css:{width:"44px",height:"44px",borderRadius:"50%",background:"#F5DDD1",border:"2px solid #E8956D",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"22px",flexShrink:0}});av.textContent=(dm.members&&dm.members[0]&&dm.members[0].av)||"\uD83D\uDC64";
+    var av=d({css:{width:"44px",height:"44px",borderRadius:"50%",background:"#F5DDD1",border:"2px solid #E8956D",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"22px",flexShrink:0,overflow:"hidden"}});
+    var dmAvVal=(dm.members&&dm.members[0]&&dm.members[0].av)||"\uD83D\uDC64";
+    if(dmAvVal.startsWith("http")){var dmAvImg=document.createElement("img");dmAvImg.src=dmAvVal;dmAvImg.style.cssText="width:100%;height:100%;object-fit:cover;";av.appendChild(dmAvImg);}
+    else{av.textContent=dmAvVal;}
     var gd=d({css:{flex:1,minWidth:0}});
     var gtop=d({css:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"6px"}});
     gtop.appendChild(d({css:{fontSize:"14px",fontWeight:hasUnread?800:700,color:"#3D2314"}},dm.members.map(function(m){return m.name;}).join(", ")));
