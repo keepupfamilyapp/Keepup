@@ -18,7 +18,7 @@ html,body{height:100%;background:#FAF6F0;font-family:Nunito,sans-serif;overflow:
 .scr{overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;flex:1;scrollbar-width:none;}
 .scr::-webkit-scrollbar{display:none;}
 /* floating nav - no bottom bar */
-.card{background:#FFF9F2;border-radius:16px;overflow:hidden;margin-bottom:10px;border:1px solid #F5DDD1;box-shadow:0 2px 8px rgba(0,0,0,.06);}
+.card{background:#FFF9F2;border-radius:0;overflow:hidden;margin-bottom:1px;border:none;border-bottom:1px solid #F5DDD1;box-shadow:none;}
 .pill{display:flex;align-items:center;gap:5px;padding:6px 12px;border-radius:50px;border:2px solid rgba(107,66,38,.12);background:#FAF6F0;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:inherit;flex-shrink:0;}
 .pill.active{background:#F5DDD1;border-color:#C4714A;color:#6B4226;}
 .overlay{position:fixed;inset:0;background:rgba(61,35,20,.45);z-index:60;display:flex;align-items:flex-end;}
@@ -1540,8 +1540,8 @@ function buildItem(item,t){
       });acts.appendChild(rp);
     }
     if(pc.length){var lc=d({css:{marginTop:"8px",background:t.bg,border:"1px solid "+t.ap,borderRadius:"10px",padding:"7px 10px",cursor:"pointer",fontSize:"12px",color:"#6B4C35",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},pc[pc.length-1].name+": "+pc[pc.length-1].text);lc.addEventListener("click",function(){ST.cmtOpen=item.id;ST.cmtIn="";redraw();});body.appendChild(lc);}
-    // Send to Chat button for photo/video posts
-    if(item.imgUrl){
+    // Send to Chat button for photos only (not videos - too large for chat)
+    if(item.imgUrl&&!item.isVideo&&item.type!=="video"){
       var s2c=b({css:{display:"flex",alignItems:"center",gap:"5px",padding:"6px 12px",borderRadius:"50px",background:t.ap,border:"none",fontSize:"12px",fontWeight:700,color:t.ad,cursor:"pointer",fontFamily:"inherit",marginTop:"6px",width:"100%",justifyContent:"center"}});
       s2c.textContent="\uD83D\uDCAC Send to Chat";
       (function(fi){s2c.addEventListener("click",function(){showSendToChatPicker(fi);});})(item);
