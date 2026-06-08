@@ -594,10 +594,12 @@ function doSync(){
               var rawLt=data.lt||"";
               var badLt=/^[A-Za-z0-9_-]{20,}$/.test(rawLt)||rawLt.startsWith("http");
               existing.lt=badLt?"":rawLt;
-              // Only update unread from Firestore if it increased (don't restore cleared counts)
+              // Only update unread if local count is >0 AND remote is higher
               var myUid5=currentUser?currentUser.uid:localStorage.getItem("ku_uid");
               var remoteUnread=(data.unreadBy&&myUid5&&data.unreadBy[myUid5])||0;
-              if(remoteUnread>existing.unread)existing.unread=remoteUnread;
+              // Never restore a cleared count (0 stays 0)
+              if(existing.unread>0&&remoteUnread>existing.unread)existing.unread=remoteUnread;
+              else if(existing.unread===0)existing.unread=0; // keep cleared
             }
           }
         });
@@ -1667,7 +1669,7 @@ function buildChat(t){
     var gtop=d({css:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"6px"}});
     gtop.appendChild(d({css:{fontSize:"14px",fontWeight:hasUnread?800:700,color:"#3D2314"}},dm.members.map(function(m){return m.name;}).join(", ")));
     var timeEl=d({css:{display:"flex",alignItems:"center",gap:"5px",flexShrink:0}});
-    var ltDisplay=typeof dm.lt==="number"?timeAgo(dm.lt):(dm.lt&&dm.lt.length>20?"Just now":dm.lt||"");
+    var ltDisplay=typeof dm.lt==="number"?timeAgo(dm.lt):(dm.lt&&dm.lt.length>20?"":dm.lt||"");
     timeEl.appendChild(d({css:{fontSize:"10px",color:"#9B7B62"}},ltDisplay));
     if(hasUnread){var badge=d({css:{background:"#C4714A",color:"white",borderRadius:"50px",padding:"1px 7px",fontSize:"11px",fontWeight:800,minWidth:"18px",textAlign:"center"}},String(dm.unread));timeEl.appendChild(badge);}
     gtop.appendChild(timeEl);
@@ -1698,10 +1700,14 @@ function buildChatView(t,grp){
   var chatSub=dm?(dm.members&&dm.members.length>1?"Group DM":"Direct message"):((ST.mems[grp.id]||[]).length+" members");
   var cid=ST.openChat;
   // Clear unread for this chat now that it's open
-  if(dm){dm.unread=0;var myUid=currentUser?currentUser.uid:localStorage.getItem("ku_uid");
-    // Defer seenBy write so it doesn't trigger listener during keyboard open
+  if(dm){
+    dm.unread=0;
+    var myUid=currentUser?currentUser.uid:localStorage.getItem("ku_uid");
     if(myUid){setTimeout(function(){
-      db.collection("userDms").doc(cid).update({["seenBy."+myUid]:firebase.firestore.FieldValue.serverTimestamp()}).catch(function(){});
+      db.collection("userDms").doc(cid).update({
+        ["seenBy."+myUid]:firebase.firestore.FieldValue.serverTimestamp(),
+        ["unreadBy."+myUid]:0
+      }).catch(function(){});
     },1000);}
   }
   var hdr=d({css:{background:t.cb,padding:"10px 13px",display:"flex",alignItems:"center",gap:"10px",borderBottom:"1px solid "+t.ap,flexShrink:0}});
