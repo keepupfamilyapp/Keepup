@@ -1469,9 +1469,9 @@ function buildItem(item,t){
     bd.appendChild(wb);card.appendChild(bd);wrap.appendChild(card);
   }
   if(item.type==="photo"||item.type==="video"){
-    var card=d({css:{background:"#FFF9F2",borderRadius:"16px",overflow:"hidden",marginBottom:"6px",boxShadow:"0 1px 4px rgba(0,0,0,.06)"}});
+    var card=d({cls:"card",css:{background:"#FFF9F2",overflow:"hidden",marginBottom:"1px"}});
     if(item.uploading){
-      var upCard=d({css:{background:"#FFF9F2",borderRadius:"16px",border:"1px solid #F5DDD1",padding:"16px",display:"flex",alignItems:"center",gap:"12px",marginBottom:"6px",opacity:".7"}});
+      var upCard=d({css:{background:"#FFF9F2",border:"none",borderBottom:"1px solid #F5DDD1",padding:"16px",display:"flex",alignItems:"center",gap:"12px",marginBottom:"1px",opacity:".7"}});
       var upIcon=d({css:{fontSize:"28px",flexShrink:0}});upIcon.textContent="\uD83D\uDCF8";upCard.appendChild(upIcon);
       var upTxt=d({css:{flex:1}});
       upTxt.appendChild(d({css:{fontSize:"14px",fontWeight:700,color:"#3D2314"}},ST.upIsVideo?"Uploading video...":"Uploading photo..."));
