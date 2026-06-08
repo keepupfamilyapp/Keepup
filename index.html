@@ -1454,9 +1454,9 @@ function buildFeed(t,grp){
 
 function buildItem(item,t){
   var rx=ST.reactions[item.id];var pc=ST.comments[item.id]||[];
-  var wrap=d({css:{animation:"fadeUp .3s ease both"}});
+  var wrap=d({css:{animation:"fadeUp .3s ease both",borderBottom:"1px solid #F5DDD1",marginBottom:"0"}});
   if(item.type==="birthday"){
-    var card=d({css:{background:"linear-gradient(135deg,#FFF8E8,#FBF0D0)",border:"2px solid #E8C878",borderRadius:"16px",padding:"14px",display:"flex",gap:"12px",alignItems:"center"}});
+    var card=d({css:{background:"linear-gradient(135deg,#FFF8E8,#FBF0D0)",border:"none",borderBottom:"2px solid #E8C878",padding:"14px 16px",display:"flex",gap:"12px",alignItems:"center"}});
     var cake=d({css:{fontSize:"40px",flexShrink:0}});cake.textContent="\uD83C\uDF82";card.appendChild(cake);
     var bd=d({css:{flex:1}});
     var brow=d({css:{display:"flex",alignItems:"center",gap:"7px",marginBottom:"4px"}});
@@ -1573,7 +1573,7 @@ function buildItem(item,t){
     body.appendChild(acts);card.appendChild(body);wrap.appendChild(card);
   }
   if(item.type==="checkin"){
-    var card=d({css:{background:t.ap,border:"1.5px solid "+t.al,borderRadius:"14px",padding:"10px 12px",display:"flex",gap:"10px",margin:"0 4px"}});
+    var card=d({css:{background:t.ap,border:"none",borderBottom:"1px solid "+t.al,padding:"12px 16px",display:"flex",gap:"10px"}});
     var av=d({css:{width:"40px",height:"40px",borderRadius:"50%",background:t.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"20px",flexShrink:0}});av.textContent=item.av;card.appendChild(av);
     var bd=d({css:{flex:1}});bd.appendChild(d({css:{fontSize:"12px",fontWeight:700,color:t.ad}},item.name+" checked in"));bd.appendChild(d({css:{fontSize:"13px",color:"#3D2314",marginTop:"4px",lineHeight:"1.5"}},item.status));bd.appendChild(d({css:{fontSize:"11px",color:"#9B7B62",marginTop:"4px"}},item.createdAt?timeAgo(item.createdAt):item.time));card.appendChild(bd);
     if(item.name===(ST.name||"You")||item.av===ST.avatar){
@@ -1593,7 +1593,7 @@ function buildItem(item,t){
     wrap.appendChild(card);
   }
   if(item.type==="event"){
-    var card=d({css:{background:"#FBF0D9",border:"2px solid #E8C878",borderRadius:"16px",padding:"13px"}});
+    var card=d({css:{background:"#FBF0D9",border:"none",borderBottom:"2px solid #E8C878",padding:"13px 16px"}});
     var hdr=d({css:{display:"flex",alignItems:"center",gap:"10px",marginBottom:"8px"}});
     var dt=d({css:{width:"44px",height:"44px",borderRadius:"12px",background:"#D4922A",color:"white",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",flexShrink:0}});
     dt.appendChild(d({css:{fontSize:"8px",fontWeight:700,letterSpacing:"1px",textTransform:"uppercase"}},item.month));
