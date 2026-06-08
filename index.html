@@ -472,6 +472,17 @@ function doSync(){
     unsubscribers.push(unsub);
   }
   ST.groups.forEach(function(g){watchChat(g.id);});
+  // Load saved group labels/icons from Firestore
+  ST.groups.forEach(function(g){
+    db.collection("groups").doc(g.id).get().then(function(doc){
+      if(doc.exists){
+        var data=doc.data();
+        if(data.label)g.label=data.label;
+        if(data.icon)g.icon=data.icon;
+        if(ST.tab==="feed"||ST.tab==="profile")redraw();
+      }
+    }).catch(function(){});
+  });
 
   // Listen to DM messages
   var _redrawTimer=null;
@@ -578,13 +589,9 @@ function doSync(){
           if(change.type==="added"){
             // New DM appeared (either we created it or someone DMed us)
             if(!ST.dms.find(function(x){return x.id===dmId;})){
-              var myUid3=currentUser?currentUser.uid:localStorage.getItem("ku_uid");
-            var savedUnread=(data.unreadBy&&myUid3&&data.unreadBy[myUid3])||0;
-            // Check if already cleared locally - use lower of local vs Firestore
-            var existingDm=ST.dms.find(function(x){return x.id===dmId;});
-            var localUnread=existingDm?existingDm.unread:savedUnread;
-            var finalUnread=Math.min(localUnread,savedUnread);
-            ST.dms.push({id:dmId,members:otherProfiles,last:data.last||"",lt:data.lt||"",msgs:[],unread:finalUnread});
+              // Start unread at 0 - will increment via watchDm as new messages arrive
+            // Don't load from Firestore to avoid stale counts restoring
+            ST.dms.push({id:dmId,members:otherProfiles,last:data.last||"",lt:data.lt||"",msgs:[],unread:0});
             }
             watchDm(dmId);
           } else if(change.type==="modified"){
@@ -594,12 +601,7 @@ function doSync(){
               var rawLt=data.lt||"";
               var badLt=/^[A-Za-z0-9_-]{20,}$/.test(rawLt)||rawLt.startsWith("http");
               existing.lt=badLt?"":rawLt;
-              // Only update unread if local count is >0 AND remote is higher
-              var myUid5=currentUser?currentUser.uid:localStorage.getItem("ku_uid");
-              var remoteUnread=(data.unreadBy&&myUid5&&data.unreadBy[myUid5])||0;
-              // Never restore a cleared count (0 stays 0)
-              if(existing.unread>0&&remoteUnread>existing.unread)existing.unread=remoteUnread;
-              else if(existing.unread===0)existing.unread=0; // keep cleared
+              // Unread managed via watchDm listener only - not from userDms modified events
             }
           }
         });
@@ -1247,6 +1249,10 @@ function buildApp(){
     } else {
       // Toggle nav pill without full redraw to avoid flash
       ST.navExpanded=!ST.navExpanded;
+      // Update home button badge immediately when nav state changes
+      homeBtn.innerHTML="&#127968;"+((!ST.navExpanded&&totalUnread>0)
+        ?"<span style='position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;background:#C0392B;border-radius:50px;border:2px solid white;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:white;font-family:inherit;padding:0 4px;box-sizing:border-box;'>"+( totalUnread>99?"99+":String(totalUnread))+"</span>"
+        :"");
       var existingPill=navFloat.querySelector(".nav-pill");
       if(ST.navExpanded&&!existingPill){
         var navPill2=d({css:{background:"white",borderRadius:"50px",padding:"5px 6px",display:"flex",gap:"2px",boxShadow:"0 4px 20px rgba(0,0,0,.15)",animation:"fadeUp .2s ease"}});
@@ -1255,6 +1261,14 @@ function buildApp(){
           var nb=b({css:{display:"flex",flexDirection:"column",alignItems:"center",gap:"2px",padding:"5px 12px",borderRadius:"50px",background:ST.tab===n[0]?t.ap:"transparent",border:"none",cursor:"pointer",fontFamily:"inherit",WebkitUserSelect:"none",userSelect:"none"}});
           nb.appendChild(d({html:n[1],css:{fontSize:"18px"}}));
           nb.appendChild(el("small",{css:{fontSize:"9px",color:ST.tab===n[0]?t.a:"#9B7B62",fontWeight:ST.tab===n[0]?800:600}},n[2]));
+          // Add badge to Chat pill
+          if(n[0]==="chat"&&totalUnread>0){
+            var cpBadge=document.createElement("span");
+            cpBadge.style.cssText="position:absolute;top:2px;right:6px;min-width:16px;height:16px;background:#C0392B;border-radius:50px;border:1.5px solid white;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:white;padding:0 3px;box-sizing:border-box;";
+            cpBadge.textContent=totalUnread>99?"99+":String(totalUnread);
+            nb.style.position="relative";
+            nb.appendChild(cpBadge);
+          }
           nb.addEventListener("click",function(){ST.tab=n[0];ST.navExpanded=false;if(n[0]!=="chat")ST.openChat=null;navFloat.removeChild(navPill2);homeBtn.style.background=t.bg;redraw();});
           navPill2.appendChild(nb);
         });
@@ -2854,6 +2868,12 @@ function buildEditGroup(gid){
     if(!ni.value.trim())return;
     g.label=ni.value.trim();
     try{localStorage.setItem("ku_grp",JSON.stringify({label:g.label,icon:g.icon}));}catch(e){}
+    // Save to Firestore so it persists across sessions
+    if(currentUser){
+      db.collection("groups").doc(g.id).set({
+        label:g.label,icon:g.icon,updatedAt:firebase.firestore.FieldValue.serverTimestamp()
+      },{merge:true}).catch(function(e){console.log("group save failed",e);});
+    }
     ST.editingGroup=null;redraw();
   });
   sh.appendChild(saveBtn);
