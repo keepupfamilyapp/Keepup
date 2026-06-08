@@ -615,6 +615,8 @@ function doSync(){
         if(ST.tab==="chat"&&ST.openChat){
           // Do nothing - watchDm handles this
         } else if(ST.tab==="chat"){
+    // Mark group chats as seen when visiting chat tab
+    ST.groups.forEach(function(g){localStorage.setItem("ku_seen_"+g.id,Date.now());});
     // Clear unread for whichever DM is open
     if(ST.openChat){
       var openDm=ST.dms&&ST.dms.find(function(x){return x.id===ST.openChat;});
@@ -1640,7 +1642,7 @@ function buildItem(item,t){
   }
   return wrap;
 }
-function hasUnread(gid){var seen=parseInt(localStorage.getItem("ku_seen_"+gid)||"0");var msgs=ST.chatMsgs[gid]||[];return msgs.some(function(m){var t=m.createdAt&&m.createdAt.toMillis?m.createdAt.toMillis():0;return t>seen&&!m.you;});}
+function hasUnread(gid){var seen=Math.max(parseInt(localStorage.getItem("ku_seen_"+gid)||"0"),ST.sessionStart||0);var msgs=ST.chatMsgs[gid]||[];return msgs.some(function(m){var t=m.createdAt&&m.createdAt.toMillis?m.createdAt.toMillis():0;return t>seen&&!m.you;});}
 function feedUnreadCount(gid){
   var seen=parseInt(localStorage.getItem("ku_feed_seen_"+gid)||"0");
   var posts=ST.feed[gid]||[];
