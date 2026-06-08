@@ -606,6 +606,15 @@ function doSync(){
         if(ST.tab==="chat"&&ST.openChat){
           // Do nothing - watchDm handles this
         } else if(ST.tab==="chat"){
+    // Clear unread for whichever DM is open
+    if(ST.openChat){
+      var openDm=ST.dms&&ST.dms.find(function(x){return x.id===ST.openChat;});
+      if(openDm&&openDm.unread>0){
+        openDm.unread=0;
+        var myUid6=currentUser?currentUser.uid:localStorage.getItem("ku_uid");
+        if(myUid6)db.collection("userDms").doc(ST.openChat).update({["unreadBy."+myUid6]:0}).catch(function(){});
+      }
+    }
           redraw();
         }
       },function(e){console.log("userDms listener failed",e);});
@@ -2063,7 +2072,7 @@ function sendChatPhoto(gid,file,t){
       else{ST.chatMsgs[gid]=ST.chatMsgs[gid].filter(function(x){return x.id!==tempId;});}
       if(dm){
         postToDm(gid,Object.assign({},msg,{you:false})).catch(function(){
-          dm.msgs.push(Object.assign({},msg,{id:Date.now()}));dm.last="📷 Photo";dm.lt="Just now";
+          dm.msgs.push(Object.assign({},msg,{id:Date.now()}));dm.last="📷 Photo";dm.lt=Date.now();
         });
       } else {
         postToChat(gid,Object.assign({},msg,{you:false})).catch(function(){
@@ -2153,7 +2162,7 @@ function sendChat(gid){
     postToDm(gid,Object.assign({},msg,{you:false})).then(function(){
       // Update last message in Firestore - no broadcastNotif for DMs (private)
       db.collection("userDms").doc(gid).update({
-        last:msg.text,lt:"Just now",
+        last:msg.text,lt:Date.now(),
         updatedAt:firebase.firestore.FieldValue.serverTimestamp()
       }).catch(function(){});
     }).catch(function(e){console.log("DM send failed",e);});
