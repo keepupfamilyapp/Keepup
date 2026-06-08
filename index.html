@@ -593,7 +593,9 @@ function doSync(){
             if(!ST.dms.find(function(x){return x.id===dmId;})){
               // Start unread at 0 - will increment via watchDm as new messages arrive
             // Don't load from Firestore to avoid stale counts restoring
-            ST.dms.push({id:dmId,members:otherProfiles,last:data.last||"",lt:data.lt||"",msgs:[],unread:0});
+            var dmLt=data.lt;
+            if(dmLt&&dmLt.toMillis)dmLt=dmLt.toMillis();
+            ST.dms.push({id:dmId,members:otherProfiles,last:data.last||"",lt:dmLt||"",msgs:[],unread:0});
             }
             watchDm(dmId);
           } else if(change.type==="modified"){
@@ -601,7 +603,8 @@ function doSync(){
             if(existing){
               existing.last=data.last||"";
               var rawLt=data.lt||"";
-              var badLt=/^[A-Za-z0-9_-]{20,}$/.test(rawLt)||rawLt.startsWith("http");
+              var rawLtStr=String(rawLt);
+              var badLt=typeof rawLt==="number"?false:(/^[A-Za-z0-9_-]{20,}$/.test(rawLtStr)||rawLtStr.startsWith("http"));
               existing.lt=badLt?"":rawLt;
               // Unread managed via watchDm listener only - not from userDms modified events
             }
@@ -1877,10 +1880,10 @@ function buildChatView(t,grp){
     if(msg.imgUrl){
       // Fixed-size photo bubble - no dynamic loading to prevent layout glitch
       var photoBubble=d({css:{borderRadius:iy?"16px 16px 3px 16px":"16px 16px 16px 3px",overflow:"hidden",cursor:"pointer",boxShadow:"0 1px 5px rgba(0,0,0,.12)",width:"220px",height:"180px",background:iy?t.a:"#e8e0d8",border:iy?"none":"1px solid "+t.ap,WebkitTouchCallout:"none",userSelect:"none",flexShrink:"0",position:"relative"}});
-      // Shared from feed indicator
-      if(msg.sharedFrom==="feed"){
+      // Shared from feed indicator - only show if explicitly shared
+      if(msg.sharedFrom==="feed"&&msg.sharedName&&msg.sharedName!==msg.name){
         var sharedTag=d({css:{position:"absolute",top:"6px",left:"6px",background:"rgba(0,0,0,.5)",borderRadius:"50px",padding:"2px 8px",fontSize:"10px",color:"white",fontWeight:700,zIndex:1}});
-        sharedTag.textContent="\uD83D\uDCF0 "+( msg.sharedName||"Feed");
+        sharedTag.textContent="\uD83D\uDCF0 "+msg.sharedName;
         photoBubble.appendChild(sharedTag);
       }
       photoBubble.addEventListener("contextmenu",function(e){e.preventDefault();});
