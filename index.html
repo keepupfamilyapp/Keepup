@@ -548,9 +548,11 @@ function doSync(){
             if(!dm.msgs.find(function(x){return x.id===data.id;})){
               data.you=(data.name===(ST.name||"You")&&data.av===ST.avatar);
               dm.msgs.push(data);dm.last=data.text||"📷";dm.lt=data.createdAt&&data.createdAt.toMillis?data.createdAt.toMillis():Date.now();
-              // Only count as unread if message arrived after this session started
+              // Only count unread for truly new messages - not already counted ones
               var msgTs=data.createdAt&&data.createdAt.toMillis?data.createdAt.toMillis():0;
-              if(!data.you&&ST.openChat!==dmId&&msgTs>ST.sessionStart){
+              if(!dm.countedIds)dm.countedIds={};
+              if(!data.you&&msgTs>ST.sessionStart&&!dm.countedIds[data.id]){
+                dm.countedIds[data.id]=true;
                 dm.unread=(dm.unread||0)+1;
                 var myUid4=currentUser?currentUser.uid:localStorage.getItem("ku_uid");
                 if(myUid4)db.collection("userDms").doc(dmId).update({
@@ -1702,6 +1704,7 @@ function buildChat(t){
     row.appendChild(gd);row.appendChild(d({css:{fontSize:"18px",color:"#E8956D"}},">"));
     row.addEventListener("click",function(){
       dm.unread=0;
+      dm.countedIds={}; // Reset so messages dont re-increment after leaving
       ST.openChat=dm.id;
       var myUid=currentUser?currentUser.uid:localStorage.getItem("ku_uid");
       if(myUid)db.collection("userDms").doc(dm.id).update({
