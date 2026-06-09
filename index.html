@@ -761,7 +761,7 @@ function th(id){return TH[id]||TH.imm;}
 var ST={
   boarded:false,obStep:0,obName:"",obAvatar:"\uD83D\uDC69",obPhoto:null,
   obGrpName:"",obGrpEmoji:"\u2764\uFE0F",obGrpPhoto:null,joinInvite:false,fbMembers:{},
-  editingGroup:null,editingBirthdays:false,creatingGroup:false,showGroupSwitcher:false,navExpanded:false,showTutorial:false,tutorialStep:0,replyTo:null,profileWallpaper:null,sessionStart:Date.now(),
+  editingGroup:null,editingBirthdays:false,creatingGroup:false,showGroupSwitcher:false,navExpanded:false,showTutorial:false,tutorialStep:0,replyTo:null,profileWallpaper:null,sessionStart:Date.now(),memoryDay:null,
   tab:"feed",group:"imm",name:"Sean",avatar:"\uD83D\uDC68",feedLoading:false,
   openChat:null,
   chatMsgs:{imm:[]},
@@ -1235,7 +1235,10 @@ function buildApp(){
     content=buildFeed(t,grp);
   }
   else if(ST.tab==="chat")content=buildChat(t);
-  else if(ST.tab==="calendar")content=buildCal(t);
+  else if(ST.tab==="calendar"){
+    if(ST.memoryDay)content=buildMemoryDay(t);
+    else content=buildCal(t);
+  }
   else content=buildProfile(t);
   wrap.appendChild(content);
   // Floating nav
@@ -2204,6 +2207,47 @@ function sendChat(gid){
   }
 }
 
+function buildMemoryDay(t){
+  var wrap=d({cls:"scr",css:{padding:"0 0 80px"}});
+  var md=ST.memoryDay;
+  // Header
+  var hdr=d({css:{background:t.cb,padding:"12px 14px",borderBottom:"1px solid "+t.ap,display:"flex",alignItems:"center",gap:"10px",flexShrink:0,position:"sticky",top:"0",zIndex:5}});
+  var backBtn=b({css:{background:t.ap,border:"none",borderRadius:"50px",padding:"7px 13px",fontSize:"13px",fontWeight:700,color:t.ad,cursor:"pointer",fontFamily:"inherit"}},"Back");
+  backBtn.addEventListener("click",function(){ST.memoryDay=null;redraw();});
+  hdr.appendChild(backBtn);
+  var hdrInfo=d({css:{flex:1}});
+  hdrInfo.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"16px",fontWeight:700,color:"#3D2314"}},"\uD83D\uDCF8 "+md.label));
+  hdrInfo.appendChild(d({css:{fontSize:"11px",color:"#9B7B62"}},"Memories from this day"));
+  hdr.appendChild(hdrInfo);
+  wrap.appendChild(hdr);
+  // Get all posts from this day across all groups
+  var selStart=new Date(md.y,md.m,md.d,0,0,0).getTime();
+  var selEnd=new Date(md.y,md.m,md.d,23,59,59).getTime();
+  var allPosts=Object.values(ST.feed).reduce(function(a,b){return a.concat(b);},[]);
+  var dayPosts=allPosts.filter(function(p){
+    var pt=p.createdAt&&p.createdAt.toMillis?p.createdAt.toMillis():(p.sentAt||0);
+    return pt>=selStart&&pt<=selEnd;
+  }).sort(function(a,b){
+    var ta=a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():(a.sentAt||0);
+    var tb=b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():(b.sentAt||0);
+    return ta-tb;
+  });
+  if(!dayPosts.length){
+    var empty=d({css:{textAlign:"center",padding:"60px 20px",color:"#9B7B62"}});
+    empty.appendChild(d({css:{fontSize:"40px",marginBottom:"12px"}}));
+    empty.textContent="\uD83D\uDCF7";
+    empty.appendChild(d({css:{fontSize:"14px",fontWeight:700,color:"#6B4C35",display:"block"}},"No memories found"));
+    empty.appendChild(d({css:{fontSize:"12px",display:"block",marginTop:"4px"}},"Nothing was posted on this day"));
+    wrap.appendChild(empty);
+    return wrap;
+  }
+  // Render each post using buildItem
+  dayPosts.forEach(function(item){
+    wrap.appendChild(buildItem(item,t));
+  });
+  return wrap;
+}
+
 function buildCal(t){
   var MLONG=["January","February","March","April","May","June","July","August","September","October","November","December"];
   var MSHORT=["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
@@ -2242,8 +2286,25 @@ function buildCal(t){
     var panel=d({css:{margin:"10px 14px",background:t.cb,borderRadius:"18px",overflow:"hidden",border:"1.5px solid "+t.ap}});
     var ph=d({css:{padding:"12px 14px 10px",borderBottom:"1px solid "+t.ap,display:"flex",alignItems:"center",justifyContent:"space-between"}});
     ph.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"15px",fontWeight:600,color:"#3D2314"}},ST.calSelDay+" "+MLONG[ST.calMonth]));
-    var addDayBtn=b({css:{padding:"6px 13px",borderRadius:"50px",background:t.a,border:"none",color:"white",fontSize:"12px",fontWeight:700,cursor:"pointer",fontFamily:"inherit"}},"+ Add Event");
-    addDayBtn.addEventListener("click",function(){ST.addEv=true;redraw();});ph.appendChild(addDayBtn);panel.appendChild(ph);
+    var btnRow=d({css:{display:"flex",gap:"6px"}});
+    var addDayBtn=b({css:{padding:"6px 13px",borderRadius:"50px",background:t.a,border:"none",color:"white",fontSize:"12px",fontWeight:700,cursor:"pointer",fontFamily:"inherit"}},"+ Event");
+    addDayBtn.addEventListener("click",function(){ST.addEv=true;redraw();});btnRow.appendChild(addDayBtn);
+    // Check if there are any feed posts on this day
+    var selDate=new Date(ST.calYear,ST.calMonth,ST.calSelDay);
+    var selStart=new Date(ST.calYear,ST.calMonth,ST.calSelDay,0,0,0).getTime();
+    var selEnd=new Date(ST.calYear,ST.calMonth,ST.calSelDay,23,59,59).getTime();
+    var allPosts=Object.values(ST.feed).reduce(function(a,b){return a.concat(b);},[]);
+    var dayPosts=allPosts.filter(function(p){
+      var pt=p.createdAt&&p.createdAt.toMillis?p.createdAt.toMillis():(p.sentAt||0);
+      return pt>=selStart&&pt<=selEnd;
+    });
+    if(dayPosts.length>0){
+      var memBtn=b({css:{padding:"6px 13px",borderRadius:"50px",background:"#FFF3E8",border:"1.5px solid "+t.al,color:t.ad,fontSize:"12px",fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:"4px"}});
+      memBtn.textContent="\uD83D\uDCF8 "+dayPosts.length+(dayPosts.length===1?" Memory":" Memories");
+      memBtn.addEventListener("click",function(){ST.memoryDay={y:ST.calYear,m:ST.calMonth,d:ST.calSelDay,label:ST.calSelDay+" "+MLONG[ST.calMonth]+", "+ST.calYear};redraw();});
+      btnRow.appendChild(memBtn);
+    }
+    ph.appendChild(btnRow);panel.appendChild(ph);
     var realEvs=selEvs.filter(function(ev){return !ev.birthday;});
     var bdayEvs=(ST.birthdays||[]).filter(function(bk){return bk.month-1===ST.calMonth&&bk.day===ST.calSelDay;});
     if(!realEvs.length&&!bdayEvs.length){panel.appendChild(d({css:{padding:"16px 14px",fontSize:"13px",color:"#9B7B62",textAlign:"center"}},"No events. Tap + to add one!"));}
