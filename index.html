@@ -1379,9 +1379,10 @@ function buildFeed(t,grp){
     authWait.appendChild(d({css:{fontSize:"13px",color:"#9B7B62"}},"Signing you in..."));
     list.appendChild(authWait);
   } else if(ST.feedLoading){
-    var loading=d({css:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"60px 24px",textAlign:"center"}});
-    var licon=d({css:{fontSize:"36px",marginBottom:"12px",opacity:".4"}});licon.textContent=grp.icon;loading.appendChild(licon);
-    loading.appendChild(d({css:{fontSize:"13px",color:"#9B7B62"}},"Loading..."));
+    var loading=d({css:{position:"fixed",inset:"0",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:t.bg,zIndex:50}});
+    var splashTitle=d({css:{fontFamily:"Lora,serif",fontSize:"42px",fontWeight:600,color:t.a,letterSpacing:"-1px",animation:"float 2s ease-in-out infinite"}});
+    splashTitle.innerHTML="keep <em>up</em>";
+    loading.appendChild(splashTitle);
     list.appendChild(loading);
   } else if(!feedItems.length){
     var empty=d({css:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"50px 24px",textAlign:"center"}});
@@ -1548,9 +1549,41 @@ function buildItem(item,t){
     }
     card.appendChild(hdr);
     if(item.imgUrl&&(item.type==="video"||item.isVideo)){
-      var vidEl=document.createElement("video");vidEl.src=item.imgUrl;
-      vidEl.style.cssText="width:100%;max-height:80vh;object-fit:contain;display:block;background:#000;";
-      vidEl.controls=true;vidEl.playsInline=true;vidEl.preload="metadata";card.appendChild(vidEl);
+      var vidEl=document.createElement("video");
+      vidEl.style.cssText="width:100%;max-height:80vh;object-fit:contain;display:block;background:#000;cursor:pointer;";
+      vidEl.playsInline=true;
+      vidEl.muted=true;
+      vidEl.loop=true;
+      vidEl.preload="metadata";
+      vidEl.setAttribute("playsinline","");
+      vidEl.setAttribute("webkit-playsinline","");
+      // Tap to toggle mute (video autoplays muted)
+      var muteBtn=d({css:{position:"absolute",bottom:"10px",right:"10px",background:"rgba(0,0,0,.5)",borderRadius:"50px",padding:"4px 10px",fontSize:"12px",color:"white",fontWeight:700,cursor:"pointer",zIndex:2}});
+      muteBtn.textContent="\uD83D\uDD07 Muted";
+      muteBtn.addEventListener("click",function(e){
+        e.stopPropagation();
+        vidEl.muted=!vidEl.muted;
+        muteBtn.textContent=vidEl.muted?"\uD83D\uDD07 Muted":"\uD83D\uDD0A Sound";
+      });
+      // Use IntersectionObserver to autoplay when in view
+      var vidWrap=d({css:{position:"relative",background:"#000"}});
+      vidWrap.appendChild(vidEl);
+      vidWrap.appendChild(muteBtn);
+      card.appendChild(vidWrap);
+      // Set src after appending to avoid eager load
+      vidEl.src=item.imgUrl;
+      if("IntersectionObserver" in window){
+        var vObs=new IntersectionObserver(function(entries){
+          entries.forEach(function(entry){
+            if(entry.isIntersecting){
+              vidEl.play().catch(function(){});
+            } else {
+              vidEl.pause();
+            }
+          });
+        },{threshold:0.5});
+        vObs.observe(vidEl);
+      }
     } else if(item.imgUrl){
       var img=el("img",{css:{width:"100%",maxHeight:"85vh",objectFit:"contain",display:"block",cursor:"zoom-in",background:"#1a1a1a",WebkitTouchCallout:"none",WebkitUserSelect:"none",pointerEvents:"auto"}});
       img.addEventListener("contextmenu",function(e){e.preventDefault();return false;});
