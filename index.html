@@ -1390,7 +1390,46 @@ function buildFeed(t,grp){
     ep.addEventListener("click",function(){ST.compose=true;redraw();});empty.appendChild(ep);
     list.appendChild(empty);
   } else {
-    feedItems.forEach(function(item){list.appendChild(buildItem(item,t));});
+    // Virtual scroll - only render items near viewport
+    var BATCH=8; // items per render batch
+    var rendered=0;
+    var rendering=false;
+    var allItems=feedItems;
+
+    function renderBatch(){
+      if(rendering||rendered>=allItems.length)return;
+      rendering=true;
+      var end=Math.min(rendered+BATCH,allItems.length);
+      var frag=document.createDocumentFragment();
+      for(var i=rendered;i<end;i++){
+        frag.appendChild(buildItem(allItems[i],t));
+      }
+      list.appendChild(frag);
+      rendered=end;
+      rendering=false;
+      // Add load more sentinel if more items remain
+      if(rendered<allItems.length){
+        var sentinel=document.getElementById("feed-sentinel");
+        if(!sentinel){
+          sentinel=document.createElement("div");
+          sentinel.id="feed-sentinel";
+          sentinel.style.height="1px";
+          list.appendChild(sentinel);
+          // Watch sentinel - load more when it enters view
+          if("IntersectionObserver" in window){
+            var obs=new IntersectionObserver(function(entries){
+              if(entries[0].isIntersecting){
+                obs.disconnect();
+                sentinel.remove();
+                renderBatch();
+              }
+            },{rootMargin:"200px"});
+            obs.observe(sentinel);
+          }
+        }
+      }
+    }
+    renderBatch();
   }
   wrap.appendChild(list);
   // FAB + vertical slide-up with horizontal sub-options
@@ -1709,7 +1748,14 @@ function buildChat(t){
   var ndb=b({css:{padding:"5px 12px",borderRadius:"50px",background:t.a,border:"none",color:"white",fontSize:"12px",fontWeight:700,cursor:"pointer",fontFamily:"inherit"}},"+ New");
   ndb.addEventListener("click",function(){ST.newDm=true;redraw();});dmhdr.appendChild(ndb);wrap.appendChild(dmhdr);
   if(!ST.dms||!ST.dms.length){wrap.appendChild(d({css:{textAlign:"center",padding:"16px",background:"#FFF9F2",borderRadius:"14px",border:"1.5px solid #F5DDD1",fontSize:"13px",color:"#9B7B62"}},"No direct messages yet"));}
-  else{ST.dms.forEach(function(dm){
+  else{
+  // Sort DMs by most recent first
+  var sortedDms=ST.dms.slice().sort(function(a,b){
+    var ta=typeof a.lt==="number"?a.lt:(a.lt&&a.lt.toMillis?a.lt.toMillis():0);
+    var tb=typeof b.lt==="number"?b.lt:(b.lt&&b.lt.toMillis?b.lt.toMillis():0);
+    return tb-ta;
+  });
+  sortedDms.forEach(function(dm){
     var hasUnread=dm.unread&&dm.unread>0;
     var row=d({css:{display:"flex",alignItems:"center",gap:"10px",padding:"11px 12px",borderRadius:"15px",background:hasUnread?"#FFF3E8":"#FFF9F2",border:"1.5px solid "+(hasUnread?"#E8956D":"#F5DDD1"),cursor:"pointer",marginBottom:"7px"}});
     var av=d({css:{width:"44px",height:"44px",borderRadius:"50%",background:"#F5DDD1",border:"2px solid #E8956D",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"22px",flexShrink:0,overflow:"hidden"}});
@@ -1738,7 +1784,8 @@ function buildChat(t){
       }).catch(function(){});
       history.pushState(null,"",location.href);redraw();
     });wrap.appendChild(row);
-  });}
+  });
+  }
   return wrap;
 }
 
