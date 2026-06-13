@@ -3477,7 +3477,14 @@ auth.onAuthStateChanged(function(user){
       }
     }).catch(function(){
       // Error loading profile - fall back to local state
-      if(ST.boarded){fetchAllFeeds();syncOn();setTimeout(checkContextualChatReminders,4000);}
+      if(ST.boarded){fetchAllFeeds();syncOn();setTimeout(checkContextualChatReminders,4000);
+        // Always init notifications on signin
+        if(typeof Notification!=="undefined"&&Notification.permission==="granted"){
+          setTimeout(initNotifications,2000);
+        } else if(typeof Notification!=="undefined"&&Notification.permission!=="denied"){
+          Notification.requestPermission().then(function(p){if(p==="granted")setTimeout(initNotifications,2000);});
+        }
+      }
       redraw();
     });
   } else {
