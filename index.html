@@ -3464,12 +3464,22 @@ auth.onAuthStateChanged(function(user){
           localStorage.setItem("ku_ob","1");
           fetchAllFeeds();
           syncOn();
+          setTimeout(checkContextualChatReminders,4000);
+          // Init notifications on every signin
+          if(typeof Notification!=="undefined"&&Notification.permission==="granted"){
+            setTimeout(initNotifications,2000);
+          } else if(typeof Notification!=="undefined"&&Notification.permission!=="denied"){
+            Notification.requestPermission().then(function(p){if(p==="granted")setTimeout(initNotifications,2000);});
+          }
           redraw();
         }).catch(function(){
           ST.boarded=true;
           localStorage.setItem("ku_ob","1");
           fetchAllFeeds();
           syncOn();
+          if(typeof Notification!=="undefined"&&Notification.permission==="granted"){
+            setTimeout(initNotifications,2000);
+          }
           redraw();
         });
       } else if(ST.boarded){
