@@ -564,6 +564,8 @@ function doSync(){
                 dm.countedIds[data.id]=true;
                 dm.unread=(dm.unread||0)+1;
                 var myUid4=currentUser?currentUser.uid:localStorage.getItem("ku_uid");
+                // Save to both Firestore and localStorage
+                localStorage.setItem("ku_unread_"+dmId,String(dm.unread));
                 if(myUid4)db.collection("userDms").doc(dmId).update({
                   ["unreadBy."+myUid4]:dm.unread
                 }).catch(function(){});
@@ -606,7 +608,11 @@ function doSync(){
             // Don't load from Firestore to avoid stale counts restoring
             var dmLt=data.lt;
             if(dmLt&&dmLt.toMillis)dmLt=dmLt.toMillis();
-            ST.dms.push({id:dmId,members:otherProfiles,last:data.last||"",lt:dmLt||"",msgs:[],unread:0});
+            // Use updatedAt if available as it's more reliable than lt
+            var dmUpdated=data.updatedAt&&data.updatedAt.toMillis?data.updatedAt.toMillis():null;
+            var finalLt=dmUpdated||dmLt||"";
+            var savedUnread=parseInt(localStorage.getItem("ku_unread_"+dmId)||"0");
+            ST.dms.push({id:dmId,members:otherProfiles,last:data.last||"",lt:finalLt,msgs:[],unread:savedUnread});
             }
             watchDm(dmId);
           } else if(change.type==="modified"){
@@ -834,6 +840,11 @@ function showFullScreen(url){
   img.addEventListener("load",function(){
     spinner.remove();
     img.style.opacity="1";
+    // Add watermark overlay
+    var wm=document.createElement("div");
+    wm.style.cssText="position:absolute;bottom:60px;left:0;right:0;text-align:center;color:rgba(255,255,255,.25);font-size:13px;font-weight:700;pointer-events:none;letter-spacing:1px;user-select:none;-webkit-user-select:none;";
+    wm.textContent="\uD83D\uDD12 Jensen's Family \u2022 "+(ST.name||"Member");
+    ov.appendChild(wm);
   });
   img.addEventListener("error",function(){
     spinner.textContent="\u26A0\uFE0F";
@@ -1782,6 +1793,7 @@ function buildChat(t){
     row.addEventListener("click",function(){
       dm.unread=0;
       dm.countedIds={}; // Reset so messages dont re-increment after leaving
+      localStorage.removeItem("ku_unread_"+dm.id); // Clear localStorage backup too
       ST.openChat=dm.id;
       var myUid=currentUser?currentUser.uid:localStorage.getItem("ku_uid");
       if(myUid)db.collection("userDms").doc(dm.id).update({
