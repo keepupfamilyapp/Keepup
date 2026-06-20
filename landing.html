@@ -2,115 +2,311 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
 <meta name="theme-color" content="#C4714A"/>
 <title>Keep Up — Stay close to the people who matter</title>
-<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Lora:ital,wght@0,600;1,400&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet"/>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
-html,body{font-family:Nunito,sans-serif;background:#FAF6F0;color:#3D2314;min-height:100%;}
-.hero{background:linear-gradient(160deg,#6B4226,#C4714A);padding:60px 24px 70px;text-align:center;}
-.logo{font-family:Lora,serif;font-size:42px;font-weight:600;color:white;margin-bottom:6px;}
-.logo em{font-style:italic;}
-.tagline{font-size:18px;color:rgba(255,255,255,.85);line-height:1.6;max-width:320px;margin:0 auto 32px;}
-.hero-icon{font-size:72px;margin-bottom:20px;display:block;}
-.cta-btn{display:inline-block;background:white;color:#C4714A;font-family:Nunito,sans-serif;font-size:17px;font-weight:800;padding:16px 36px;border-radius:50px;text-decoration:none;box-shadow:0 6px 24px rgba(0,0,0,.2);margin-bottom:12px;}
-.cta-sub{font-size:13px;color:rgba(255,255,255,.7);}
-.section{padding:48px 24px;max-width:480px;margin:0 auto;}
-.section-title{font-family:Lora,serif;font-size:26px;font-weight:600;color:#3D2314;margin-bottom:24px;text-align:center;}
-.feature{display:flex;gap:16px;align-items:flex-start;margin-bottom:28px;}
-.feature-icon{font-size:32px;flex-shrink:0;width:48px;text-align:center;}
-.feature-title{font-size:15px;font-weight:800;color:#3D2314;margin-bottom:4px;}
-.feature-desc{font-size:14px;color:#6B4C35;line-height:1.6;}
-.divider{height:1px;background:#F5DDD1;margin:0 24px;}
-.promise{background:#FFF3E8;padding:40px 24px;text-align:center;}
-.promise-title{font-family:Lora,serif;font-size:22px;font-weight:600;color:#3D2314;margin-bottom:16px;}
-.promise-list{list-style:none;display:flex;flex-direction:column;gap:10px;max-width:300px;margin:0 auto 28px;}
-.promise-list li{display:flex;align-items:center;gap:10px;font-size:15px;color:#6B4C35;font-weight:600;}
-.promise-list li::before{content:"\\2714";color:#C4714A;font-size:16px;flex-shrink:0;}
-.bottom-cta{background:linear-gradient(160deg,#6B4226,#C4714A);padding:48px 24px;text-align:center;}
-.bottom-cta h2{font-family:Lora,serif;font-size:26px;font-weight:600;color:white;margin-bottom:10px;}
-.bottom-cta p{font-size:15px;color:rgba(255,255,255,.8);margin-bottom:28px;line-height:1.6;}
-.bottom-btn{display:inline-block;background:white;color:#C4714A;font-family:Nunito,sans-serif;font-size:16px;font-weight:800;padding:14px 32px;border-radius:50px;text-decoration:none;box-shadow:0 4px 16px rgba(0,0,0,.2);}
-.footer{padding:24px;text-align:center;font-size:12px;color:#9B7B62;}
+:root{
+  --clay:#C4714A;
+  --clay-light:#F5DDD1;
+  --clay-dark:#8B4A2F;
+  --cream:#FAF6F0;
+  --warm:#FFF9F2;
+  --text:#2D1810;
+  --muted:#9B7B62;
+  --white:#FFFFFF;
+}
+html{scroll-behavior:smooth;}
+body{font-family:'Nunito',sans-serif;background:var(--cream);color:var(--text);overflow-x:hidden;}
+
+/* NAV */
+nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:16px 24px;display:flex;align-items:center;justify-content:space-between;background:rgba(250,246,240,.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--clay-light);}
+.nav-logo{font-family:'Lora',serif;font-size:22px;font-weight:600;color:var(--clay);letter-spacing:-.5px;}
+.nav-logo em{font-style:italic;}
+.nav-cta{background:var(--clay);color:white;border:none;padding:10px 20px;border-radius:50px;font-family:'Nunito',sans-serif;font-size:14px;font-weight:800;cursor:pointer;text-decoration:none;display:inline-block;}
+
+/* HERO */
+.hero{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:100px 24px 60px;text-align:center;position:relative;overflow:hidden;}
+.hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,rgba(196,113,74,.12) 0%,transparent 70%);}
+.hero-eyebrow{font-size:12px;font-weight:800;letter-spacing:2px;color:var(--clay);text-transform:uppercase;margin-bottom:20px;}
+.hero-title{font-family:'Lora',serif;font-size:clamp(38px,8vw,72px);font-weight:700;line-height:1.1;color:var(--text);margin-bottom:24px;max-width:800px;}
+.hero-title em{font-style:italic;color:var(--clay);}
+.hero-sub{font-size:clamp(16px,3vw,20px);color:var(--muted);max-width:520px;line-height:1.6;margin-bottom:40px;}
+.hero-actions{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-bottom:60px;}
+.btn-primary{background:var(--clay);color:white;border:none;padding:16px 32px;border-radius:50px;font-family:'Nunito',sans-serif;font-size:16px;font-weight:800;cursor:pointer;text-decoration:none;display:inline-block;box-shadow:0 8px 32px rgba(196,113,74,.35);transition:transform .2s,box-shadow .2s;}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 12px 40px rgba(196,113,74,.45);}
+.btn-secondary{background:transparent;color:var(--clay);border:2px solid var(--clay);padding:14px 28px;border-radius:50px;font-family:'Nunito',sans-serif;font-size:16px;font-weight:800;cursor:pointer;text-decoration:none;display:inline-block;transition:background .2s,color .2s;}
+.btn-secondary:hover{background:var(--clay);color:white;}
+.hero-note{font-size:13px;color:var(--muted);}
+
+/* PHONE MOCKUP */
+.mockup-wrap{width:100%;max-width:320px;margin:0 auto 80px;position:relative;}
+.mockup{background:var(--text);border-radius:36px;padding:12px;box-shadow:0 40px 80px rgba(45,24,16,.25),0 0 0 1px rgba(255,255,255,.1);position:relative;overflow:hidden;}
+.mockup-screen{background:var(--cream);border-radius:26px;overflow:hidden;}
+.mockup-bar{background:var(--clay);padding:14px 16px 10px;display:flex;align-items:center;justify-content:space-between;}
+.mockup-bar-title{font-family:'Lora',serif;font-size:14px;color:white;font-weight:600;font-style:italic;}
+.mockup-bar-pill{background:rgba(255,255,255,.2);border-radius:50px;padding:4px 10px;font-size:10px;color:white;font-weight:700;}
+.mockup-feed{padding:0;}
+.feed-post{border-bottom:1px solid var(--clay-light);overflow:hidden;}
+.feed-post-header{padding:10px 12px;display:flex;align-items:center;gap:8px;}
+.feed-av{width:28px;height:28px;border-radius:50%;background:var(--clay);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;}
+.feed-name{font-size:11px;font-weight:800;color:var(--text);}
+.feed-time{font-size:9px;color:var(--muted);}
+.feed-img{width:100%;height:140px;background:linear-gradient(135deg,#8B6B55,#C4714A);display:flex;align-items:center;justify-content:center;font-size:40px;}
+.feed-actions{padding:8px 12px;display:flex;gap:8px;}
+.feed-action{font-size:9px;color:var(--muted);font-weight:700;background:var(--clay-light);padding:4px 10px;border-radius:50px;}
+.mockup-nav{background:white;padding:10px 16px;display:flex;align-items:center;gap:8px;border-top:1px solid var(--clay-light);}
+.mockup-home{width:36px;height:36px;border-radius:50%;background:var(--clay);display:flex;align-items:center;justify-content:center;font-size:16px;}
+.mockup-pills{display:flex;gap:6px;flex:1;background:var(--clay-light);border-radius:50px;padding:6px 10px;}
+.mockup-pill{font-size:9px;font-weight:700;color:var(--muted);}
+.mockup-pill.active{color:var(--clay);}
+.mockup-fab{width:36px;height:36px;border-radius:50%;background:var(--clay);display:flex;align-items:center;justify-content:center;font-size:18px;color:white;font-weight:300;margin-left:auto;}
+
+/* FEATURES */
+.section{padding:80px 24px;}
+.section-label{font-size:11px;font-weight:800;letter-spacing:2px;color:var(--clay);text-transform:uppercase;text-align:center;margin-bottom:12px;}
+.section-title{font-family:'Lora',serif;font-size:clamp(28px,5vw,42px);font-weight:700;text-align:center;margin-bottom:16px;line-height:1.2;}
+.section-title em{font-style:italic;color:var(--clay);}
+.section-sub{text-align:center;color:var(--muted);font-size:16px;max-width:480px;margin:0 auto 56px;line-height:1.6;}
+
+.features{display:grid;grid-template-columns:1fr;gap:16px;max-width:600px;margin:0 auto;}
+.feature{background:var(--warm);border:1.5px solid var(--clay-light);border-radius:20px;padding:24px;display:flex;gap:16px;align-items:flex-start;}
+.feature-icon{font-size:28px;flex-shrink:0;margin-top:2px;}
+.feature-title{font-size:16px;font-weight:800;margin-bottom:4px;}
+.feature-desc{font-size:14px;color:var(--muted);line-height:1.5;}
+
+/* PRICING */
+.pricing-section{background:var(--text);padding:80px 24px;}
+.pricing-section .section-label{color:var(--clay-light);}
+.pricing-section .section-title{color:white;}
+.pricing-section .section-sub{color:rgba(255,255,255,.5);}
+.pricing-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:600px;margin:0 auto;}
+.pricing-card{background:rgba(255,255,255,.05);border:1.5px solid rgba(255,255,255,.1);border-radius:20px;padding:20px;text-align:center;transition:border-color .2s;}
+.pricing-card.featured{border-color:var(--clay);background:rgba(196,113,74,.1);}
+.pricing-emoji{font-size:28px;margin-bottom:8px;}
+.pricing-name{font-size:13px;font-weight:800;color:white;margin-bottom:4px;}
+.pricing-price{font-family:'Lora',serif;font-size:28px;font-weight:700;color:var(--clay);margin-bottom:4px;}
+.pricing-price span{font-size:13px;font-weight:400;color:rgba(255,255,255,.4);}
+.pricing-members{font-size:11px;color:rgba(255,255,255,.4);margin-bottom:12px;}
+.pricing-note{font-size:10px;color:rgba(255,255,255,.3);line-height:1.4;}
+
+/* MISSION */
+.mission{padding:80px 24px;text-align:center;max-width:640px;margin:0 auto;}
+.mission-quote{font-family:'Lora',serif;font-size:clamp(22px,4vw,32px);font-style:italic;line-height:1.4;color:var(--text);margin-bottom:24px;}
+.mission-quote em{color:var(--clay);font-style:normal;}
+.mission-attr{font-size:13px;color:var(--muted);font-weight:700;}
+
+/* NO ADS */
+.no-ads{background:var(--clay);padding:60px 24px;text-align:center;}
+.no-ads-title{font-family:'Lora',serif;font-size:clamp(24px,4vw,36px);font-weight:700;color:white;margin-bottom:12px;}
+.no-ads-title em{font-style:italic;}
+.no-ads-sub{color:rgba(255,255,255,.75);font-size:16px;max-width:440px;margin:0 auto 32px;line-height:1.6;}
+.no-ads-pills{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;}
+.no-ads-pill{background:rgba(255,255,255,.15);border:1.5px solid rgba(255,255,255,.3);border-radius:50px;padding:8px 16px;font-size:13px;font-weight:700;color:white;}
+
+/* CTA */
+.final-cta{padding:80px 24px;text-align:center;}
+.final-cta-title{font-family:'Lora',serif;font-size:clamp(28px,5vw,48px);font-weight:700;margin-bottom:16px;line-height:1.2;}
+.final-cta-title em{font-style:italic;color:var(--clay);}
+.final-cta-sub{color:var(--muted);font-size:16px;margin-bottom:32px;line-height:1.6;}
+
+/* FOOTER */
+footer{padding:32px 24px;border-top:1px solid var(--clay-light);text-align:center;}
+.footer-logo{font-family:'Lora',serif;font-size:20px;font-style:italic;color:var(--clay);margin-bottom:8px;}
+.footer-note{font-size:12px;color:var(--muted);}
 </style>
 </head>
 <body>
 
-<div class="hero">
-  <span class="hero-icon">🏡</span>
-  <div class="logo">keep <em>up</em></div>
-  <p class="tagline">Stay close to the people who matter most. No ads. No algorithms. Just your family.</p>
-  <a href="/Keepup/" class="cta-btn">Open Keep Up</a>
-  <p class="cta-sub">Free forever for your family</p>
-</div>
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">keep <em>up</em></div>
+  <a href="https://keepupfamilyapp.github.io/Keepup" class="nav-cta">Open App</a>
+</nav>
 
-<div class="section">
-  <h2 class="section-title">Everything your family needs</h2>
+<!-- HERO -->
+<section class="hero">
+  <p class="hero-eyebrow">Private · Family-First · No Algorithms</p>
+  <h1 class="hero-title">Your family deserves a place <em>just for them</em></h1>
+  <p class="hero-sub">Keep Up is a private space for your family to share moments, stay connected, and build memories together — without ads, algorithms, or strangers.</p>
+  <div class="hero-actions">
+    <a href="https://keepupfamilyapp.github.io/Keepup" class="btn-primary">Start Your Family Group</a>
+    <a href="#how-it-works" class="btn-secondary">See How It Works</a>
+  </div>
 
-  <div class="feature">
-    <div class="feature-icon">📸</div>
-    <div>
-      <div class="feature-title">Share moments</div>
-      <div class="feature-desc">Post photos and check-ins to your family feed. React, comment, and stay in the loop.</div>
+  <!-- Phone Mockup -->
+  <div class="mockup-wrap">
+    <div class="mockup">
+      <div class="mockup-screen">
+        <div class="mockup-bar">
+          <div class="mockup-bar-title">keep up</div>
+          <div class="mockup-bar-pill">❤️ Jensen's</div>
+        </div>
+        <div class="mockup-feed">
+          <div class="feed-post">
+            <div class="feed-post-header">
+              <div class="feed-av">👩</div>
+              <div>
+                <div class="feed-name">Mom</div>
+                <div class="feed-time">2m ago</div>
+              </div>
+            </div>
+            <div class="feed-img">🌸</div>
+            <div class="feed-actions">
+              <div class="feed-action">React</div>
+              <div class="feed-action">💬 Send to Chat</div>
+            </div>
+          </div>
+          <div class="feed-post">
+            <div class="feed-post-header">
+              <div class="feed-av">👦</div>
+              <div>
+                <div class="feed-name">Jake</div>
+                <div class="feed-time">1h ago</div>
+              </div>
+            </div>
+            <div class="feed-img">⚽</div>
+            <div class="feed-actions">
+              <div class="feed-action">React</div>
+              <div class="feed-action">Comment</div>
+            </div>
+          </div>
+        </div>
+        <div class="mockup-nav">
+          <div class="mockup-home">🏠</div>
+
+          <div class="mockup-fab">+</div>
+        </div>
+      </div>
     </div>
   </div>
 
-  <div class="feature">
-    <div class="feature-icon">💬</div>
-    <div>
-      <div class="feature-title">Family chat</div>
-      <div class="feature-desc">Group chats for every branch of the family, plus direct messages for one-on-one conversations.</div>
+  <p class="hero-note">Available on Android · Works on any phone · Private by design</p>
+</section>
+
+<!-- FEATURES -->
+<section class="section" id="how-it-works">
+  <p class="section-label">What's Inside</p>
+  <h2 class="section-title">Everything your family needs,<br><em>nothing you don't</em></h2>
+  <p class="section-sub">Keep Up was built around one idea — your family moments belong to your family.</p>
+
+  <div class="features">
+    <div class="feature">
+      <div class="feature-icon">📸</div>
+      <div>
+        <div class="feature-title">Family Feed</div>
+        <div class="feature-desc">Share photos, videos, and updates that only your family sees. No algorithm decides who sees what — everyone sees everything.</div>
+      </div>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">💬</div>
+      <div>
+        <div class="feature-title">Group Chat + DMs</div>
+        <div class="feature-desc">Chat as a family or have private conversations. React, reply, and share photos directly in chat.</div>
+      </div>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">📅</div>
+      <div>
+        <div class="feature-title">Family Calendar</div>
+        <div class="feature-desc">Birthdays, events, and reminders all in one place. The app reminds the group when something important is coming up.</div>
+      </div>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">📷</div>
+      <div>
+        <div class="feature-title">Memory Day</div>
+        <div class="feature-desc">Tap any date on the calendar and see every photo and post your family shared that day. Your own family time capsule.</div>
+      </div>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">🔔</div>
+      <div>
+        <div class="feature-title">Real Notifications</div>
+        <div class="feature-desc">Get notified when family members post or message — not when an algorithm thinks you should be.</div>
+      </div>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">🔒</div>
+      <div>
+        <div class="feature-title">Completely Private</div>
+        <div class="feature-desc">Your group is invite-only. No strangers, no public profiles, no data sold to advertisers. Ever.</div>
+      </div>
     </div>
   </div>
+</section>
 
-  <div class="feature">
-    <div class="feature-icon">📅</div>
-    <div>
-      <div class="feature-title">Family calendar</div>
-      <div class="feature-desc">Add events, RSVP, and never miss a birthday or gathering again.</div>
+<!-- NO ADS -->
+<section class="no-ads">
+  <h2 class="no-ads-title">No ads. No algorithm.<br><em>No compromise.</em></h2>
+  <p class="no-ads-sub">Other apps are free because you're the product. Keep Up charges a small monthly fee so your family's moments stay yours.</p>
+  <div class="no-ads-pills">
+    <div class="no-ads-pill">✓ No ads ever</div>
+    <div class="no-ads-pill">✓ No data selling</div>
+    <div class="no-ads-pill">✓ No public profiles</div>
+    <div class="no-ads-pill">✓ No algorithm</div>
+    <div class="no-ads-pill">✓ No strangers</div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section class="pricing-section">
+  <p class="section-label">Simple Pricing</p>
+  <h2 class="section-title" style="color:white;">One family pays.<br>Everyone else joins <em style="color:var(--clay)">free.</em></h2>
+  <p class="section-sub">The group owner pays a small monthly fee. Every family member they invite joins at no cost.</p>
+
+  <div class="pricing-grid">
+    <div class="pricing-card">
+      <div class="pricing-emoji">💑</div>
+      <div class="pricing-name">Couples</div>
+      <div class="pricing-price">$2<span>/mo</span></div>
+      <div class="pricing-members">2 members</div>
+      <div class="pricing-note">Perfect for partners & best friends</div>
+    </div>
+    <div class="pricing-card featured">
+      <div class="pricing-emoji">👨‍👩‍👧‍👦</div>
+      <div class="pricing-name">Family</div>
+      <div class="pricing-price">$4<span>/mo</span></div>
+      <div class="pricing-members">Up to 10 members</div>
+      <div class="pricing-note">Most popular for immediate families</div>
+    </div>
+    <div class="pricing-card">
+      <div class="pricing-emoji">🏡</div>
+      <div class="pricing-name">Extended Family</div>
+      <div class="pricing-price">$7<span>/mo</span></div>
+      <div class="pricing-members">Up to 30 members</div>
+      <div class="pricing-note">Grandparents, cousins & all</div>
+    </div>
+    <div class="pricing-card">
+      <div class="pricing-emoji">🎉</div>
+      <div class="pricing-name">Family Reunion</div>
+      <div class="pricing-price">$10<span>/mo</span></div>
+      <div class="pricing-members">Unlimited members</div>
+      <div class="pricing-note">For the big families</div>
     </div>
   </div>
+</section>
 
-  <div class="feature">
-    <div class="feature-icon">🎂</div>
-    <div>
-      <div class="feature-title">Birthday reminders</div>
-      <div class="feature-desc">Get reminded when a family member's birthday is coming up so you never forget.</div>
-    </div>
-  </div>
+<!-- MISSION -->
+<section class="mission">
+  <p class="mission-quote">"In a busy life, keep up with those whom you love without distractions."</p>
+  <p class="mission-attr">— Sean, Founder of Keep Up</p>
+</section>
 
-  <div class="feature">
-    <div class="feature-icon">🔒</div>
-    <div>
-      <div class="feature-title">Private by design</div>
-      <div class="feature-desc">Invite-only. Your family's moments stay in your family. No strangers, no algorithms.</div>
-    </div>
-  </div>
-</div>
+<!-- FINAL CTA -->
+<section class="final-cta">
+  <h2 class="final-cta-title">Your family is waiting.<br><em>Keep up with them.</em></h2>
+  <p class="final-cta-sub">Start your private family group today. Available on Android with iOS coming soon.</p>
+  <a href="https://keepupfamilyapp.github.io/Keepup" class="btn-primary">Start Your Family Group</a>
+</section>
 
-<div class="divider"></div>
-
-<div class="promise">
-  <h2 class="promise-title">Our promise to your family</h2>
-  <ul class="promise-list">
-    <li>No ads, ever</li>
-    <li>No selling your data</li>
-    <li>No algorithmic feed</li>
-    <li>No pressure to post</li>
-    <li>Always free for families</li>
-  </ul>
-</div>
-
-<div class="bottom-cta">
-  <h2>Ready to keep up?</h2>
-  <p>Ask a family member to send you an invite link, or start your own family group in minutes.</p>
-  <a href="/Keepup/" class="bottom-btn">Get Started</a>
-</div>
-
-<div class="footer">
-  Keep Up &mdash; A private space for your family
-</div>
+<!-- FOOTER -->
+<footer>
+  <div class="footer-logo">keep up</div>
+  <p class="footer-note">Private · Secure · Family-First · © 2025 Keep Up</p>
+</footer>
 
 </body>
 </html>
