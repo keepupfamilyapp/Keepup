@@ -94,6 +94,41 @@ var messaging=null;
 try{messaging=firebase.messaging();}catch(e){console.log("Messaging not supported:",e);}
 var currentUser=null;
 var unsubscribers=[];
+// Cloudflare Stream - upload via Cloud Function (token stored server-side)
+var CF_ACCOUNT_ID="f6991628f350e3ae320b0ee72805b9f3";
+var CF_FUNC_URL="https://us-central1-keep-up-f9d1c.cloudfunctions.net/uploadVideo";
+
+async function uploadToCloudflareStream(file,onProgress){
+  // Get upload credentials from our Cloud Function
+  var credsResp=await fetch(CF_FUNC_URL,{method:"POST"});
+  var creds=await credsResp.json();
+  var formData=new FormData();
+  formData.append("file",file);
+  return new Promise(function(resolve,reject){
+    var xhr=new XMLHttpRequest();
+    xhr.open("POST",creds.uploadUrl);
+    xhr.setRequestHeader("Authorization","Bearer "+creds.token);
+    xhr.upload.addEventListener("progress",function(e){
+      if(e.lengthComputable&&onProgress)onProgress(Math.round(e.loaded/e.total*100));
+    });
+    xhr.addEventListener("load",function(){
+      if(xhr.status===200||xhr.status===201){
+        try{
+          var resp=JSON.parse(xhr.responseText);
+          var uid=resp.result&&resp.result.uid;
+          if(uid){
+            var videoUrl="https://customer-"+CF_ACCOUNT_ID+".cloudflarestream.com/"+uid+"/manifest/video.m3u8";
+            var thumbUrl="https://customer-"+CF_ACCOUNT_ID+".cloudflarestream.com/"+uid+"/thumbnails/thumbnail.jpg";
+            resolve({uid:uid,videoUrl:videoUrl,thumbUrl:thumbUrl});
+          } else {reject(new Error("No uid in response"));}
+        }catch(e){reject(e);}
+      } else {reject(new Error("Upload failed: "+xhr.status));}
+    });
+    xhr.addEventListener("error",function(){reject(new Error("Network error"));});
+    xhr.send(formData);
+  });
+}
+
 var VAPID_KEY="BJOij4wvBLe4ZgNbMuhHSVarzr9k65tSbnbF5oeSjsvOg_rTJN-ffZmCsLfz1iX_UGq5aPmTyWwRRb-fdAHJ7O4";
 
 // Register service worker and request notification permission
@@ -152,12 +187,20 @@ function uploadPhoto(dataUrl){
     var uid=(currentUser&&currentUser.uid)||localStorage.getItem("ku_uid")||"anon";
     var isVid=ST.upIsVideo&&ST.upVideoFile;
     if(isVid){
-      var ext=ST.upVideoFile.name.split(".").pop()||"mp4";
-      var ref=storage.ref("videos/"+uid+"/"+Date.now()+"."+ext);
-      ref.put(ST.upVideoFile)
-        .then(function(snap){return snap.ref.getDownloadURL();})
-        .then(function(url){resolve(url);})
-        .catch(function(e){console.log("Video upload failed",e);resolve(null);});
+      uploadToCloudflareStream(ST.upVideoFile,function(pct){
+        var prog=document.getElementById("cf-upload-progress");
+        if(prog)prog.textContent="Uploading... "+pct+"%";
+      }).then(function(result){
+        ST.cfThumbUrl=result.thumbUrl;
+        resolve(result.videoUrl);
+      }).catch(function(e){
+        console.log("CF upload failed, trying Firebase",e);
+        var ext=ST.upVideoFile.name.split(".").pop()||"mp4";
+        storage.ref("videos/"+uid+"/"+Date.now()+"."+ext).put(ST.upVideoFile)
+          .then(function(snap){return snap.ref.getDownloadURL();})
+          .then(function(url){resolve(url);})
+          .catch(function(e2){resolve(null);});
+      });
     } else {
       var ref=storage.ref("photos/"+uid+"/"+Date.now()+".jpg");
       ref.putString(dataUrl,"data_url",{contentType:"image/jpeg"})
@@ -1582,6 +1625,7 @@ function buildItem(item,t){
       var upIcon=d({css:{fontSize:"28px",flexShrink:0}});upIcon.textContent="\uD83D\uDCF8";upCard.appendChild(upIcon);
       var upTxt=d({css:{flex:1}});
       upTxt.appendChild(d({css:{fontSize:"14px",fontWeight:700,color:"#3D2314"}},ST.upIsVideo?"Uploading video...":"Uploading photo..."));
+      if(ST.upIsVideo){var prog=d({id:"cf-upload-progress",css:{fontSize:"12px",color:"#9B7B62",marginTop:"4px"}});upTxt.appendChild(prog);}
       upTxt.appendChild(d({css:{fontSize:"12px",color:"#9B7B62",marginTop:"2px"}},"This may take a moment"));
       upCard.appendChild(upTxt);wrap.appendChild(upCard);return wrap;
     }
@@ -1617,29 +1661,44 @@ function buildItem(item,t){
     if(item.imgUrl&&(item.type==="video"||item.isVideo)){
       // Video - shows first frame thumbnail, native controls, loads smoothly
       var vidWrap=d({css:{position:"relative",background:"#000",cursor:"pointer"}});
-      var vidEl=document.createElement("video");
-      vidEl.src=item.imgUrl;
-      vidEl.style.cssText="width:100%;max-height:80vh;object-fit:cover;display:block;background:#000;";
-      vidEl.controls=false;
-      vidEl.playsInline=true;
-      vidEl.preload="metadata";
-      vidEl.setAttribute("playsinline","");
-      vidEl.setAttribute("webkit-playsinline","");
-      // Show first frame
-      vidEl.addEventListener("loadedmetadata",function(){
-        vidEl.currentTime=0.001;
-      });
-      // Play button overlay
-      var vPlay=d({css:{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:"56px",height:"56px",borderRadius:"50%",background:"rgba(0,0,0,.45)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"22px",pointerEvents:"none"}});
-      vPlay.textContent="\u25B6\uFE0F";
-      vidWrap.appendChild(vidEl);
-      vidWrap.appendChild(vPlay);
-      // Tap to play - show controls and hide overlay
-      vidWrap.addEventListener("click",function(){
-        vPlay.style.display="none";
-        vidEl.controls=true;
-        vidEl.play().catch(function(){});
-      });
+      // Use Cloudflare Stream iframe for HLS videos, fallback to native video
+      var isCFStream=item.imgUrl&&item.imgUrl.includes("cloudflarestream.com");
+      if(isCFStream){
+        // Extract video UID from URL
+        var cfUid=item.imgUrl.split("cloudflarestream.com/")[1];
+        if(cfUid)cfUid=cfUid.split("/")[0];
+        // Show thumbnail until tapped
+        var cfThumb=d({css:{width:"100%",minHeight:"200px",background:"#000",position:"relative",cursor:"pointer"}});
+        if(item.thumbUrl){
+          cfThumb.style.backgroundImage="url("+item.thumbUrl+")";
+          cfThumb.style.backgroundSize="cover";
+          cfThumb.style.backgroundPosition="center";
+        }
+        var cfPlay=d({css:{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:"56px",height:"56px",borderRadius:"50%",background:"rgba(0,0,0,.55)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"24px"}});
+        cfPlay.textContent="\u25B6\uFE0F";
+        cfThumb.appendChild(cfPlay);
+        vidWrap.appendChild(cfThumb);
+        cfThumb.addEventListener("click",function(){
+          cfThumb.remove();
+          var iframe=document.createElement("iframe");
+          iframe.src="https://customer-"+CF_ACCOUNT_ID+".cloudflarestream.com/"+cfUid+"/iframe?autoplay=true&muted=false";
+          iframe.style.cssText="width:100%;height:280px;border:none;display:block;background:#000;";
+          iframe.setAttribute("allow","accelerometer;gyroscope;autoplay;encrypted-media;picture-in-picture;");
+          iframe.setAttribute("allowfullscreen","true");
+          vidWrap.appendChild(iframe);
+        });
+      } else {
+        var vidEl=document.createElement("video");
+        vidEl.src=item.imgUrl;
+        vidEl.style.cssText="width:100%;max-height:80vh;object-fit:cover;display:block;background:#000;";
+        vidEl.controls=false;vidEl.playsInline=true;vidEl.preload="metadata";
+        vidEl.setAttribute("playsinline","");vidEl.setAttribute("webkit-playsinline","");
+        vidEl.addEventListener("loadedmetadata",function(){vidEl.currentTime=0.001;});
+        var vPlay=d({css:{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:"56px",height:"56px",borderRadius:"50%",background:"rgba(0,0,0,.45)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"22px",pointerEvents:"none"}});
+        vPlay.textContent="\u25B6\uFE0F";
+        vidWrap.appendChild(vidEl);vidWrap.appendChild(vPlay);
+        vidWrap.addEventListener("click",function(){vPlay.style.display="none";vidEl.controls=true;vidEl.play().catch(function(){});});
+      }
       card.appendChild(vidWrap);
     } else if(item.imgUrl){
       var img=el("img",{css:{width:"100%",maxHeight:"85vh",objectFit:"contain",display:"block",cursor:"zoom-in",background:"#1a1a1a",WebkitTouchCallout:"none",WebkitUserSelect:"none",pointerEvents:"auto"}});
@@ -2860,9 +2919,7 @@ function buildUpload(t,grp){
       ST.upIsVideo=f.type.startsWith("video/");
       ST.upVideoFile=f;
       // Warn if video is over 50MB
-      if(ST.upIsVideo&&f.size>50*1024*1024){
-        alert("That video is quite large ("+Math.round(f.size/1024/1024)+"MB). For the best experience, try to keep videos under 30 seconds. You can still upload it but it may take a while.");
-      }
+      // Cloudflare Stream handles compression - no size limit needed
       var r=new FileReader();
       r.onload=function(e){ST.upImg=e.target.result;redraw();};
       r.readAsDataURL(f);
