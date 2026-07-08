@@ -1553,7 +1553,8 @@ function buildFeed(t,grp){
   function handleVideo(f){
     hideAll();
     ST.upType="photo";ST.upIsVideo=true;ST.upVideoFile=f;ST.upStep=2;ST.upCap="";
-    var r=new FileReader();r.onload=function(e){ST.upImg=e.target.result;ST.upOpen=true;redraw();};r.readAsDataURL(f);
+    // Don't read video into memory - go straight to upload step
+    ST.upImg="video-placeholder";ST.upOpen=true;redraw();
   }
 
   // Photo row with sub-options sliding left
@@ -2931,7 +2932,13 @@ function buildUpload(t,grp){
     tapBtn.addEventListener("click",function(e){e.stopPropagation();fi.click();});pa.appendChild(tapBtn);}
     pa.addEventListener("click",function(){fi.click();});body.appendChild(pa);body.appendChild(fi);
     if(ST.upIsVideo&&ST.upImg){
-      body.appendChild(d({css:{fontSize:"12px",color:"#9B7B62",textAlign:"center",marginBottom:"8px"}},"\uD83D\uDCA1 Tip: Short clips under 30 seconds upload fastest"));
+      var vidPrev=d({css:{background:"#1a1a1a",borderRadius:"12px",padding:"20px",textAlign:"center",marginBottom:"12px"}});
+      vidPrev.appendChild(d({css:{fontSize:"32px",display:"block",marginBottom:"8px"}},"\uD83C\uDFA5"));
+      var vidName=ST.upVideoFile?ST.upVideoFile.name:"Video ready";
+      var vidSize=ST.upVideoFile?"("+Math.round(ST.upVideoFile.size/1024/1024*10)/10+"MB)":"";
+      vidPrev.appendChild(d({css:{fontSize:"13px",color:"rgba(255,255,255,.7)"}},vidName));
+      vidPrev.appendChild(d({css:{fontSize:"11px",color:"rgba(255,255,255,.4)",display:"block",marginTop:"4px"}},vidSize));
+      body.appendChild(vidPrev);
     }sh.appendChild(body);
     var ft=d({css:{padding:"12px 15px 26px",flexShrink:0}});
     // Caption input directly on photo step
