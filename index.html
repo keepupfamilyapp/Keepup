@@ -1213,23 +1213,24 @@ function buildOnboarding(){
     body.appendChild(d({css:{fontSize:"14px",color:"#6B4C35",lineHeight:1.7,marginBottom:"28px"}},doneMsg));
     body.appendChild(makeBtn("Take me to Keep Up",function(){
       ST.name=ST.obName;ST.avatar=ST.obPhoto||ST.obAvatar;
-      ST.groups=[{id:"imm",label:ST.obGrpName,icon:ST.obGrpEmoji,photo:ST.obGrpPhoto}];
-      ST.group="imm";
-      ST.feed={imm:[{id:1,type:"checkin",av:"\uD83C\uDFE1",name:"Keep Up",time:"Just now",status:"Welcome to Keep Up, "+ST.obName+"! Tap + to share your first post \uD83C\uDF89"}]};
-      ST.chatMsgs={imm:[]};ST.mems={imm:[{av:ST.obPhoto||ST.obAvatar,name:ST.obName,role:"Admin",you:true}]};
+      // Use the exact group ID from invite token for invited users
+      var finalGrpId=ST.joinInvite&&ST.joinGroupId?ST.joinGroupId:"imm";
+      ST.groups=[{id:finalGrpId,label:ST.obGrpName,icon:ST.obGrpEmoji,photo:ST.obGrpPhoto}];
+      ST.group=finalGrpId;
+      ST.feed={};ST.feed[finalGrpId]=[];
+      if(!ST.joinInvite)ST.feed[finalGrpId]=[{id:1,type:"checkin",av:"\uD83C\uDFE1",name:"Keep Up",time:"Just now",status:"Welcome to Keep Up, "+ST.obName+"! Tap + to share your first post \uD83C\uDF89"}];
+      ST.chatMsgs={};ST.chatMsgs[finalGrpId]=[];
+      ST.mems={};ST.mems[finalGrpId]=[{av:ST.obPhoto||ST.obAvatar,name:ST.obName,role:ST.joinInvite?"Member":"Admin",you:true}];
       ST.birthdays=[];ST.evs=[];ST.dms=[];ST.boarded=true;
-      // Save the joined group to localStorage
-      if(ST.joinInvite){
-        try{localStorage.setItem("ku_grp",JSON.stringify({label:ST.obGrpName,icon:ST.obGrpEmoji}));}catch(e){}
-      }
+      try{localStorage.setItem("ku_grp",JSON.stringify({label:ST.obGrpName,icon:ST.obGrpEmoji,id:finalGrpId}));}catch(e){}
       var isCreator=!ST.joinInvite;
-     if(currentUser){db.collection("userGroups").doc(currentUser.uid).set({groups:ST.groups}).catch(function(){});}
+      if(currentUser){db.collection("userGroups").doc(currentUser.uid).set({groups:ST.groups}).catch(function(){});}
       // Write full profile to Firestore
       var uid=currentUser?currentUser.uid:(localStorage.getItem("ku_uid")||("u"+Date.now()));
       localStorage.setItem("ku_uid",uid);
       db.collection("members").doc(uid).set({
         uid:uid,name:ST.obName,av:ST.obPhoto||ST.obAvatar,
-        groupId:"imm",groupLabel:ST.obGrpName,groupIcon:ST.obGrpEmoji,
+        groupId:finalGrpId,groupLabel:ST.obGrpName,groupIcon:ST.obGrpEmoji,
         isAdmin:!ST.joinInvite,
         joinedAt:firebase.firestore.FieldValue.serverTimestamp()
       }).catch(function(e){console.log("member write failed",e);});
@@ -3457,6 +3458,7 @@ function processInviteToken(token){
     ST.obGrpName=data.groupLabel||"Family";
     ST.obGrpEmoji=data.groupIcon||"\u2764\uFE0F";
     ST.joinInvite=true;
+    ST.joinGroupId=data.groupId||null; // Save the exact group ID
     ST.boarded=false;
     redraw();
   }).catch(function(e){
