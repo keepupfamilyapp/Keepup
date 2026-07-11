@@ -329,7 +329,7 @@ function showSendToChatPicker(feedItem){
       row.addEventListener("click",function(){
         ov.remove();
         var tmpId2="tmp-s2c-"+Date.now();
-        var msg={av:ST.avatar,name:ST.name||"You",text:feedItem.cap||"",imgUrl:feedItem.imgUrl,sharedFrom:"feed",sharedName:feedItem.name,time:"Just now",sentAt:Date.now(),you:true,senderUid:currentUser?currentUser.uid:"anon"};
+        var msg={av:ST.avatar&&ST.avatar.startsWith("data:")?"\uD83D\uDC64":(ST.avatar||"\uD83D\uDC64"),name:ST.name||"You",text:feedItem.cap||"",imgUrl:feedItem.imgUrl,sharedFrom:"feed",sharedName:feedItem.name,time:"Just now",sentAt:Date.now(),you:true,senderUid:currentUser?currentUser.uid:"anon"};
         if(!ST.chatMsgs[grpId])ST.chatMsgs[grpId]=[];
         ST.chatMsgs[grpId].push(Object.assign({},msg,{id:tmpId2}));
         ST.tab="chat";ST.openChat=null;
@@ -352,7 +352,7 @@ function showSendToChatPicker(feedItem){
       row.addEventListener("click",function(){
         ov.remove();
         var tmpId="tmp-s2c-"+Date.now();
-        var msg={av:ST.avatar,name:ST.name||"You",text:feedItem.cap||"",imgUrl:feedItem.imgUrl,sharedFrom:"feed",sharedName:feedItem.name,time:"Just now",sentAt:Date.now(),you:true};
+        var msg={av:ST.avatar&&ST.avatar.startsWith("data:")?"\uD83D\uDC64":(ST.avatar||"\uD83D\uDC64"),name:ST.name||"You",text:feedItem.cap||"",imgUrl:feedItem.imgUrl,sharedFrom:"feed",sharedName:feedItem.name,time:"Just now",sentAt:Date.now(),you:true};
         dmObj.msgs.push(Object.assign({},msg,{id:tmpId}));
         ST.tab="chat";ST.openChat=dmObj.id;
         redraw();
@@ -2284,7 +2284,7 @@ function sendChatPhoto(gid,file,t){
   if(!currentUser){alert("Still signing you in, try again in a moment.");return;}
   var dm=ST.dms&&ST.dms.find(function(x){return x.id===gid;});
   var tempId="chatphoto-"+Date.now();
-  var tempMsg={id:tempId,av:ST.avatar,name:ST.name||"You",text:"",imgUrl:null,uploading:true,time:"Just now",sentAt:Date.now(),you:true};
+  var tempMsg={id:tempId,av:ST.avatar&&ST.avatar.startsWith("data:")?"\uD83D\uDC64":(ST.avatar||"\uD83D\uDC64"),name:ST.name||"You",text:"",imgUrl:null,uploading:true,time:"Just now",sentAt:Date.now(),you:true};
   if(dm){dm.msgs.push(tempMsg);}
   else{if(!ST.chatMsgs[gid])ST.chatMsgs[gid]=[];ST.chatMsgs[gid].push(tempMsg);}
   redraw();
@@ -2294,7 +2294,7 @@ function sendChatPhoto(gid,file,t){
   storage.ref("chat-photos/"+uid+"/"+Date.now()+"."+ext).put(file)
     .then(function(snap){return snap.ref.getDownloadURL();})
     .then(function(url){
-      var msg={av:ST.avatar,name:ST.name||"You",text:"",imgUrl:url,time:"Just now",you:true};
+      var msg={av:ST.avatar&&ST.avatar.startsWith("data:")?"\uD83D\uDC64":(ST.avatar||"\uD83D\uDC64"),name:ST.name||"You",text:"",imgUrl:url,time:"Just now",you:true};
       // Remove temp
       if(dm){dm.msgs=dm.msgs.filter(function(x){return x.id!==tempId;});}
       else{ST.chatMsgs[gid]=ST.chatMsgs[gid].filter(function(x){return x.id!==tempId;});}
@@ -2325,7 +2325,7 @@ function sendChatVideo(gid,file,t){
   if(!currentUser){alert("Still signing you in, try again in a moment.");return;}
   var dm=ST.dms&&ST.dms.find(function(x){return x.id===gid;});
   var tempId="chatvideo-"+Date.now();
-  var tempMsg={id:tempId,av:ST.avatar,name:ST.name||"You",text:"",videoUrl:null,uploadingVideo:true,time:"Just now",sentAt:Date.now(),you:true};
+  var tempMsg={id:tempId,av:ST.avatar&&ST.avatar.startsWith("data:")?"\uD83D\uDC64":(ST.avatar||"\uD83D\uDC64"),name:ST.name||"You",text:"",videoUrl:null,uploadingVideo:true,time:"Just now",sentAt:Date.now(),you:true};
   if(dm){dm.msgs.push(tempMsg);}
   else{if(!ST.chatMsgs[gid])ST.chatMsgs[gid]=[];ST.chatMsgs[gid].push(tempMsg);}
   redraw();
@@ -2343,7 +2343,7 @@ function sendChatVideo(gid,file,t){
   });
   uploadTask.then(function(snap){return snap.ref.getDownloadURL();})
     .then(function(url){
-      var msg={av:ST.avatar,name:ST.name||"You",text:"",videoUrl:url,time:"Just now",you:true};
+      var msg={av:ST.avatar&&ST.avatar.startsWith("data:")?"\uD83D\uDC64":(ST.avatar||"\uD83D\uDC64"),name:ST.name||"You",text:"",videoUrl:url,time:"Just now",you:true};
       if(dm){dm.msgs=dm.msgs.filter(function(x){return x.id!==tempId;});}
       else{ST.chatMsgs[gid]=ST.chatMsgs[gid].filter(function(x){return x.id!==tempId;});}
       if(dm){
@@ -2373,7 +2373,7 @@ function sendChat(gid){
   var iv=ST.chatIn[gid]||"";if(!iv.trim())return;
   var sUid=currentUser?currentUser.uid:(localStorage.getItem("ku_uid")||"anon");
   var replyData=ST.replyTo?{replyToId:ST.replyTo.id,replyToName:ST.replyTo.name,replyToText:ST.replyTo.text,replyToImg:ST.replyTo.imgUrl}:null;
-  var msg=Object.assign({av:ST.avatar,name:ST.name||"You",text:iv.trim(),time:"Just now",sentAt:Date.now(),you:true,senderUid:sUid},replyData||{});
+  var msg=Object.assign({av:ST.avatar&&ST.avatar.startsWith("data:")?"\uD83D\uDC64":(ST.avatar||"\uD83D\uDC64"),name:ST.name||"You",text:iv.trim(),time:"Just now",sentAt:Date.now(),you:true,senderUid:sUid},replyData||{});
   ST.chatIn[gid]="";ST.replyTo=null;
   var dm=ST.dms&&ST.dms.find(function(x){return x.id===gid;});
   // Optimistic: show message immediately before Firestore confirms
@@ -2601,16 +2601,22 @@ function buildProfile(t){
     if(!f)return;
     var reader=new FileReader();
     reader.onload=function(e){
-      ST.avatar=e.target.result;
-      // Save to Firebase
-      if(currentUser){
-        db.collection("members").doc(currentUser.uid).update({av:e.target.result}).catch(function(){});
-        storage.ref("avatars/"+currentUser.uid+".jpg").putString(e.target.result,"data_url")
-          .then(function(snap){return snap.ref.getDownloadURL();})
-          .then(function(url){ST.avatar=url;db.collection("members").doc(currentUser.uid).update({av:url}).catch(function(){});redraw();})
-          .catch(function(){redraw();});
-      }
+      // Store base64 temporarily for display only - never save to Firestore
+      var tempBase64=e.target.result;
+      ST.avatar=tempBase64;
       redraw();
+      // Upload to Storage first, then save URL to Firestore
+      if(currentUser){
+        storage.ref("avatars/"+currentUser.uid+".jpg").putString(tempBase64,"data_url")
+          .then(function(snap){return snap.ref.getDownloadURL();})
+          .then(function(url){
+            ST.avatar=url;
+            localStorage.setItem("ku_av",url);
+            db.collection("members").doc(currentUser.uid).update({av:url}).catch(function(){});
+            redraw();
+          })
+          .catch(function(e){console.log("Avatar upload failed",e);});
+      }
     };
     reader.readAsDataURL(f);
   });
@@ -2776,7 +2782,10 @@ function buildProfile(t){
   else apC.textContent=ST.avatar;
   var apFi=el("input",{type:"file",accept:"image/*",css:{display:"none"}});
   apFi.addEventListener("change",function(){var f=this.files&&this.files[0];if(!f)return;var r=new FileReader();r.onload=function(e){ST.avatar=e.target.result;try{localStorage.setItem("ku_av",ST.avatar);}catch(e2){}
-    if(currentUser)db.collection("members").doc(currentUser.uid).update({av:ST.avatar}).catch(function(){});
+    // Only save emoji avatars directly - photo URLs already saved by upload handler
+    if(currentUser&&ST.avatar&&!ST.avatar.startsWith("data:")){
+      db.collection("members").doc(currentUser.uid).update({av:ST.avatar}).catch(function(){});
+    }
     redraw();};r.readAsDataURL(f);});
   apC.addEventListener("click",function(){apFi.click();});
   var apUp=b({css:{flex:1,padding:"10px",borderRadius:"12px",background:"#FAF6F0",border:"1.5px dashed #E8956D",fontSize:"13px",fontWeight:700,color:"#C4714A",cursor:"pointer",fontFamily:"inherit"}},"\uD83D\uDCF7 Upload new photo");
@@ -2931,7 +2940,9 @@ function buildUpload(t,grp){
       var txt=(ST.upCap||"").trim();
       if(!txt){alert("Write something first!");return;}
       var loc=(ST.upCi||"").trim();
-      var postAv=ST.avatar,postName=ST.name||"You",postGroup=grp.id;
+      // Never write base64 avatars to Firestore
+  var postAv=ST.avatar&&ST.avatar.startsWith("data:")?"\uD83D\uDC64":(ST.avatar||"\uD83D\uDC64");
+  var postName=ST.name||"You",postGroup=grp.id;
       var statusTxt=loc?txt+" \uD83D\uDCCD "+loc:txt;
       var item={type:"checkin",av:postAv,name:postName,status:statusTxt,groupId:postGroup,emoji:loc?"\uD83D\uDCCD":"\u270F\uFE0F",createdAt:firebase.firestore.FieldValue.serverTimestamp()};
       postToFeed(item);
@@ -3088,7 +3099,7 @@ function buildCreateGroup(){
     ST.groups.push(newGroup);
     ST.feed[newGid]=[];
     ST.chatMsgs[newGid]=[];
-    ST.mems[newGid]=[{av:ST.avatar,name:ST.name,role:"Admin",you:true,uid:currentUser.uid}];
+    ST.mems[newGid]=[{av:ST.avatar&&ST.avatar.startsWith("data:")?"\uD83D\uDC64":(ST.avatar||"\uD83D\uDC64"),name:ST.name,role:"Admin",you:true,uid:currentUser.uid}];
     // Save group to Firebase
     db.collection("groups").doc(newGid).set({
       id:newGid,label:newGroup.label,icon:newGroup.icon,
@@ -3097,7 +3108,7 @@ function buildCreateGroup(){
     }).then(function(){
       // Add self as member of new group
       db.collection("members").doc(currentUser.uid+"_"+newGid).set({
-        uid:currentUser.uid,name:ST.name,av:ST.avatar,
+        uid:currentUser.uid,name:ST.name,av:ST.avatar&&ST.avatar.startsWith("data:")?"\uD83D\uDC64":(ST.avatar||"\uD83D\uDC64"),
         groupId:newGid,groupLabel:newGroup.label,isAdmin:true,
         joinedAt:firebase.firestore.FieldValue.serverTimestamp()
       });
@@ -3288,7 +3299,7 @@ var mems=fbMems.length?fbMems.map(function(m){
     var memberUids=selMems.map(function(m){return m.uid||"anon";});
     if(uid&&!memberUids.includes(uid))memberUids.push(uid);
     var senderUid2=(currentUser?currentUser.uid:null)||uid||"anon";
-    var senderProfile={av:ST.avatar,name:ST.name||"You",uid:senderUid2};
+    var senderProfile={av:ST.avatar&&ST.avatar.startsWith("data:")?"\uD83D\uDC64":(ST.avatar||"\uD83D\uDC64"),name:ST.name||"You",uid:senderUid2};
     var allProfiles=selMems.concat([senderProfile]);
     if(!memberUids.includes(senderUid2))memberUids.push(senderUid2);
     db.collection("userDms").doc(nid).set({
@@ -3440,7 +3451,7 @@ ST.upImg=null;
 function addComment(){
   if(!ST.cmtIn.trim()||!currentUser)return;
   var pid=ST.cmtOpen;
-  var cmt={av:ST.avatar,name:ST.name||"You",text:ST.cmtIn.trim(),time:"Just now",postId:String(pid)};
+  var cmt={av:ST.avatar&&ST.avatar.startsWith("data:")?"\uD83D\uDC64":(ST.avatar||"\uD83D\uDC64"),name:ST.name||"You",text:ST.cmtIn.trim(),time:"Just now",postId:String(pid)};
   ST.cmtIn="";redraw();
   db.collection("comments").add(Object.assign({},cmt,{
     createdAt:firebase.firestore.FieldValue.serverTimestamp()
@@ -3576,8 +3587,13 @@ auth.onAuthStateChanged(function(user){
         var m=doc.data();
         // Restore profile from Firebase
         if(m.name){ST.name=m.name;localStorage.setItem("ku_name",m.name);}
-        if(m.av){ST.avatar=m.av;localStorage.setItem("ku_av",m.av);}
+        if(m.av&&!m.av.startsWith("data:")){ST.avatar=m.av;localStorage.setItem("ku_av",m.av);}
         if(m.wallpaper){ST.profileWallpaper=m.wallpaper;}
+        // Restore boarded status from Firestore as backup
+        if(!localStorage.getItem("ku_ob")){
+          localStorage.setItem("ku_ob","1");
+          localStorage.setItem("ku_name",m.name||ST.name);
+        }
         if(m.groupLabel){
           ST.groups[0].label=m.groupLabel;
           ST.groups[0].icon=m.groupIcon||ST.groups[0].icon;
