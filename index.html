@@ -66,8 +66,20 @@ window.onerror=function(msg,src,line,col,err){
   return false;
 };
 window.addEventListener("unhandledrejection",function(e){
+  var msg=(e.reason&&e.reason.message)||String(e.reason)||"";
+  // Handle Firebase IDB deleted error gracefully
+  if(msg.indexOf("deleted")>-1||msg.indexOf("IDB")>-1||msg.indexOf("database")>-1){
+    e.preventDefault();
+    // Show friendly message instead of raw error
+    var banner=document.createElement("div");
+    banner.style.cssText="position:fixed;inset:0;background:rgba(250,246,240,.97);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;text-align:center;font-family:Nunito,sans-serif;";
+    banner.innerHTML="<div style='font-size:48px;margin-bottom:16px'>\uD83D\uDD04</div><div style='font-family:Lora,serif;font-size:22px;font-weight:700;color:#3D2314;margin-bottom:10px'>Please sign back in</div><div style='font-size:14px;color:#9B7B62;margin-bottom:24px;line-height:1.6'>Your session needs to be refreshed. Tap below to continue.</div><button onclick='location.reload()' style='background:#C4714A;color:white;border:none;padding:14px 32px;border-radius:50px;font-size:16px;font-weight:800;cursor:pointer;font-family:Nunito,sans-serif'>Refresh Keep Up</button>";
+    document.body.appendChild(banner);
+    return;
+  }
+  // Show debug info for other errors
   var d=document.getElementById("debug");
-  if(d){d.style.display="block";d.innerHTML+="<div style='margin-bottom:4px'>PROMISE ERROR: "+(e.reason&&e.reason.message||e.reason)+"</div>";}
+  if(d){d.style.display="block";d.innerHTML+="<div style='margin-bottom:4px'>ERROR: "+msg+"</div>";}
 });
 </script>
 <script>
@@ -706,10 +718,18 @@ function doSync(){
           if(age>3000&&age<30000){
             // Show browser notification if permission granted
             if(typeof Notification!=="undefined"&&Notification.permission==="granted"){
-              new Notification(n.title||"Keep Up",{
-                body:n.body||"New activity in your family",
-                icon:"/Keepup/icon.svg"
-              });
+              // Use service worker for iOS compatibility
+              if(navigator.serviceWorker&&navigator.serviceWorker.controller){
+                navigator.serviceWorker.ready.then(function(reg){
+                  reg.showNotification(n.title||"Keep Up",{
+                    body:n.body||"New activity in your family",
+                    icon:"/Keepup/icon.svg"
+                  });
+                }).catch(function(){});
+              } else {
+                try{new Notification(n.title||"Keep Up",{body:n.body||"New activity in your family",icon:"/Keepup/icon.svg"});}
+                catch(e){console.log("Notification not supported:",e);}
+              }
             }
             showInAppNotif(n.title||"Keep Up",n.body||"New activity");
           }
@@ -1612,7 +1632,13 @@ function buildItem(item,t){
     var cake=d({css:{fontSize:"40px",flexShrink:0}});cake.textContent="\uD83C\uDF82";card.appendChild(cake);
     var bd=d({css:{flex:1}});
     var brow=d({css:{display:"flex",alignItems:"center",gap:"7px",marginBottom:"4px"}});
-    var bav=d({css:{width:"24px",height:"24px",borderRadius:"50%",background:"#FBF0D0",border:"1.5px solid #E8C878",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"13px"}});bav.textContent=item.av;brow.appendChild(bav);
+    var bav=d({css:{width:"24px",height:"24px",borderRadius:"50%",background:"#FBF0D0",border:"1.5px solid #E8C878",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"13px",overflow:"hidden"}});
+    var bavVal=item.av||"\uD83D\uDC64";
+    if(bavVal.startsWith("http")||bavVal.startsWith("data:")){
+      var bavImg=document.createElement("img");bavImg.src=bavVal;bavImg.style.cssText="width:100%;height:100%;object-fit:cover;border-radius:50%;";bav.appendChild(bavImg);
+    } else if(bavVal.length>10||/^[A-Za-z0-9_-]{10,}$/.test(bavVal)){bav.textContent="\uD83D\uDC64";}
+    else{bav.textContent=bavVal;}
+    brow.appendChild(bav);
     brow.appendChild(d({css:{fontSize:"14px",fontWeight:800,color:"#7A5A14"}},item.name+"'s Birthday!"));bd.appendChild(brow);
     var when=item.daysAway===0?"Today! \uD83C\uDF89 Wish them well!":item.daysAway===1?"Tomorrow! Start planning...":"In "+item.daysAway+" days";
     bd.appendChild(d({css:{fontSize:"12px",color:"#9B7B62",marginBottom:"9px"}},when));
@@ -1765,7 +1791,13 @@ function buildItem(item,t){
   }
   if(item.type==="checkin"){
     var card=d({css:{background:t.ap,border:"none",borderBottom:"1px solid "+t.al,padding:"12px 16px",display:"flex",gap:"10px"}});
-    var av=d({css:{width:"40px",height:"40px",borderRadius:"50%",background:t.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"20px",flexShrink:0}});av.textContent=item.av;card.appendChild(av);
+    var av=d({css:{width:"40px",height:"40px",borderRadius:"50%",background:t.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"20px",flexShrink:0,overflow:"hidden"}});
+    var avVal=item.av||"\uD83D\uDC64";
+    if(avVal.startsWith("http")||avVal.startsWith("data:")){
+      var avImg=document.createElement("img");avImg.src=avVal;avImg.style.cssText="width:100%;height:100%;object-fit:cover;border-radius:50%;";av.appendChild(avImg);
+    } else if(avVal.length>10||/^[A-Za-z0-9_-]{10,}$/.test(avVal)){av.textContent="\uD83D\uDC64";}
+    else{av.textContent=avVal;}
+    card.appendChild(av);
     var bd=d({css:{flex:1}});bd.appendChild(d({css:{fontSize:"12px",fontWeight:700,color:t.ad}},item.name+" checked in"));bd.appendChild(d({css:{fontSize:"13px",color:"#3D2314",marginTop:"4px",lineHeight:"1.5"}},item.status));bd.appendChild(d({css:{fontSize:"11px",color:"#9B7B62",marginTop:"4px"}},item.createdAt?timeAgo(item.createdAt):item.time));card.appendChild(bd);
     if(item.name===(ST.name||"You")||item.av===ST.avatar){
       var ciDel=b({css:{background:"transparent",border:"none",color:"#C9A882",fontSize:"18px",cursor:"pointer",padding:"4px 8px",alignSelf:"flex-start",fontFamily:"inherit"}},"\u00B7\u00B7\u00B7");
