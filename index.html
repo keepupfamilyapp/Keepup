@@ -1769,16 +1769,41 @@ function buildItem(item,t){
     var acts=d({css:{display:"flex",gap:"6px",flexWrap:"wrap",alignItems:"center"}});
     if(rx){var ri=d({css:{padding:"4px 10px",borderRadius:"50px",background:t.ap,fontSize:"12px",color:t.ad}});ri.textContent=rx+" Reacted";acts.appendChild(ri);}
     var rb=b({css:{padding:"5px 12px",borderRadius:"50px",background:t.bg,border:"2px solid "+t.ap,fontSize:"12px",fontWeight:700,color:"#6B4C35",cursor:"pointer",fontFamily:"inherit"}},rx?"Change":"React");
-    rb.addEventListener("click",function(){ST.rxPick=ST.rxPick===item.id?null:item.id;redraw();});acts.appendChild(rb);
+    (function(iid,actsEl,tEl){
+      rb.addEventListener("click",function(e){
+        e.stopPropagation();
+        // Remove any existing picker
+        var existing=actsEl.querySelector(".rx-inline");
+        if(existing){existing.remove();ST.rxPick=null;return;}
+        ST.rxPick=iid;
+        var rp=d({cls:"rx-inline",css:{width:"100%",display:"flex",gap:"5px",marginTop:"6px"}});
+        ["\uD83E\uDD70","\uD83D\uDE02","\uD83D\uDE4C","\uD83D\uDE2E","\uD83D\uDCAA"].forEach(function(em){
+          var curRx=ST.reactions[iid];
+          var rb3=b({css:{flex:1,fontSize:"20px",padding:"6px 0",borderRadius:"10px",background:curRx===em?tEl.ap:tEl.bg,border:"2px solid "+(curRx===em?tEl.al:tEl.ap),cursor:"pointer",fontFamily:"inherit"}},em);
+          rb3.addEventListener("click",function(e2){
+            e2.stopPropagation();
+            ST.reactions[iid]=curRx===em?null:em;
+            ST.rxPick=null;
+            rp.remove();
+            // Update react button text in place
+            rb.textContent=ST.reactions[iid]?"Change":"React";
+            // Save to Firestore
+            var grpId=ST.group||"imm";
+            if(currentUser&&ST.reactions[iid]){
+              db.collection("reactions").doc(iid+"_"+currentUser.uid).set({postId:iid,uid:currentUser.uid,em:ST.reactions[iid],groupId:grpId}).catch(function(){});
+            } else if(currentUser){
+              db.collection("reactions").doc(iid+"_"+currentUser.uid).delete().catch(function(){});
+            }
+          });
+          rp.appendChild(rb3);
+        });
+        actsEl.appendChild(rp);
+      });
+    })(item.id,acts,t);
+    acts.appendChild(rb);
     var cmb=b({css:{padding:"5px 12px",borderRadius:"50px",background:t.bg,border:"2px solid "+t.ap,fontSize:"12px",fontWeight:700,color:"#6B4C35",cursor:"pointer",marginLeft:"auto",fontFamily:"inherit"}},"Comment"+(pc.length?" ("+pc.length+")":""));
     cmb.addEventListener("click",function(){ST.cmtOpen=item.id;ST.cmtIn="";redraw();});acts.appendChild(cmb);
-    if(ST.rxPick===item.id){
-      var rp=d({css:{width:"100%",display:"flex",gap:"5px",marginTop:"6px"}});
-      ["\uD83E\uDD70","\uD83D\uDE02","\uD83D\uDE4C","\uD83D\uDE2E","\uD83D\uDCAA"].forEach(function(e){
-        var rb2=b({css:{flex:1,fontSize:"20px",padding:"6px 0",borderRadius:"10px",background:rx===e?t.ap:t.bg,border:"2px solid "+(rx===e?t.al:t.ap),cursor:"pointer",fontFamily:"inherit"}},e);
-        rb2.addEventListener("click",function(){ST.reactions[item.id]=rx===e?null:e;ST.rxPick=null;redraw();});rp.appendChild(rb2);
-      });acts.appendChild(rp);
-    }
+
     if(pc.length){var lc=d({css:{marginTop:"8px",background:t.bg,border:"1px solid "+t.ap,borderRadius:"10px",padding:"7px 10px",cursor:"pointer",fontSize:"12px",color:"#6B4C35",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},pc[pc.length-1].name+": "+pc[pc.length-1].text);lc.addEventListener("click",function(){ST.cmtOpen=item.id;ST.cmtIn="";redraw();});body.appendChild(lc);}
     // Send to Chat button for photos only (not videos - too large for chat)
     if(item.imgUrl&&!item.isVideo&&item.type!=="video"){
