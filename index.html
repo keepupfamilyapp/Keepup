@@ -536,6 +536,31 @@ function doSync(){
     unsubscribers.push(unsub);
   }
   ST.groups.forEach(function(g){watchChat(g.id);});
+  // Load birthdays from Firestore for each group
+  ST.birthdays=[];
+  ST.groups.forEach(function(g){
+    db.collection("groups").doc(g.id).collection("birthdays").get()
+      .then(function(snap){
+        snap.forEach(function(doc){ST.birthdays.push(doc.data());});
+        if(ST.tab==="calendar")redraw();
+      }).catch(function(){});
+  });
+  // Also load member birthdays automatically
+  ST.groups.forEach(function(g){
+    db.collection("members").where("groupId","==",g.id).get()
+      .then(function(snap){
+        snap.forEach(function(doc){
+          var m=doc.data();
+          if(m.birthday&&m.birthdayMonth&&m.birthdayDay){
+            // Check if already in birthdays
+            var exists=ST.birthdays.find(function(b){return b.id==="member-"+m.uid;});
+            if(!exists){
+              ST.birthdays.push({id:"member-"+m.uid,name:m.name,av:m.av||"\uD83D\uDC64",month:m.birthdayMonth,day:m.birthdayDay,groupId:g.id,auto:true});
+            }
+          }
+        });
+      }).catch(function(){});
+  });
   // Load saved group labels/icons from Firestore
   ST.groups.forEach(function(g){
     db.collection("groups").doc(g.id).get().then(function(doc){
@@ -1244,7 +1269,11 @@ function buildOnboarding(){
       ST.birthdays=[];ST.evs=[];ST.dms=[];ST.boarded=true;
       try{localStorage.setItem("ku_grp",JSON.stringify({label:ST.obGrpName,icon:ST.obGrpEmoji,id:finalGrpId}));}catch(e){}
       var isCreator=!ST.joinInvite;
-      if(currentUser){db.collection("userGroups").doc(currentUser.uid).set({groups:ST.groups}).catch(function(){});}
+      // Only save the invited group for new members, not all groups
+      var grpsToSave=ST.joinInvite
+        ?[{id:finalGrpId,label:ST.obGrpName,icon:ST.obGrpEmoji}]
+        :ST.groups;
+      if(currentUser){db.collection("userGroups").doc(currentUser.uid).set({groups:grpsToSave}).catch(function(){});}
       // Write full profile to Firestore
       var uid=currentUser?currentUser.uid:(localStorage.getItem("ku_uid")||("u"+Date.now()));
       localStorage.setItem("ku_uid",uid);
@@ -2856,6 +2885,38 @@ function buildProfile(t){
   cgBtn.addEventListener("click",function(){ST.creatingGroup=true;redraw();});
   cgBody.appendChild(cgBtn);cgCard.appendChild(cgBody);body.appendChild(cgCard);
 
+  // Birthday section
+  var bdayCard=d({css:{background:t.ap,borderRadius:"16px",padding:"14px 16px",marginBottom:"8px"}});
+  bdayCard.appendChild(d({css:{fontSize:"12px",fontWeight:800,color:"#9B7B62",marginBottom:"8px",letterSpacing:".5px"}},"\uD83C\uDF82 YOUR BIRTHDAY"));
+  var bdayRow=d({css:{display:"flex",alignItems:"center",gap:"10px"}});
+  var curBday=currentUser?localStorage.getItem("ku_bday_"+currentUser.uid)||"":"";
+  var bdayDisp=d({css:{flex:1,fontSize:"14px",color:curBday?"#3D2314":"#9B7B62"}},curBday?"Your birthday: "+curBday:"Tap to add your birthday");
+  var bdayEditBtn=b({css:{padding:"7px 14px",borderRadius:"50px",background:t.a,border:"none",fontSize:"12px",fontWeight:700,color:"white",cursor:"pointer",fontFamily:"inherit"}},curBday?"Edit":"Add");
+  var MNAMES3=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  bdayEditBtn.addEventListener("click",function(){
+    var month=prompt("Birthday month (1-12):");
+    var day=prompt("Birthday day (1-31):");
+    if(!month||!day)return;
+    var m=parseInt(month);var dy=parseInt(day);
+    if(isNaN(m)||m<1||m>12||isNaN(dy)||dy<1||dy>31){alert("Please enter a valid date");return;}
+    var bdayStr=MNAMES3[m-1]+" "+dy;
+    localStorage.setItem("ku_bday_"+(currentUser?currentUser.uid:""),bdayStr);
+    if(currentUser){
+      db.collection("members").doc(currentUser.uid).update({birthdayMonth:m,birthdayDay:dy,birthday:true}).catch(function(){});
+      ST.groups.forEach(function(g){
+        var bdayId="member-"+currentUser.uid;
+        var safeAv=ST.avatar&&!ST.avatar.startsWith("data:")?ST.avatar:"\uD83D\uDC64";
+        var bdayObj={id:bdayId,name:ST.name,av:safeAv,month:m,day:dy,groupId:g.id,auto:true};
+        db.collection("groups").doc(g.id).collection("birthdays").doc(bdayId).set(bdayObj).catch(function(){});
+        var ei=ST.birthdays.findIndex(function(bd){return bd.id===bdayId;});
+        if(ei>=0)ST.birthdays[ei]=bdayObj;else ST.birthdays.push(bdayObj);
+      });
+    }
+    redraw();
+  });
+  bdayRow.appendChild(bdayDisp);bdayRow.appendChild(bdayEditBtn);
+  bdayCard.appendChild(bdayRow);body.appendChild(bdayCard);
+
   // Sign out
   var so=b({css:{width:"100%",padding:"13px",borderRadius:"50px",background:"transparent",border:"2px solid #F5DDD1",color:"#9B7B62",fontSize:"14px",fontWeight:700,cursor:"pointer",fontFamily:"inherit",marginTop:"4px"}},"Sign Out");
   so.addEventListener("click",function(){
@@ -3267,7 +3328,13 @@ function buildEditBirthdays(){
   var addBtn=b({css:{width:"100%",padding:"13px",borderRadius:"50px",background:t.a,border:"none",color:"white",fontSize:"14px",fontWeight:800,cursor:"pointer",fontFamily:"inherit"}},"Add Birthday");
   addBtn.addEventListener("click",function(){
     if(!nameIn.value.trim()||!dayIn.value)return;
-    ST.birthdays.push({id:"b"+Date.now(),name:nameIn.value.trim(),av:selAv[0],month:parseInt(monthSel.value),day:parseInt(dayIn.value),groupId:ST.group});
+    var newBday={id:"b"+Date.now(),name:nameIn.value.trim(),av:selAv[0],month:parseInt(monthSel.value),day:parseInt(dayIn.value),groupId:ST.group};
+    ST.birthdays.push(newBday);
+    // Save to Firestore
+    if(currentUser){
+      db.collection("groups").doc(ST.group).collection("birthdays").doc(newBday.id).set(newBday)
+        .catch(function(e){console.log("birthday save failed",e);});
+    }
     nameIn.value="";dayIn.value="";redraw();
   });
   sh.appendChild(addBtn);
