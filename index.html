@@ -248,11 +248,16 @@ function fetchAllFeeds(){
       ST.feedLoading=false;
       if(ST.tab==="feed")redraw();
       // Mark app ready after feed renders
-      setTimeout(function(){ST.appReady=true;if(ST.tab==="feed")redraw();},400);
+      setTimeout(function(){
+        ST.appReady=true;
+        if(ST._splashTimer){clearTimeout(ST._splashTimer);ST._splashTimer=null;}
+        if(ST.tab==="feed")redraw();
+      },400);
     }).catch(function(e){
       console.log("fetchAllFeeds error:",e.code,e.message);
       ST.feedLoading=false;
       ST.appReady=true;
+      if(ST._splashTimer){clearTimeout(ST._splashTimer);ST._splashTimer=null;}
       if(ST.tab==="feed")redraw();
     });
 }
@@ -1503,6 +1508,15 @@ function buildFeed(t,grp){
     var splashTitle=d({css:{fontFamily:"Lora,serif",fontSize:"42px",fontWeight:600,color:t.a,letterSpacing:"-1px",animation:"float 2s ease-in-out infinite"}});
     splashTitle.innerHTML="keep <em>up</em>";
     loading.appendChild(splashTitle);
+    // Hard timeout - never stuck more than 8 seconds
+    if(!ST._splashTimer){
+      ST._splashTimer=setTimeout(function(){
+        ST._splashTimer=null;
+        ST.appReady=true;
+        ST.feedLoading=false;
+        redraw();
+      },8000);
+    }
     list.appendChild(loading);
   } else if(!feedItems.length){
     var empty=d({css:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"50px 24px",textAlign:"center"}});
