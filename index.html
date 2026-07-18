@@ -3709,8 +3709,9 @@ auth.onAuthStateChanged(function(user){
         // Load groups from Firestore
         db.collection("userGroups").doc(user.uid).get().then(function(gdoc){
           if(gdoc.exists&&gdoc.data().groups&&gdoc.data().groups.length>0){
-            var savedGroups=gdoc.data().groups;
-            savedGroups.forEach(function(sg){if(!ST.groups.find(function(g){return g.id===sg.id;}))ST.groups.push(sg);});
+            // Replace groups entirely - dont merge with default imm group
+            ST.groups=gdoc.data().groups;
+            ST.group=ST.groups[0].id;
             try{localStorage.setItem("ku_groups",JSON.stringify(ST.groups));}catch(e){}
           }
           ST.boarded=true;
