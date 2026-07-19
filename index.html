@@ -1502,9 +1502,11 @@ function buildFeed(t,grp){
   });
 
   var feedItems=ST.feed[ST.group]||[];
-  // Show onboarding immediately if invite is ready - dont wait on splash
-  if(ST.joinInvite&&!ST.boarded&&!ST.appReady)ST.appReady=true;
-  if(!ST.appReady||!currentUser||ST.feedLoading){
+  // If pending invite token exists, skip splash entirely
+  var hasPendingInvite=localStorage.getItem("ku_pending_token")||_pendingToken;
+  if(hasPendingInvite&&!ST.boarded){ST.appReady=true;ST.joinInvite=true;}
+  if(ST.joinInvite&&!ST.boarded)ST.appReady=true;
+  if(!ST.appReady||(!currentUser&&!ST.joinInvite)||ST.feedLoading){
     var loading=d({css:{position:"fixed",inset:"0",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:t.bg,zIndex:50}});
     var splashTitle=d({css:{fontFamily:"Lora,serif",fontSize:"42px",fontWeight:600,color:t.a,letterSpacing:"-1px",animation:"float 2s ease-in-out infinite"}});
     splashTitle.innerHTML="keep <em>up</em>";
