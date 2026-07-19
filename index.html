@@ -3718,8 +3718,14 @@ auth.onAuthStateChanged(function(user){
   if(user){
     localStorage.setItem("ku_uid",user.uid);
     // Process pending invite token now that we have auth
-    if(_pendingToken){
-      var t=_pendingToken;_pendingToken=null;
+    var pendingLS=localStorage.getItem("ku_pending_token");
+    if(_pendingToken||pendingLS){
+      var t=_pendingToken||pendingLS;
+      _pendingToken=null;
+      localStorage.removeItem("ku_pending_token");
+      ST.appReady=true; // Show onboarding not splash while token loads
+      ST.boarded=false;
+      redraw();
       processInviteToken(t);
       return;
     }
