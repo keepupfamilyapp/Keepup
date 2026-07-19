@@ -236,15 +236,13 @@ function fetchAllFeeds(){
   ST.feedLoading=true;
   if(ST.tab==="feed")redraw();
   var gid=ST.group||"imm";
-  db.collection("feed").where("groupId","==",gid).get()
+  db.collection("feed").where("groupId","==",gid)
+    .orderBy("createdAt","desc")
+    .limit(200)
+    .get()
     .then(function(snap){
       ST.feed[gid]=[];
       snap.forEach(function(doc){ST.feed[gid].push(Object.assign({},doc.data(),{id:doc.id}));});
-      ST.feed[gid].sort(function(a,b){
-        var ta=a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():0;
-        var tb=b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():0;
-        return tb-ta;
-      });
       ST.feedLoading=false;
       if(ST.tab==="feed")redraw();
       // Mark app ready after feed renders
@@ -1262,47 +1260,43 @@ function buildOnboarding(){
     var doneMsg=ST.joinInvite?"Welcome to "+ST.obGrpName+"! You can now see and share with the group.":ST.obGrpEmoji+" "+ST.obGrpName+" is ready. Now invite your family!";
     body.appendChild(d({css:{fontSize:"14px",color:"#6B4C35",lineHeight:1.7,marginBottom:"28px"}},doneMsg));
     body.appendChild(makeBtn("Take me to Keep Up",function(){
-      ST.name=ST.obName;ST.avatar=ST.obPhoto||ST.obAvatar;
-      // Use the exact group ID from invite token for invited users
-      var finalGrpId=ST.joinInvite&&ST.joinGroupId?ST.joinGroupId:"imm";
-      ST.groups=[{id:finalGrpId,label:ST.obGrpName,icon:ST.obGrpEmoji,photo:ST.obGrpPhoto}];
+      if(!currentUser){alert("Please wait a moment while we sign you in.");return;}
+      var uid=currentUser.uid;
+      var finalGrpId=ST.joinInvite&&ST.joinGroupId?ST.joinGroupId:"grp-"+uid;
+      var safeAv=ST.obAvatar||"\uD83D\uDC64"; // Always use emoji for onboarding
+      // Set local state
+      ST.name=ST.obName;
+      ST.avatar=safeAv;
+      ST.groups=[{id:finalGrpId,label:ST.obGrpName,icon:ST.obGrpEmoji}];
       ST.group=finalGrpId;
-      ST.feed={};ST.feed[finalGrpId]=[];
-      if(!ST.joinInvite)ST.feed[finalGrpId]=[{id:1,type:"checkin",av:"\uD83C\uDFE1",name:"Keep Up",time:"Just now",status:"Welcome to Keep Up, "+ST.obName+"! Tap + to share your first post \uD83C\uDF89"}];
-      ST.chatMsgs={};ST.chatMsgs[finalGrpId]=[];
-      ST.mems={};ST.mems[finalGrpId]=[{av:ST.obPhoto||ST.obAvatar,name:ST.obName,role:ST.joinInvite?"Member":"Admin",you:true}];
-      ST.birthdays=[];ST.evs=[];ST.dms=[];ST.boarded=true;
-      try{localStorage.setItem("ku_grp",JSON.stringify({label:ST.obGrpName,icon:ST.obGrpEmoji,id:finalGrpId}));}catch(e){}
-      var isCreator=!ST.joinInvite;
-      // Only save the invited group for new members, not all groups
-      var grpsToSave=ST.joinInvite
-        ?[{id:finalGrpId,label:ST.obGrpName,icon:ST.obGrpEmoji}]
-        :ST.groups;
-      if(currentUser){db.collection("userGroups").doc(currentUser.uid).set({groups:grpsToSave}).catch(function(){});}
-      // Write full profile to Firestore
-      var uid=currentUser?currentUser.uid:(localStorage.getItem("ku_uid")||("u"+Date.now()));
+      ST.boarded=true;
+      ST.birthdays=[];ST.evs=[];ST.dms=[];
+      // Save to localStorage immediately
+      localStorage.setItem("ku_ob","1");
+      localStorage.setItem("ku_name",ST.obName);
+      localStorage.setItem("ku_av",safeAv);
       localStorage.setItem("ku_uid",uid);
+      try{localStorage.setItem("ku_grp",JSON.stringify({label:ST.obGrpName,icon:ST.obGrpEmoji,id:finalGrpId}));}catch(e){}
+      var grpsToSave=[{id:finalGrpId,label:ST.obGrpName,icon:ST.obGrpEmoji}];
+      // Write to Firestore - userGroups first (most critical)
+      db.collection("userGroups").doc(uid).set({groups:grpsToSave,updatedAt:firebase.firestore.FieldValue.serverTimestamp()})
+        .catch(function(e){console.log("userGroups write failed",e);});
+      // Write member profile
       db.collection("members").doc(uid).set({
-        uid:uid,name:ST.obName,av:ST.obPhoto||ST.obAvatar,
+        uid:uid,name:ST.obName,av:safeAv,
         groupId:finalGrpId,groupLabel:ST.obGrpName,groupIcon:ST.obGrpEmoji,
         isAdmin:!ST.joinInvite,
         joinedAt:firebase.firestore.FieldValue.serverTimestamp()
       }).catch(function(e){console.log("member write failed",e);});
+      // Start app
       syncOn();
-      if(ST.joinInvite&&!localStorage.getItem("ku_tutorial")){ST.showTutorial=true;ST.tutorialStep=1;}
-      // Request notification permission during onboarding
-      if(typeof Notification!=="undefined"&&Notification.permission==="default"){
+      fetchAllFeeds();
+      setTimeout(function(){ST.appReady=true;redraw();},500);
+      // Request notifications
+      if(typeof Notification!=="undefined"&&Notification.permission!=="denied"){
         setTimeout(function(){
-          Notification.requestPermission().then(function(p){
-            if(p==="granted")setTimeout(initNotifications,1000);
-          });
-        },1500);
-      }
-      if(typeof Notification!=="undefined"&&Notification.permission==="granted")initNotifications();
-      else if(typeof Notification!=="undefined"&&Notification.permission!=="denied"){
-        Notification.requestPermission().then(function(perm){
-          if(perm==="granted")initNotifications();
-        });
+          Notification.requestPermission().then(function(p){if(p==="granted")setTimeout(initNotifications,1000);});
+        },2000);
       }
       redraw();
     }));
@@ -2942,6 +2936,39 @@ function buildProfile(t){
     redraw();
   });
   body.appendChild(so);
+  // Delete account button
+  var delAccBtn=b({css:{width:"100%",padding:"13px",borderRadius:"50px",background:"transparent",border:"2px solid #FFCDD2",color:"#C0392B",fontSize:"13px",fontWeight:700,cursor:"pointer",fontFamily:"inherit",marginTop:"4px"}},"Delete My Account");
+  delAccBtn.addEventListener("click",function(){
+    var ov=d({css:{position:"fixed",inset:"0",background:"rgba(0,0,0,.6)",zIndex:300,display:"flex",alignItems:"flex-end"}});
+    var sh=d({css:{background:"white",borderRadius:"20px 20px 0 0",padding:"20px 20px 32px",width:"100%",boxSizing:"border-box"}});
+    sh.appendChild(d({css:{fontSize:"18px",fontWeight:800,color:"#3D2314",marginBottom:"8px",textAlign:"center"}},"Delete Account?"));
+    sh.appendChild(d({css:{fontSize:"13px",color:"#9B7B62",textAlign:"center",marginBottom:"20px",lineHeight:"1.6"}},"This will permanently delete your profile and remove you from all groups. Your posts will remain. This cannot be undone."));
+    var row=d({css:{display:"flex",gap:"10px"}});
+    var cBtn=b({css:{flex:1,padding:"13px",borderRadius:"50px",background:"#F0EDE8",border:"none",fontSize:"15px",fontWeight:700,color:"#6B4C35",cursor:"pointer",fontFamily:"inherit"}},"Cancel");
+    var dBtn=b({css:{flex:1,padding:"13px",borderRadius:"50px",background:"#C0392B",border:"none",fontSize:"15px",fontWeight:700,color:"white",cursor:"pointer",fontFamily:"inherit"}},"Delete");
+    cBtn.addEventListener("click",function(){ov.remove();});
+    dBtn.addEventListener("click",function(){
+      ov.remove();
+      var uid=currentUser?currentUser.uid:null;
+      if(uid){
+        // Delete Firestore data
+        db.collection("members").doc(uid).delete().catch(function(){});
+        db.collection("userGroups").doc(uid).delete().catch(function(){});
+        db.collection("fcmTokens").doc(uid).delete().catch(function(){});
+        // Delete Firebase Auth account
+        currentUser.delete().catch(function(){});
+      }
+      // Clear local state
+      try{localStorage.clear();}catch(e){}
+      auth.signOut().catch(function(){});
+      ST.boarded=false;ST.obStep=0;
+      ST.obGrpName="";ST.obGrpEmoji="\u2764\uFE0F";
+      redraw();
+    });
+    row.appendChild(cBtn);row.appendChild(dBtn);sh.appendChild(row);
+    ov.appendChild(sh);document.body.appendChild(ov);
+  });
+  body.appendChild(delAccBtn);
   wrap.appendChild(body);return wrap;
 }
 
@@ -3737,12 +3764,26 @@ auth.onAuthStateChanged(function(user){
           redraw();
         });
       } else if(ST.boarded){
-        // No Firebase profile but locally boarded - sync anyway
-        fetchAllFeeds();
-        syncOn();
-        redraw();
+        // No Firebase profile but locally boarded
+        // Check if they have a userGroups doc
+        db.collection("userGroups").doc(user.uid).get().then(function(gdoc){
+          if(gdoc.exists&&gdoc.data().groups&&gdoc.data().groups.length>0){
+            ST.groups=gdoc.data().groups;
+            ST.group=ST.groups[0].id;
+            fetchAllFeeds();syncOn();redraw();
+          } else {
+            // No groups found - reset and show onboarding
+            ST.boarded=false;
+            localStorage.removeItem("ku_ob");
+            ST.appReady=true;
+            redraw();
+          }
+        }).catch(function(){
+          fetchAllFeeds();syncOn();redraw();
+        });
       } else {
         // New user - show onboarding
+        ST.appReady=true;
         redraw();
       }
     }).catch(function(){
