@@ -2816,7 +2816,7 @@ function buildProfile(t){
           createdBy:currentUser.uid,createdAt:firebase.firestore.FieldValue.serverTimestamp(),
           used:false
         }).then(function(){
-          var link="https://keepupfamilyapp.github.io/Keepup?token="+token;
+          var link="https://keepupfamilyapp.github.io/Keepup/join.html?token="+token;
           if(navigator.clipboard&&navigator.clipboard.writeText){
             navigator.clipboard.writeText(link).then(function(){
               btn.textContent="\u2713 Copied!";btn.style.background="#4A7C59";
