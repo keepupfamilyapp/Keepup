@@ -1261,6 +1261,11 @@ function buildOnboarding(){
     body.appendChild(d({css:{fontSize:"14px",color:"#6B4C35",lineHeight:1.7,marginBottom:"28px"}},doneMsg));
     body.appendChild(makeBtn("Take me to Keep Up",function(){
       if(!currentUser){alert("Please wait a moment while we sign you in.");return;}
+      // Mark invite token as used now that onboarding is completing
+      if(ST.pendingInviteToken){
+        db.collection("inviteTokens").doc(ST.pendingInviteToken).update({used:true,usedAt:firebase.firestore.FieldValue.serverTimestamp()}).catch(function(){});
+        ST.pendingInviteToken=null;
+      }
       var uid=currentUser.uid;
       var finalGrpId=ST.joinInvite&&ST.joinGroupId?ST.joinGroupId:"grp-"+uid;
       var safeAv=ST.obAvatar||"\uD83D\uDC64"; // Always use emoji for onboarding
@@ -1497,6 +1502,8 @@ function buildFeed(t,grp){
   });
 
   var feedItems=ST.feed[ST.group]||[];
+  // Show onboarding immediately if invite is ready - dont wait on splash
+  if(ST.joinInvite&&!ST.boarded&&!ST.appReady)ST.appReady=true;
   if(!ST.appReady||!currentUser||ST.feedLoading){
     var loading=d({css:{position:"fixed",inset:"0",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:t.bg,zIndex:50}});
     var splashTitle=d({css:{fontFamily:"Lora,serif",fontSize:"42px",fontWeight:600,color:t.a,letterSpacing:"-1px",animation:"float 2s ease-in-out infinite"}});
@@ -3630,12 +3637,14 @@ function processInviteToken(token){
       alert("This invite link has already been used. Please ask for a new one.");
       return;
     }
-    db.collection("inviteTokens").doc(token).update({used:true,usedAt:firebase.firestore.FieldValue.serverTimestamp()});
+    // Dont mark used until onboarding completes
+    ST.pendingInviteToken=token;
     ST.obGrpName=data.groupLabel||"Family";
     ST.obGrpEmoji=data.groupIcon||"\u2764\uFE0F";
     ST.joinInvite=true;
-    ST.joinGroupId=data.groupId||null; // Save the exact group ID
+    ST.joinGroupId=data.groupId||null;
     ST.boarded=false;
+    ST.appReady=true; // Show onboarding not splash
     redraw();
   }).catch(function(e){
     console.log("token error:",e);
