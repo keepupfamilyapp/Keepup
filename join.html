@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Join Keep Up</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Nunito',sans-serif;background:#FAF6F0;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:24px;text-align:center;}
+.logo{font-family:Georgia,serif;font-size:36px;font-style:italic;color:#C4714A;margin-bottom:8px;}
+.logo em{font-style:normal;}
+p{color:#9B7B62;font-size:15px;margin-bottom:24px;line-height:1.6;}
+.btn{background:#C4714A;color:white;border:none;padding:16px 32px;border-radius:50px;font-size:16px;font-weight:700;cursor:pointer;text-decoration:none;display:inline-block;}
+</style>
+</head>
+<body>
+<div class="logo">keep <em>up</em></div>
+<p>You've been invited to join a family group on Keep Up.</p>
+<a class="btn" id="joinBtn">Open Keep Up</a>
+<script>
+var params=new URLSearchParams(window.location.search);
+var token=params.get("token");
+if(token){
+  localStorage.setItem("ku_pending_token",token);
+}
+var btn=document.getElementById("joinBtn");
+btn.href="https://keepupfamilyapp.github.io/Keepup";
+btn.addEventListener("click",function(){
+  if(token)localStorage.setItem("ku_pending_token",token);
+});
+// Auto redirect after 1 second
+setTimeout(function(){
+  if(token)localStorage.setItem("ku_pending_token",token);
+  window.location.href="https://keepupfamilyapp.github.io/Keepup";
+},1500);
+</script>
+</body>
+</html>
