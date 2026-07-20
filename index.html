@@ -1507,7 +1507,11 @@ function buildFeed(t,grp){
   if(hasPendingInvite&&!ST.boarded){ST.appReady=true;ST.joinInvite=true;}
   if(ST.joinInvite&&!ST.boarded)ST.appReady=true;
   var _hasPending=!!localStorage.getItem("ku_pending_token");
-  if(_hasPending){ST.appReady=true;} // Never show splash if pending token
+  if(_hasPending){
+    ST.appReady=true;
+    ST.boarded=false; // Force onboarding if pending invite
+    ST.joinInvite=true;
+  }
   if(!ST.appReady||(!currentUser&&!ST.joinInvite&&!_hasPending)||ST.feedLoading){
     var loading=d({css:{position:"fixed",inset:"0",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:t.bg,zIndex:50}});
     var splashTitle=d({css:{fontFamily:"Lora,serif",fontSize:"42px",fontWeight:600,color:t.a,letterSpacing:"-1px",animation:"float 2s ease-in-out infinite"}});
