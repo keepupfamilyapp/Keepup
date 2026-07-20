@@ -3563,6 +3563,9 @@ ST.upImg=null;
     var tempPost={id:tempId,type:"photo",av:postAv,name:postName,time:"Just now",cap:postCap,groupId:postGroup,emoji:"\uD83D\uDCF7",uploading:true};
     if(!ST.feed[postGroup])ST.feed[postGroup]=[];
     ST.feed[postGroup].unshift(tempPost);
+    // Make sure tab is on feed and group is correct
+    ST.tab="feed";
+    ST.group=postGroup;
     redraw();
 
     uploadRef.then(function(url){
@@ -3573,12 +3576,14 @@ ST.upImg=null;
     }).then(function(){
       broadcastNotif(postName+" posted","Shared a photo",postGroup);
       // Refresh feed
-      db.collection("feed").where("groupId","==",postGroup).get().then(function(snap){
+      db.collection("feed").where("groupId","==",postGroup)
+        .orderBy("createdAt","desc").limit(200)
+        .get().then(function(snap){
         ST.feed[postGroup]=[];
         snap.forEach(function(doc){ST.feed[postGroup].push(Object.assign({},doc.data(),{id:doc.id}));});
-        ST.feed[postGroup].sort(function(a,b){var ta=a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():0;var tb=b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():0;return tb-ta;});
+        ST.tab="feed";ST.group=postGroup;
         redraw();
-      });
+      }).catch(function(){redraw();});
     }).catch(function(e){
       console.log("photo post failed:",e.message||e);
       // Remove temp, post without image
