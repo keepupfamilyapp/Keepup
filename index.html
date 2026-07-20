@@ -1281,6 +1281,7 @@ function buildOnboarding(){
       localStorage.setItem("ku_name",ST.obName);
       localStorage.setItem("ku_av",safeAv);
       localStorage.setItem("ku_uid",uid);
+      localStorage.setItem("ku_admin",ST.joinInvite?"0":"1"); // Creator is admin
       try{localStorage.setItem("ku_grp",JSON.stringify({label:ST.obGrpName,icon:ST.obGrpEmoji,id:finalGrpId}));}catch(e){}
       var grpsToSave=[{id:finalGrpId,label:ST.obGrpName,icon:ST.obGrpEmoji}];
       // Write to Firestore - userGroups first (most critical)
@@ -1519,10 +1520,7 @@ function buildFeed(t,grp){
     var splashTitle=d({css:{fontFamily:"Lora,serif",fontSize:"42px",fontWeight:600,color:t.a,letterSpacing:"-1px",animation:"float 2s ease-in-out infinite"}});
     splashTitle.innerHTML="keep <em>up</em>";
     loading.appendChild(splashTitle);
-    // Debug info visible on screen
-    var dbg=d({css:{fontSize:"10px",color:"rgba(0,0,0,.3)",marginTop:"20px",textAlign:"center",padding:"0 20px"}});
-    dbg.textContent="ready:"+ST.appReady+" user:"+(!!currentUser)+" boarded:"+ST.boarded+" invite:"+ST.joinInvite+" token:"+(!!localStorage.getItem("ku_pending_token"));
-    loading.appendChild(dbg);
+
     // Hard timeout - never stuck more than 8 seconds
     if(!ST._splashTimer){
       ST._splashTimer=setTimeout(function(){
@@ -3771,7 +3769,9 @@ auth.onAuthStateChanged(function(user){
           ST.groups[0].icon=m.groupIcon||ST.groups[0].icon;
           localStorage.setItem("ku_grp",JSON.stringify({label:m.groupLabel,icon:m.groupIcon||ST.groups[0].icon}));
         }
-        if(m.isAdmin!==undefined)localStorage.setItem("ku_admin",m.isAdmin?"1":"0");
+        if(m.isAdmin!==undefined){
+          localStorage.setItem("ku_admin",m.isAdmin?"1":"0");
+        }
         // Load groups from Firestore
         db.collection("userGroups").doc(user.uid).get().then(function(gdoc){
           if(gdoc.exists&&gdoc.data().groups&&gdoc.data().groups.length>0){
