@@ -911,7 +911,7 @@ function d(a,c){return el("div",a,c);}
 function b(a,c){return el("button",a,c);}
 
 function isAdmin(){
-  try{return localStorage.getItem("ku_admin")!=="0";}catch(e){return true;}
+  try{return localStorage.getItem("ku_admin")==="1";}catch(e){return false;}
 }
 
 function showFullScreen(url){
@@ -1509,8 +1509,10 @@ function buildFeed(t,grp){
   var _hasPending=!!localStorage.getItem("ku_pending_token");
   if(_hasPending){
     ST.appReady=true;
-    ST.boarded=false; // Force onboarding if pending invite
+    ST.boarded=false;
     ST.joinInvite=true;
+    ST.groups=[]; // Clear old groups so they dont show
+    ST.group="";
   }
   if(!ST.appReady||(!currentUser&&!ST.joinInvite&&!_hasPending)||ST.feedLoading){
     var loading=d({css:{position:"fixed",inset:"0",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:t.bg,zIndex:50}});
@@ -2826,7 +2828,7 @@ function buildProfile(t){
           createdBy:currentUser.uid,createdAt:firebase.firestore.FieldValue.serverTimestamp(),
           used:false
         }).then(function(){
-          var link="https://keepupfamilyapp.github.io/Keepup/join.html?token="+token;
+          var link="https://keepupfamilyapp.github.io/Keepup/#token="+token;
           if(navigator.clipboard&&navigator.clipboard.writeText){
             navigator.clipboard.writeText(link).then(function(){
               btn.textContent="\u2713 Copied!";btn.style.background="#4A7C59";
@@ -3616,6 +3618,11 @@ var _pendingToken=null;
 (function(){
   var params=new URLSearchParams(window.location.search);
   var token=params.get("token");
+  // Also check URL hash for token (survives Custom Tab redirects)
+  if(!token&&window.location.hash){
+    var hashParams=new URLSearchParams(window.location.hash.substring(1));
+    token=hashParams.get("token");
+  }
   var joinGroup=params.get("join");
   var joinIcon=params.get("icon");
   if(token){
