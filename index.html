@@ -200,8 +200,10 @@ function uploadPhoto(dataUrl){
     var isVid=ST.upIsVideo&&ST.upVideoFile;
     if(isVid){
       uploadToCloudflareStream(ST.upVideoFile,function(pct){
-        var prog=document.getElementById("cf-upload-progress");
-        if(prog)prog.textContent="Uploading... "+pct+"%";
+        var bar=document.getElementById("upload-progress-bar");
+        var pctTxt=document.getElementById("upload-progress-pct");
+        if(bar)bar.style.width=pct+"%";
+        if(pctTxt)pctTxt.textContent=Math.round(pct)+"%";
       }).then(function(result){
         ST.cfThumbUrl=result.thumbUrl;
         resolve(result.videoUrl);
@@ -1631,7 +1633,30 @@ function buildFeed(t,grp){
     hideAll();
     ST.upType="photo";ST.upIsVideo=true;ST.upVideoFile=f;ST.upStep=2;ST.upCap="";
     // Don't read video into memory - go straight to upload step
-    ST.upImg="video-placeholder";ST.upOpen=true;redraw();
+    // Capture first frame as thumbnail
+    var thumbVid=document.createElement("video");
+    thumbVid.preload="metadata";
+    thumbVid.muted=true;
+    thumbVid.playsInline=true;
+    var thumbUrl=URL.createObjectURL(f);
+    thumbVid.src=thumbUrl;
+    thumbVid.addEventListener("loadeddata",function(){
+      thumbVid.currentTime=0.5;
+    });
+    thumbVid.addEventListener("seeked",function(){
+      var canvas=document.createElement("canvas");
+      canvas.width=thumbVid.videoWidth||640;
+      canvas.height=thumbVid.videoHeight||360;
+      canvas.getContext("2d").drawImage(thumbVid,0,0,canvas.width,canvas.height);
+      ST.upImg=canvas.toDataURL("image/jpeg",0.7);
+      ST.upThumb=ST.upImg;
+      URL.revokeObjectURL(thumbUrl);
+      ST.upOpen=true;redraw();
+    });
+    thumbVid.addEventListener("error",function(){
+      ST.upImg="video-placeholder";
+      ST.upOpen=true;redraw();
+    });
   }
 
   // Photo row with sub-options sliding left
@@ -1705,13 +1730,20 @@ function buildItem(item,t){
   if(item.type==="photo"||item.type==="video"){
     var card=d({cls:"card",css:{background:"#FFF9F2",overflow:"hidden",marginBottom:"1px"}});
     if(item.uploading){
-      var upCard=d({css:{background:"#FFF9F2",border:"none",borderBottom:"1px solid #F5DDD1",padding:"16px",display:"flex",alignItems:"center",gap:"12px",marginBottom:"1px",opacity:".7"}});
-      var upIcon=d({css:{fontSize:"28px",flexShrink:0}});upIcon.textContent="\uD83D\uDCF8";upCard.appendChild(upIcon);
+      var upCard=d({css:{background:"#FFF9F2",border:"none",borderBottom:"1px solid #F5DDD1",padding:"20px 16px",marginBottom:"1px"}});
+      var upTop=d({css:{display:"flex",alignItems:"center",gap:"12px",marginBottom:"14px"}});
+      var upIcon=d({css:{fontSize:"28px",flexShrink:0}});upIcon.textContent=ST.upIsVideo?"\uD83C\uDFA5":"\uD83D\uDCF8";upTop.appendChild(upIcon);
       var upTxt=d({css:{flex:1}});
-      upTxt.appendChild(d({css:{fontSize:"14px",fontWeight:700,color:"#3D2314"}},ST.upIsVideo?"Uploading video...":"Uploading photo..."));
-      if(ST.upIsVideo){var prog=d({id:"cf-upload-progress",css:{fontSize:"12px",color:"#9B7B62",marginTop:"4px"}});upTxt.appendChild(prog);}
-      upTxt.appendChild(d({css:{fontSize:"12px",color:"#9B7B62",marginTop:"2px"}},"This may take a moment"));
-      upCard.appendChild(upTxt);wrap.appendChild(upCard);return wrap;
+      upTxt.appendChild(d({css:{fontSize:"14px",fontWeight:800,color:"#3D2314",marginBottom:"2px"}},ST.upIsVideo?"Uploading your video...":"Uploading your photo..."));
+      upTxt.appendChild(d({css:{fontSize:"12px",color:"#9B7B62"}},ST.upIsVideo?"Hang tight \u2014 this may take up to a minute":"Almost there..."));
+      upTop.appendChild(upTxt);upCard.appendChild(upTop);
+      // Progress bar track
+      var track=d({css:{background:"#F0EDE8",borderRadius:"50px",height:"8px",overflow:"hidden",marginBottom:"8px"}});
+      var bar=d({id:"upload-progress-bar",css:{background:"linear-gradient(90deg,#C4714A,#E8956D)",height:"100%",borderRadius:"50px",width:"0%",transition:"width .3s ease"}});
+      track.appendChild(bar);upCard.appendChild(track);
+      var pctTxt=d({id:"upload-progress-pct",css:{fontSize:"11px",color:"#9B7B62",textAlign:"right"}});
+      pctTxt.textContent="0%";upCard.appendChild(pctTxt);
+      wrap.appendChild(upCard);return wrap;
     }
     // Author overlay will be placed over photo
     var hdr=d({css:{display:"none"}}); // hidden - replaced by overlay
@@ -1747,6 +1779,13 @@ function buildItem(item,t){
       var vidWrap=d({css:{position:"relative",background:"#000",cursor:"pointer"}});
       // Use Cloudflare Stream iframe for HLS videos, fallback to native video
       var isCFStream=item.imgUrl&&item.imgUrl.includes("cloudflarestream.com");
+      // Show thumbnail as poster for all videos
+      if(item.thumbUrl&&!isCFStream){
+        vidWrap.style.backgroundImage="url("+item.thumbUrl+")";
+        vidWrap.style.backgroundSize="cover";
+        vidWrap.style.backgroundPosition="center";
+        vidWrap.style.minHeight="200px";
+      }
       if(isCFStream){
         // Extract video UID from URL
         var cfUid=item.imgUrl.split("cloudflarestream.com/")[1];
@@ -3122,12 +3161,30 @@ function buildUpload(t,grp){
     tapBtn.addEventListener("click",function(e){e.stopPropagation();fi.click();});pa.appendChild(tapBtn);}
     pa.addEventListener("click",function(){fi.click();});body.appendChild(pa);body.appendChild(fi);
     if(ST.upIsVideo&&ST.upImg){
-      var vidPrev=d({css:{background:"#1a1a1a",borderRadius:"12px",padding:"20px",textAlign:"center",marginBottom:"12px"}});
-      vidPrev.appendChild(d({css:{fontSize:"32px",display:"block",marginBottom:"8px"}},"\uD83C\uDFA5"));
-      var vidName=ST.upVideoFile?ST.upVideoFile.name:"Video ready";
-      var vidSize=ST.upVideoFile?"("+Math.round(ST.upVideoFile.size/1024/1024*10)/10+"MB)":"";
-      vidPrev.appendChild(d({css:{fontSize:"13px",color:"rgba(255,255,255,.7)"}},vidName));
-      vidPrev.appendChild(d({css:{fontSize:"11px",color:"rgba(255,255,255,.4)",display:"block",marginTop:"4px"}},vidSize));
+      var vidPrev=d({css:{borderRadius:"12px",overflow:"hidden",marginBottom:"12px",position:"relative",background:"#1a1a1a"}});
+      if(ST.upImg!=="video-placeholder"){
+        // Show actual thumbnail
+        var tImg=document.createElement("img");
+        tImg.src=ST.upImg;
+        tImg.style.cssText="width:100%;max-height:220px;object-fit:cover;display:block;";
+        vidPrev.appendChild(tImg);
+        // Play icon overlay
+        var playOv=d({css:{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:"52px",height:"52px",borderRadius:"50%",background:"rgba(0,0,0,.55)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"22px",pointerEvents:"none"}});
+        playOv.textContent="\u25B6\uFE0F";
+        vidPrev.appendChild(playOv);
+        // File size badge
+        if(ST.upVideoFile){
+          var sizeBadge=d({css:{position:"absolute",bottom:"8px",right:"8px",background:"rgba(0,0,0,.6)",color:"white",borderRadius:"50px",padding:"3px 8px",fontSize:"11px",fontWeight:700}});
+          sizeBadge.textContent=Math.round(ST.upVideoFile.size/1024/1024*10)/10+"MB";
+          vidPrev.appendChild(sizeBadge);
+        }
+      } else {
+        // Fallback if thumbnail capture failed
+        var fallback=d({css:{padding:"24px",textAlign:"center"}});
+        fallback.appendChild(d({css:{fontSize:"32px",display:"block",marginBottom:"8px"}},"\uD83C\uDFA5"));
+        fallback.appendChild(d({css:{fontSize:"13px",color:"rgba(255,255,255,.7)"}},ST.upVideoFile?ST.upVideoFile.name:"Video ready"));
+        vidPrev.appendChild(fallback);
+      }
       body.appendChild(vidPrev);
     }sh.appendChild(body);
     var ft=d({css:{padding:"12px 15px 26px",flexShrink:0}});
@@ -3553,9 +3610,30 @@ ST.upImg=null;
       while(n--){u8[n]=bstr.charCodeAt(n);}
       return new Blob([u8],{type:mime});
     }
-    var uploadRef=isVid&&vidFile
-      ? storage.ref("videos/"+uid+"/"+Date.now()+"."+(vidFile.name.split(".").pop()||"mp4")).put(vidFile).then(function(s){return s.ref.getDownloadURL();})
-      : storage.ref("photos/"+uid+"/"+Date.now()+".jpg").put(dataUrlToBlob(imgData)).then(function(s){return s.ref.getDownloadURL();});
+    function updateProgress(pct){
+      var bar=document.getElementById("upload-progress-bar");
+      var pctTxt=document.getElementById("upload-progress-pct");
+      if(bar)bar.style.width=pct+"%";
+      if(pctTxt)pctTxt.textContent=Math.round(pct)+"%";
+    }
+    var uploadRef;
+    if(isVid&&vidFile){
+      var vidRef=storage.ref("videos/"+uid+"/"+Date.now()+"."+(vidFile.name.split(".").pop()||"mp4"));
+      var vidTask=vidRef.put(vidFile);
+      vidTask.on("state_changed",function(snap){
+        var pct=snap.bytesTransferred/snap.totalBytes*100;
+        updateProgress(pct);
+      });
+      uploadRef=vidTask.then(function(s){return s.ref.getDownloadURL();});
+    } else {
+      var photoRef=storage.ref("photos/"+uid+"/"+Date.now()+".jpg");
+      var photoTask=photoRef.put(dataUrlToBlob(imgData));
+      photoTask.on("state_changed",function(snap){
+        var pct=snap.bytesTransferred/snap.totalBytes*100;
+        updateProgress(pct);
+      });
+      uploadRef=photoTask.then(function(s){return s.ref.getDownloadURL();});
+    }
     // Show uploading indicator in feed
     var tempId="temp-"+Date.now();
     var tempPost={id:tempId,type:"photo",av:postAv,name:postName,time:"Just now",cap:postCap,groupId:postGroup,emoji:"\uD83D\uDCF7",uploading:true};
@@ -3570,9 +3648,16 @@ ST.upImg=null;
       // Remove temp post
       ST.feed[postGroup]=ST.feed[postGroup].filter(function(x){return x.id!==tempId;});
       p.imgUrl=url;
+      if(isVid&&ST.upThumb)p.thumbUrl=ST.upThumb; // Save thumbnail with video post
       return postToFeed(p);
     }).then(function(){
-      broadcastNotif(postName+" posted","Shared a photo",postGroup);
+      broadcastNotif(postName+" posted","Shared a "+(isVid?"video":"photo"),postGroup);
+      // Show success toast
+      var toast=document.createElement("div");
+      toast.style.cssText="position:fixed;top:70px;left:50%;transform:translateX(-50%);background:#3D2314;color:white;padding:12px 20px;border-radius:50px;font-family:Nunito,sans-serif;font-size:14px;font-weight:700;z-index:999;white-space:nowrap;animation:fadeUp .3s ease;";
+      toast.textContent=(isVid?"\uD83C\uDFA5":"\uD83D\uDCF8")+" "+(isVid?"Video":"Photo")+" posted!";
+      document.body.appendChild(toast);
+      setTimeout(function(){toast.remove();},3000);
       // Refresh feed
       db.collection("feed").where("groupId","==",postGroup)
         .orderBy("createdAt","desc").limit(200)
