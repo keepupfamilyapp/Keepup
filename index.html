@@ -2774,7 +2774,7 @@ function buildProfile(t){
       else mavic.textContent=m.av||"\uD83D\uDC64";
       mrow.appendChild(mavic);
       mrow.appendChild(d({css:{flex:1,fontSize:"13px",fontWeight:700,color:"#3D2314"}},m.name+(isYou?" (you)":"")));
-      if(!isYou){
+      if(!isYou&&isAdmin()){
         var removeBtn=b({css:{padding:"5px 11px",borderRadius:"50px",background:"transparent",border:"1.5px solid #F5DDD1",fontSize:"11px",fontWeight:700,color:"#9B7B62",cursor:"pointer",fontFamily:"inherit"}},"Remove");
         (function(member){
           removeBtn.addEventListener("click",function(){
