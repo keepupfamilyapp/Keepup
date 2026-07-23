@@ -3650,14 +3650,12 @@ ST.upImg=null;
       if(pctTxt)pctTxt.textContent=Math.round(pct)+"%";
     }
     var uploadRef;
+    var cfResultThumb=null;
     if(isVid&&vidFile){
-      var vidRef=storage.ref("videos/"+uid+"/"+Date.now()+"."+(vidFile.name.split(".").pop()||"mp4"));
-      var vidTask=vidRef.put(vidFile);
-      vidTask.on("state_changed",function(snap){
-        var pct=snap.bytesTransferred/snap.totalBytes*100;
-        updateProgress(pct);
+      uploadRef=uploadToCloudflareStream(vidFile,updateProgress).then(function(result){
+        cfResultThumb=result.thumbUrl;
+        return result.videoUrl;
       });
-      uploadRef=vidTask.then(function(s){return s.ref.getDownloadURL();});
     } else {
       var photoRef=storage.ref("photos/"+uid+"/"+Date.now()+".jpg");
       var photoTask=photoRef.put(dataUrlToBlob(imgData));
@@ -3681,7 +3679,7 @@ ST.upImg=null;
       // Remove temp post
       ST.feed[postGroup]=ST.feed[postGroup].filter(function(x){return x.id!==tempId;});
       p.imgUrl=url;
-      if(isVid&&ST.upThumb)p.thumbUrl=ST.upThumb; // Save thumbnail with video post
+      if(isVid&&cfResultThumb)p.thumbUrl=cfResultThumb; // Cloudflare-hosted thumbnail URL (short), not base64
       return postToFeed(p);
     }).then(function(){
       broadcastNotif(postName+" posted","Shared a "+(isVid?"video":"photo"),postGroup);
