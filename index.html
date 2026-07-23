@@ -1723,7 +1723,7 @@ function buildItem(item,t){
     var bavVal=item.av||"\uD83D\uDC64";
     if(bavVal.startsWith("http")||bavVal.startsWith("data:")){
       var bavImg=document.createElement("img");bavImg.src=bavVal;bavImg.style.cssText="width:100%;height:100%;object-fit:cover;border-radius:50%;";bav.appendChild(bavImg);
-    } else if(bavVal.length>10||/^[A-Za-z0-9_-]{10,}$/.test(bavVal)){bav.textContent="\uD83D\uDC64";}
+    } else if(!bavVal||bavVal.length>8||/^[A-Za-z0-9_-]{8,}$/.test(bavVal)){bav.textContent="\uD83D\uDC64";}
     else{bav.textContent=bavVal;}
     brow.appendChild(bav);
     brow.appendChild(d({css:{fontSize:"14px",fontWeight:800,color:"#7A5A14"}},item.name+"'s Birthday!"));bd.appendChild(brow);
@@ -1839,8 +1839,11 @@ function buildItem(item,t){
       // Author overlay top-left
       var authorOv=d({css:{position:"absolute",top:"8px",left:"8px",display:"flex",alignItems:"center",gap:"7px",background:"rgba(0,0,0,.45)",borderRadius:"50px",padding:"4px 10px 4px 4px",backdropFilter:"blur(4px)"}});
       var oav=d({css:{width:"26px",height:"26px",borderRadius:"50%",overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"14px",flexShrink:0,background:"rgba(255,255,255,.2)"}});
-      if(item.av&&item.av.startsWith("data:")){var oavImg=document.createElement("img");oavImg.src=item.av;oavImg.style.cssText="width:100%;height:100%;object-fit:cover;";oav.appendChild(oavImg);}
-      else oav.textContent=item.av;
+      var oavVal=item.av||"\uD83D\uDC64";
+      if(oavVal.startsWith("http")||oavVal.startsWith("data:")){
+        var oavImg=document.createElement("img");oavImg.src=oavVal;oavImg.style.cssText="width:100%;height:100%;object-fit:cover;border-radius:50%;";oav.appendChild(oavImg);
+      } else if(!oavVal||oavVal.length>8||/^[A-Za-z0-9_-]{8,}$/.test(oavVal)){oav.textContent="\uD83D\uDC64";}
+      else{oav.textContent=oavVal;}
       authorOv.appendChild(oav);
       var authorTxt=d({css:{display:"flex",flexDirection:"column"}});
       authorTxt.appendChild(d({css:{fontSize:"12px",fontWeight:800,color:"white",lineHeight:"1.2"}},item.name));
@@ -2989,7 +2992,7 @@ function buildProfile(t){
       db.collection("members").doc(currentUser.uid).update({birthdayMonth:m,birthdayDay:dy,birthday:true}).catch(function(){});
       ST.groups.forEach(function(g){
         var bdayId="member-"+currentUser.uid;
-        var safeAv=ST.avatar&&!ST.avatar.startsWith("data:")?ST.avatar:"\uD83D\uDC64";
+        var safeAv=ST.avatar&&ST.avatar.startsWith("http")?ST.avatar:(ST.avatar&&ST.avatar.length<=8?ST.avatar:"\uD83D\uDC64");
         var bdayObj={id:bdayId,name:ST.name,av:safeAv,month:m,day:dy,groupId:g.id,auto:true};
         db.collection("groups").doc(g.id).collection("birthdays").doc(bdayId).set(bdayObj).catch(function(){});
         var ei=ST.birthdays.findIndex(function(bd){return bd.id===bdayId;});
