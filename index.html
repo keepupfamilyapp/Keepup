@@ -111,7 +111,8 @@ var CF_ACCOUNT_ID="f6991628f350e3ae320b0ee72805b9f3";
 var CF_FUNC_URL="https://us-central1-keep-up-f9d1c.cloudfunctions.net/uploadVideo";
 
 function uploadToCloudflareStream(file,onProgress){
-  // Upload directly to our Cloud Function which proxies to Cloudflare
+  // Send the video directly to our Cloud Function, which proxies it to
+  // Cloudflare server-side (token never touches the browser).
   return new Promise(function(resolve,reject){
     var formData=new FormData();
     formData.append("file",file);
@@ -129,12 +130,9 @@ function uploadToCloudflareStream(file,onProgress){
             var videoUrl="https://customer-"+CF_ACCOUNT_ID+".cloudflarestream.com/"+uid+"/manifest/video.m3u8";
             var thumbUrl="https://customer-"+CF_ACCOUNT_ID+".cloudflarestream.com/"+uid+"/thumbnails/thumbnail.jpg";
             resolve({uid:uid,videoUrl:videoUrl,thumbUrl:thumbUrl});
-          } else {reject(new Error("No uid in response"));}
+          } else {reject(new Error("No uid in response: "+xhr.responseText));}
         }catch(e){reject(e);}
-      } else {
-        console.log("CF upload failed:",xhr.status,xhr.responseText);
-        reject(new Error("Upload failed: "+xhr.status));
-      }
+      } else {reject(new Error("Upload failed: "+xhr.status+" "+xhr.responseText));}
     });
     xhr.addEventListener("error",function(){reject(new Error("Network error"));});
     xhr.send(formData);
