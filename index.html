@@ -2919,14 +2919,10 @@ function buildProfile(t){
   var apBody=d({css:{padding:"12px 15px"}});
   var apRow=d({css:{display:"flex",alignItems:"center",gap:"12px",marginBottom:"12px"}});
   var apC=d({css:{width:"56px",height:"56px",borderRadius:"50%",background:"#F5DDD1",border:"2px solid #E8956D",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"26px",overflow:"hidden",cursor:"pointer",flexShrink:0}});
-  var apAvVal=ST.avatar||"\uD83D\uDC68";
-  if(apAvVal.startsWith("http")||apAvVal.startsWith("data:")){
-    var apImg=el("img",{css:{width:"100%",height:"100%",objectFit:"cover",display:"block",borderRadius:"50%"}});apImg.src=apAvVal;apC.appendChild(apImg);
-  } else if(!apAvVal||apAvVal.length>8||/^[A-Za-z0-9_-]{8,}$/.test(apAvVal)){
-    apC.textContent="\uD83D\uDC68";
-  } else {
-    apC.textContent=apAvVal;
-  }
+  var apAvVal=ST.avatar||"";
+  var apIsUrl=apAvVal&&(apAvVal.startsWith("http")||apAvVal.startsWith("data:"));
+  if(apIsUrl){apC.style.backgroundImage="url("+apAvVal+")";apC.style.backgroundSize="cover";apC.style.backgroundPosition="center";}
+  else{apC.textContent=(apAvVal&&apAvVal.length<=8)?apAvVal:"\uD83D\uDC68";}
   var apFi=el("input",{type:"file",accept:"image/*",css:{display:"none"}});
   apFi.addEventListener("change",function(){var f=this.files&&this.files[0];if(!f)return;var r=new FileReader();r.onload=function(e){ST.avatar=e.target.result;try{localStorage.setItem("ku_av",ST.avatar);}catch(e2){}
     // Only save emoji avatars directly - photo URLs already saved by upload handler
@@ -2957,12 +2953,13 @@ function buildProfile(t){
     var months=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
     ST.birthdays.forEach(function(bk){
       var brow=d({css:{display:"flex",alignItems:"center",gap:"8px",marginBottom:"8px"}});
-      var bav=d({css:{width:"28px",height:"28px",borderRadius:"50%",background:t.ap,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"15px",flexShrink:0,overflow:"hidden"}});
-      var bavVal2=bk.av||"\uD83D\uDC64";
-      if(bavVal2.startsWith("http")||bavVal2.startsWith("data:")){
-        var bavImg2=document.createElement("img");bavImg2.src=bavVal2;bavImg2.style.cssText="width:100%;height:100%;object-fit:cover;border-radius:50%;";bav.appendChild(bavImg2);
-      } else if(!bavVal2||bavVal2.length>8){bav.textContent="\uD83D\uDC64";}
-      else{bav.textContent=bavVal2;}
+      var bavVal2=bk.av||"";
+      var bavIsUrl=bavVal2&&(bavVal2.startsWith("http")||bavVal2.startsWith("data:"));
+      var bavIsEmoji=bavVal2&&bavVal2.length<=8;
+      var bavCss={width:"28px",height:"28px",borderRadius:"50%",background:t.ap,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"15px",flexShrink:0,overflow:"hidden"};
+      if(bavIsUrl){bavCss.backgroundImage="url("+bavVal2+")";bavCss.backgroundSize="cover";bavCss.backgroundPosition="center";}
+      var bav=d({css:bavCss});
+      if(!bavIsUrl){bav.textContent=bavIsEmoji?bavVal2:"\uD83D\uDC64";}
       brow.appendChild(bav);
       brow.appendChild(d({css:{flex:1,fontSize:"13px",fontWeight:700,color:"#3D2314"}},bk.name));
       brow.appendChild(d({css:{fontSize:"12px",color:"#9B7B62"}},months[bk.month-1]+" "+bk.day));
@@ -3439,11 +3436,10 @@ function buildEditBirthdays(){
   ST.birthdays.forEach(function(bk,idx){
     var row=d({css:{display:"flex",alignItems:"center",gap:"10px",padding:"10px 0",borderBottom:"1px solid #F5DDD1"}});
     var av=d({css:{width:"32px",height:"32px",borderRadius:"50%",background:t.ap,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"18px",flexShrink:0,overflow:"hidden"}});
-    var avV=bk.av||"\uD83D\uDC64";
-    if(avV.startsWith("http")||avV.startsWith("data:")){
-      var avI=document.createElement("img");avI.src=avV;avI.style.cssText="width:100%;height:100%;object-fit:cover;border-radius:50%;";av.appendChild(avI);
-    } else if(!avV||avV.length>8){av.textContent="\uD83D\uDC64";}
-    else{av.textContent=avV;}
+    var avV=bk.av||"";
+    var avIsUrl=avV&&(avV.startsWith("http")||avV.startsWith("data:"));
+    if(avIsUrl){av.style.backgroundImage="url("+avV+")";av.style.backgroundSize="cover";av.style.backgroundPosition="center";}
+    else{av.textContent=(avV&&avV.length<=8)?avV:"\uD83D\uDC64";}
     row.appendChild(av);
     var info=d({css:{flex:1}});
     info.appendChild(d({css:{fontSize:"14px",fontWeight:700,color:"#3D2314"}},bk.name));
