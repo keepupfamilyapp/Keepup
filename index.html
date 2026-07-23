@@ -1337,8 +1337,14 @@ function buildApp(){
   });
   bar.appendChild(grpBtn);
   var av=d({css:{width:"30px",height:"30px",borderRadius:"50%",background:t.ap,border:"2px solid "+t.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"15px",overflow:"hidden",cursor:"pointer",flexShrink:0}});
-  if(ST.avatar&&ST.avatar.startsWith("data:")){var avImg=el("img",{css:{width:"100%",height:"100%",objectFit:"cover",display:"block"}});avImg.src=ST.avatar;av.appendChild(avImg);}
-  else av.textContent=ST.avatar;
+  var avDisplayVal=ST.avatar||"\uD83D\uDC64";
+  if(avDisplayVal.startsWith("http")||avDisplayVal.startsWith("data:")){
+    var avImg=el("img",{css:{width:"100%",height:"100%",objectFit:"cover",display:"block",borderRadius:"50%"}});avImg.src=avDisplayVal;av.appendChild(avImg);
+  } else if(avDisplayVal.length>10||/^[A-Za-z0-9_-]{10,}$/.test(avDisplayVal)){
+    av.textContent="\uD83D\uDC64";
+  } else {
+    av.textContent=avDisplayVal;
+  }
   av.addEventListener("click",function(){ST.tab="profile";redraw();});
   var offlineBadge=d({css:{fontSize:"10px",fontWeight:700,color:"#9B7B62",background:"#F5DDD1",padding:"3px 8px",borderRadius:"50px",display:navigator.onLine?"none":"flex",alignItems:"center",gap:"4px"}});
   offlineBadge.id="offline-badge";offlineBadge.textContent="Offline";
@@ -2712,8 +2718,14 @@ function buildProfile(t){
   // Avatar
   var avWrap=d({css:{position:"relative",marginBottom:"10px",zIndex:1}});
   var av=d({css:{width:"80px",height:"80px",borderRadius:"50%",background:"rgba(255,255,255,.2)",border:"3px solid rgba(255,255,255,.6)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"38px",overflow:"hidden",cursor:"pointer"}});
-  if(ST.avatar&&ST.avatar.startsWith("data:")){var avImg=el("img",{css:{width:"100%",height:"100%",objectFit:"cover",display:"block"}});avImg.src=ST.avatar;av.appendChild(avImg);}
-  else av.textContent=ST.avatar;
+  var avDisplayVal=ST.avatar||"\uD83D\uDC64";
+  if(avDisplayVal.startsWith("http")||avDisplayVal.startsWith("data:")){
+    var avImg=el("img",{css:{width:"100%",height:"100%",objectFit:"cover",display:"block",borderRadius:"50%"}});avImg.src=avDisplayVal;av.appendChild(avImg);
+  } else if(avDisplayVal.length>10||/^[A-Za-z0-9_-]{10,}$/.test(avDisplayVal)){
+    av.textContent="\uD83D\uDC64";
+  } else {
+    av.textContent=avDisplayVal;
+  }
   // Tap avatar to change it
   var avFi=document.createElement("input");avFi.type="file";avFi.accept="image/*";avFi.style.display="none";
   avFi.addEventListener("change",function(){
@@ -2809,8 +2821,14 @@ function buildProfile(t){
       var isYou=m.uid===localStorage.getItem("ku_uid");
       var mrow=d({css:{display:"flex",alignItems:"center",gap:"10px",padding:"9px 15px",borderBottom:"1px solid #F5DDD1"}});
       var mavic=d({css:{width:"30px",height:"30px",borderRadius:"50%",background:gt.ap,border:"1.5px solid "+gt.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"15px",overflow:"hidden",flexShrink:0}});
-      if(m.av&&m.av.startsWith("data:")){var mi=el("img",{css:{width:"100%",height:"100%",objectFit:"cover"}});mi.src=m.av;mavic.appendChild(mi);}
-      else mavic.textContent=m.av||"\uD83D\uDC64";
+      var mavVal=m.av||"\uD83D\uDC64";
+      if(mavVal.startsWith("http")||mavVal.startsWith("data:")){
+        var mi=el("img",{css:{width:"100%",height:"100%",objectFit:"cover",borderRadius:"50%"}});mi.src=mavVal;mavic.appendChild(mi);
+      } else if(mavVal.length>10||/^[A-Za-z0-9_-]{10,}$/.test(mavVal)){
+        mavic.textContent="\uD83D\uDC64"; // UID stored as av - show default
+      } else {
+        mavic.textContent=mavVal;
+      }
       mrow.appendChild(mavic);
       mrow.appendChild(d({css:{flex:1,fontSize:"13px",fontWeight:700,color:"#3D2314"}},m.name+(isYou?" (you)":"")));
       if(!isYou&&isAdmin()){
@@ -3842,7 +3860,12 @@ auth.onAuthStateChanged(function(user){
         var m=doc.data();
         // Restore profile from Firebase
         if(m.name){ST.name=m.name;localStorage.setItem("ku_name",m.name);}
-        if(m.av&&!m.av.startsWith("data:")){ST.avatar=m.av;localStorage.setItem("ku_av",m.av);}
+        if(m.av&&!m.av.startsWith("data:")){
+        // Only use av if it looks like a real URL or emoji, not a UID
+        var isValidAv=m.av.startsWith("http")||m.av.length<=8;
+        if(isValidAv){ST.avatar=m.av;localStorage.setItem("ku_av",m.av);}
+        else{ST.avatar="\uD83D\uDC64";localStorage.setItem("ku_av","\uD83D\uDC64");}
+      }
         if(m.wallpaper){ST.profileWallpaper=m.wallpaper;}
         // Restore boarded status from Firestore as backup
         if(!localStorage.getItem("ku_ob")){
