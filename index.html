@@ -3700,20 +3700,16 @@ ST.upImg=null;
       }).catch(function(){redraw();});
     }).catch(function(e){
       console.log("photo post failed:",e.message||e);
-      // Remove temp, post without image
+      // Remove temp post only - do NOT post without the image, and do NOT
+      // re-fetch the feed here (the live watchFeed listener already keeps
+      // ST.feed sorted correctly; an unordered .get() here was causing the
+      // feed to appear to jump back to older posts).
       ST.feed[postGroup]=ST.feed[postGroup].filter(function(x){return x.id!==tempId;});
-      p.imgUrl=null;
-      postToFeed(p).then(function(){
-        db.collection("feed").where("groupId","==",postGroup).get().then(function(snap){
-          ST.feed[postGroup]=[];
-          snap.forEach(function(doc){ST.feed[postGroup].push(Object.assign({},doc.data(),{id:doc.id}));});
-          redraw();
-        });
-      });
+      redraw();
       // Show error
       var errBanner=document.createElement("div");
       errBanner.style.cssText="position:fixed;top:60px;left:12px;right:12px;background:#C0392B;color:white;padding:12px 16px;border-radius:14px;z-index:999;font-family:Nunito,sans-serif;font-size:13px;font-weight:700;";
-      errBanner.textContent="Photo upload failed: "+((e&&e.message)||"Storage error. Check your connection.");
+      errBanner.textContent=(isVid?"Video":"Photo")+" upload failed: "+((e&&e.message)||"Check your connection and try again.");
       document.body.appendChild(errBanner);
       setTimeout(function(){errBanner.remove();},5000);
     });
