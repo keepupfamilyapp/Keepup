@@ -111,32 +111,36 @@ var CF_ACCOUNT_ID="f6991628f350e3ae320b0ee72805b9f3";
 var CF_FUNC_URL="https://us-central1-keep-up-f9d1c.cloudfunctions.net/uploadVideo";
 
 function uploadToCloudflareStream(file,onProgress){
-  // Send the video directly to our Cloud Function, which proxies it to
-  // Cloudflare server-side (token never touches the browser).
-  return new Promise(function(resolve,reject){
-    var formData=new FormData();
-    formData.append("file",file);
-    var xhr=new XMLHttpRequest();
-    xhr.open("POST",CF_FUNC_URL);
-    xhr.upload.addEventListener("progress",function(e){
-      if(e.lengthComputable&&onProgress)onProgress(Math.round(e.loaded/e.total*100));
-    });
-    xhr.addEventListener("load",function(){
-      if(xhr.status===200||xhr.status===201){
-        try{
-          var resp=JSON.parse(xhr.responseText);
-          var uid=resp.result&&resp.result.uid;
-          if(uid){
+  // Step 1: ask our Cloud Function for a one-time, single-use Cloudflare
+  // upload URL (small JSON exchange, no video bytes sent here).
+  return fetch(CF_FUNC_URL,{method:"POST"})
+    .then(function(r){return r.json();})
+    .then(function(data){
+      var uid=data.result&&data.result.uid;
+      var uploadURL=data.result&&data.result.uploadURL;
+      if(!uploadURL||!uid)throw new Error("Could not get upload URL");
+      // Step 2: upload the video directly to Cloudflare's one-time URL.
+      // This bypasses our Cloud Function entirely for the large binary
+      // transfer, so it isn't subject to the ~32MB request size limit.
+      return new Promise(function(resolve,reject){
+        var formData=new FormData();
+        formData.append("file",file);
+        var xhr=new XMLHttpRequest();
+        xhr.open("POST",uploadURL);
+        xhr.upload.addEventListener("progress",function(e){
+          if(e.lengthComputable&&onProgress)onProgress(Math.round(e.loaded/e.total*100));
+        });
+        xhr.addEventListener("load",function(){
+          if(xhr.status===200||xhr.status===201){
             var videoUrl="https://customer-"+CF_ACCOUNT_ID+".cloudflarestream.com/"+uid+"/manifest/video.m3u8";
             var thumbUrl="https://customer-"+CF_ACCOUNT_ID+".cloudflarestream.com/"+uid+"/thumbnails/thumbnail.jpg";
             resolve({uid:uid,videoUrl:videoUrl,thumbUrl:thumbUrl});
-          } else {reject(new Error("No uid in response: "+xhr.responseText));}
-        }catch(e){reject(e);}
-      } else {reject(new Error("Upload failed: "+xhr.status+" "+xhr.responseText));}
+          } else {reject(new Error("Upload failed: "+xhr.status+" "+xhr.responseText));}
+        });
+        xhr.addEventListener("error",function(){reject(new Error("Network error"));});
+        xhr.send(formData);
+      });
     });
-    xhr.addEventListener("error",function(){reject(new Error("Network error"));});
-    xhr.send(formData);
-  });
 }
 
 var VAPID_KEY="BJOij4wvBLe4ZgNbMuhHSVarzr9k65tSbnbF5oeSjsvOg_rTJN-ffZmCsLfz1iX_UGq5aPmTyWwRRb-fdAHJ7O4";
