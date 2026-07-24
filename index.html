@@ -108,6 +108,7 @@ var currentUser=null;
 var unsubscribers=[];
 // Cloudflare Stream - upload via Cloud Function (token stored server-side)
 var CF_ACCOUNT_ID="f6991628f350e3ae320b0ee72805b9f3";
+var CF_CUSTOMER_SUBDOMAIN="customer-32e18pqrf6myogys"; // Stream playback domain - different from account ID
 var CF_FUNC_URL="https://us-central1-keep-up-f9d1c.cloudfunctions.net/uploadVideo";
 
 function uploadToCloudflareStream(file,onProgress){
@@ -136,8 +137,8 @@ function uploadToCloudflareStream(file,onProgress){
         });
         xhr.addEventListener("load",function(){
           if(xhr.status===200||xhr.status===201){
-            var videoUrl="https://customer-"+CF_ACCOUNT_ID+".cloudflarestream.com/"+uid+"/manifest/video.m3u8";
-            var thumbUrl="https://customer-"+CF_ACCOUNT_ID+".cloudflarestream.com/"+uid+"/thumbnails/thumbnail.jpg";
+            var videoUrl="https://"+CF_CUSTOMER_SUBDOMAIN+".cloudflarestream.com/"+uid+"/manifest/video.m3u8";
+            var thumbUrl="https://"+CF_CUSTOMER_SUBDOMAIN+".cloudflarestream.com/"+uid+"/thumbnails/thumbnail.jpg";
             resolve({uid:uid,videoUrl:videoUrl,thumbUrl:thumbUrl});
           } else {reject(new Error("Upload failed: "+xhr.status+" "+xhr.responseText));}
         });
@@ -1816,7 +1817,7 @@ function buildItem(item,t){
         cfThumb.addEventListener("click",function(){
           cfThumb.remove();
           var iframe=document.createElement("iframe");
-          iframe.src="https://customer-"+CF_ACCOUNT_ID+".cloudflarestream.com/"+cfUid+"/iframe?autoplay=true&muted=false";
+          iframe.src="https://"+CF_CUSTOMER_SUBDOMAIN+".cloudflarestream.com/"+cfUid+"/iframe?autoplay=true&muted=false";
           iframe.style.cssText="width:100%;height:280px;border:none;display:block;background:#000;";
           iframe.setAttribute("allow","accelerometer;gyroscope;autoplay;encrypted-media;picture-in-picture;");
           iframe.setAttribute("allowfullscreen","true");
