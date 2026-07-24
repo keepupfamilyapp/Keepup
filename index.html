@@ -120,7 +120,7 @@ function uploadToCloudflareStream(file,onProgress){
       var uploadURL=data.result&&data.result.uploadURL;
       if(!uploadURL||!uid){
         var cfErr=(data.errors&&data.errors.length)?JSON.stringify(data.errors):JSON.stringify(data);
-        cfErr+=" | tokenLen:"+data.debug_token_length+" acctLen:"+data.debug_account_length;
+        cfErr+=" | tokenLen:"+data.debug_token_length+" prefix:"+data.debug_token_prefix+" acctLen:"+data.debug_account_length;
         throw new Error("Could not get upload URL: "+cfErr);
       }
       // Step 2: upload the video directly to Cloudflare's one-time URL.
