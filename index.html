@@ -457,6 +457,38 @@ function getThumbUrl(url){
   }catch(e){return url;}
 }
 
+// Shared handler for real-time listeners scoped to a specific group (feed, chat).
+// A permission-denied error here almost always means the user was removed
+// from that group (or it was deleted) - clean up locally instead of leaving
+// the UI silently frozen with no explanation.
+function handleGroupListenerErr(err,gid){
+  console.log("group listener error:",gid,err&&err.code,err);
+  if(err&&err.code==="permission-denied"&&gid){
+    var wasCurrent=ST.group===gid;
+    var removedGroup=ST.groups.find(function(x){return x.id===gid;});
+    ST.groups=ST.groups.filter(function(x){return x.id!==gid;});
+    try{localStorage.setItem("ku_groups",JSON.stringify(ST.groups));}catch(e){}
+    if(wasCurrent&&ST.groups.length){ST.group=ST.groups[0].id;}
+    if(typeof showTopToast==="function"){
+      showTopToast(removedGroup?("You no longer have access to "+removedGroup.label):"You no longer have access to a group.");
+    }
+    redraw();
+  }
+}
+// Shared handler for app-wide listeners (members, comments, rsvps, events).
+// These aren't scoped to one group, so we can't know exactly what changed -
+// just surface a single, non-spammy heads-up rather than failing silently.
+var _lastConnErrToastAt=0;
+function handleGenericListenerErr(err,label){
+  console.log(label+" listener error:",err&&err.code,err);
+  var now=Date.now();
+  if(now-_lastConnErrToastAt<15000)return; // avoid multiple listeners all toasting at once
+  _lastConnErrToastAt=now;
+  if(typeof showTopToast==="function"){
+    showTopToast("Having trouble syncing — check your connection.");
+  }
+}
+
 function syncOn(){
   if(!currentUser)return;
   unsubscribers.forEach(function(u){u();});unsubscribers=[];
@@ -500,7 +532,7 @@ function doSync(){
           return tb-ta;
         });
         if(ST.tab==="feed")redraw();
-      },function(err){console.log("watchFeed error:",err);});
+      },function(err){handleGroupListenerErr(err,gid);});
     unsubscribers.push(unsub);
   }
   ST.groups.forEach(function(g){watchFeed(g.id);});
@@ -545,7 +577,7 @@ function doSync(){
               setTimeout(function(){var _cl=document.getElementById("chat-msg-list");if(_cl)_cl.scrollTop=_cl.scrollHeight;},80);
             }
           }
-      });
+      },function(err){handleGroupListenerErr(err,gid);});
     unsubscribers.push(unsub);
   }
   ST.groups.forEach(function(g){watchChat(g.id);});
@@ -673,7 +705,7 @@ function doSync(){
             debouncedRedraw();
           }
         }
-      });
+      },function(err){handleGenericListenerErr(err,"dm messages");});
     unsubscribers.push(unsub);
   }
   // Listen for DMs in real-time so new DMs from others appear without refresh
@@ -738,7 +770,7 @@ function doSync(){
     }
           redraw();
         }
-      },function(e){console.log("userDms listener failed",e);});
+      },function(err){handleGenericListenerErr(err,"dm list");});
     unsubscribers.push(dmListUnsub);
   }
 
@@ -773,7 +805,7 @@ function doSync(){
           }
         }
       });
-    });
+    },function(err){handleGenericListenerErr(err,"notifications");});
   unsubscribers.push(notifUnsub);
 
   // Listen to members
@@ -786,11 +818,11 @@ function doSync(){
       if(!ST.fbMembers[gid].find(function(x){return x.uid===m.uid;})){
         var safeAv=(m.av&&m.av.length<=8)?m.av:"\uD83D\uDC64";
         var safeName=(m.name&&m.name.length<40&&!/^[A-Za-z0-9_-]{20,}$/.test(m.name))?m.name:"Family member";
-        ST.fbMembers[gid].push(Object.assign({},m,{av:safeAv,name:safeName}));
+        ST.fbMembers[gid].push(Object.assign({},m,{av:safeAv,name:safeName,_docId:doc.id}));
       }
     });
     if(ST.tab==="profile")redraw();
-  });
+  },function(err){handleGenericListenerErr(err,"members");});
   unsubscribers.push(memUnsub);
 
   // Listen to comments
@@ -812,7 +844,7 @@ function doSync(){
       });
     });
     if(ST.cmtOpen!==null)redraw();
-  });
+  },function(err){handleGenericListenerErr(err,"comments");});
   unsubscribers.push(cmtUnsub);
 
   // Listen to RSVPs
@@ -821,7 +853,7 @@ function doSync(){
       var r=doc.data();
       if(r.evId)ST.rsvp[r.evId]=r.going;
     });
-  });
+  },function(err){handleGenericListenerErr(err,"rsvps");});
   unsubscribers.push(rsvpUnsub);
 
   // Listen to events
@@ -835,7 +867,7 @@ function doSync(){
         if(change.type==="removed"){ST.evs=ST.evs.filter(function(x){return x.id!==data.id;});}
       });
       if(ST.tab==="calendar")redraw();
-    });
+    },function(err){handleGenericListenerErr(err,"events");});
   unsubscribers.push(evUnsub);
 } // end doSync
 
@@ -1399,8 +1431,11 @@ function buildApp(){
   av.addEventListener("click",function(){ST.tab="profile";redraw();});
   var offlineBadge=d({css:{fontSize:"10px",fontWeight:700,color:"#9B7B62",background:"#F5DDD1",padding:"3px 8px",borderRadius:"50px",display:navigator.onLine?"none":"flex",alignItems:"center",gap:"4px"}});
   offlineBadge.id="offline-badge";offlineBadge.textContent="Offline";
-  window.addEventListener("online",function(){var b=document.getElementById("offline-badge");if(b)b.style.display="none";syncOn();});
-  window.addEventListener("offline",function(){var b=document.getElementById("offline-badge");if(b)b.style.display="flex";});
+  if(!window._offlineListenersAttached){
+    window._offlineListenersAttached=true;
+    window.addEventListener("online",function(){var b=document.getElementById("offline-badge");if(b)b.style.display="none";showTopToast("Back online — syncing\u2026");syncOn();});
+    window.addEventListener("offline",function(){var b=document.getElementById("offline-badge");if(b)b.style.display="flex";showTopToast("You're offline. Text posts and comments will sync once you're back — photos and videos need a connection.");});
+  }
   bar.appendChild(offlineBadge);bar.appendChild(av);
   if(ST.showGroupSwitcher){
     var gsw=d({css:{position:"absolute",top:"50px",left:"50%",transform:"translateX(-50%)",background:"white",borderRadius:"16px",boxShadow:"0 4px 20px rgba(0,0,0,.18)",zIndex:50,overflow:"hidden",minWidth:"180px"}});
@@ -2919,7 +2954,7 @@ function buildProfile(t){
         (function(member){
           removeBtn.addEventListener("click",function(){
             if(!confirm("Remove "+member.name+" from "+g.label+"?"))return;
-            db.collection("members").doc(member.uid).delete()
+            db.collection("members").doc(member._docId||member.uid).delete()
               .then(function(){
                 if(ST.fbMembers&&ST.fbMembers[g.id]){
                   ST.fbMembers[g.id]=ST.fbMembers[g.id].filter(function(x){return x.uid!==member.uid;});
@@ -3652,7 +3687,7 @@ var mems=fbMems.length?fbMems.map(function(m){
             }
           });
           if(ST.tab==="chat")redraw();
-        });
+        },function(err){handleGenericListenerErr(err,"new dm");});
       unsubscribers.push(unsub);
     })(nid);
     ST.dmSel=[];ST.newDm=false;ST.openChat=nid;redraw();
@@ -3715,6 +3750,10 @@ ST.upImg=null;
       errB.style.cssText="position:fixed;top:60px;left:12px;right:12px;background:#C0392B;color:white;padding:12px 16px;border-radius:14px;z-index:999;font-family:Nunito,sans-serif;font-size:13px;font-weight:700;";
       errB.textContent="Please wait a moment and try again — still signing you in.";
       document.body.appendChild(errB);setTimeout(function(){errB.remove();},4000);
+      return;
+    }
+    if(!navigator.onLine){
+      showTopToast("You're offline — "+(isVid?"videos":"photos")+" need an internet connection. Try again once you're back online.");
       return;
     }
     var uid=currentUser.uid;
