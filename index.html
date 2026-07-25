@@ -876,7 +876,7 @@ function th(id){return TH[id]||TH.imm;}
 
 var ST={
   boarded:false,obStep:0,obName:"",obAvatar:"\uD83D\uDC69",obPhoto:null,
-  obGrpName:"",obGrpEmoji:"\u2764\uFE0F",obGrpPhoto:null,joinInvite:false,fbMembers:{},
+  obGrpName:"",obGrpEmoji:"\u2764\uFE0F",obGrpPhoto:null,joinInvite:false,inviteError:null,fbMembers:{},
   editingGroup:null,editingBirthdays:false,creatingGroup:false,showGroupSwitcher:false,navExpanded:false,showTutorial:false,tutorialStep:0,replyTo:null,profileWallpaper:null,sessionStart:Date.now(),memoryDay:null,memoryPosts:null,appReady:false,
   tab:"feed",group:"imm",name:"Sean",avatar:"\uD83D\uDC68",feedLoading:false,
   openChat:null,
@@ -1077,6 +1077,12 @@ function buildOnboarding(){
       body.appendChild(invBanner);
       body.appendChild(makeBtn("Accept Invite",function(){ST.obStep=0.5;redraw();}));
     } else {
+      if(ST.inviteError){
+        var invErrBanner=d({css:{background:"#FDECEA",border:"1.5px solid #F0B4AC",borderRadius:"16px",padding:"14px 16px",marginBottom:"20px",textAlign:"center"}});
+        invErrBanner.appendChild(d({css:{fontSize:"24px",marginBottom:"6px"}},"\uD83D\uDD17"));
+        invErrBanner.appendChild(d({css:{fontSize:"13px",color:"#C0392B",lineHeight:1.6}},ST.inviteError));
+        body.appendChild(invErrBanner);
+      }
       body.appendChild(d({css:{fontSize:"16px",color:"#6B4C35",lineHeight:1.65,marginBottom:"6px"}},"Stay close to the people who matter most."));
       body.appendChild(d({css:{fontSize:"13px",color:"#9B7B62",lineHeight:1.6,marginBottom:"32px"}},"No ads. No algorithms. Just your family."));
       body.appendChild(makeBtn("Get Started",function(){ST.obStep=0.5;redraw();}));
@@ -1090,23 +1096,39 @@ function buildOnboarding(){
     var body=d({cls:"ob-body"});
     body.appendChild(d({cls:"ob-title"},"Your phone number"));
     body.appendChild(d({cls:"ob-sub"},"We'll send a verification code. Your number is never shared with anyone."));
-    var phoneIn=document.createElement("input");phoneIn.type="tel";phoneIn.placeholder="+15550000000";
+    var phoneIn=document.createElement("input");phoneIn.type="tel";phoneIn.placeholder="(555) 000-0000";
     phoneIn.style.cssText="width:100%;padding:14px 16px;border-radius:14px;border:2px solid #E8956D;background:#FFF9F2;font-size:17px;color:#3D2314;outline:none;font-family:inherit;margin-bottom:12px;";
     body.appendChild(phoneIn);
-    // reCAPTCHA container
     var hint=document.createElement("div");
-    hint.textContent="Include country code, no spaces. US: +1XXXXXXXXXX";
+    hint.textContent="Outside the US? Include your country code, e.g. +44 for UK.";
     hint.style.cssText="font-size:12px;color:#9B7B62;margin-bottom:12px;";
     body.appendChild(hint);
+    var phoneErrBox=d({css:{display:"none",background:"#FDECEA",border:"1.5px solid #F0B4AC",borderRadius:"12px",padding:"10px 14px",fontSize:"13px",color:"#C0392B",marginBottom:"12px",lineHeight:1.5}});
+    body.appendChild(phoneErrBox);
+    function showPhoneErr(msg){phoneErrBox.textContent=msg;phoneErrBox.style.display="block";}
+    function hidePhoneErr(){phoneErrBox.style.display="none";}
+    phoneIn.addEventListener("input",hidePhoneErr);
+    // reCAPTCHA container
     var rcDiv=document.createElement("div");rcDiv.id="recaptcha-container";body.appendChild(rcDiv);
     body.appendChild(d({cls:"ob-spacer"}));
+    function friendlyAuthError(e){
+      var code=e&&e.code||"";
+      if(code==="auth/invalid-phone-number")return"That doesn't look like a valid phone number. Double-check the digits and try again.";
+      if(code==="auth/too-many-requests")return"Too many attempts. Please wait a few minutes and try again.";
+      if(code==="auth/quota-exceeded")return"We've hit a temporary limit sending codes. Please try again in a few minutes.";
+      if(code==="auth/network-request-failed")return"No internet connection. Check your connection and try again.";
+      return"Something went wrong sending your code. Please double-check your number and try again.";
+    }
     var sendBtn=makeBtn("Send Code",function(){
+      hidePhoneErr();
       // Auto-format: strip spaces, dashes, parentheses
       var raw=phoneIn.value.trim().replace(/[\s\-().]/g,"");
-      // Add + if missing
-      if(raw&&!raw.startsWith("+"))raw="+"+raw;
+      if(raw&&!raw.startsWith("+")){
+        // No country code given - assume US/Canada if it's a plain 10-digit number
+        raw=(raw.length===10)?"+1"+raw:"+"+raw;
+      }
       phoneIn.value=raw;
-      if(!raw||raw.length<8){phoneIn.style.borderColor="#C4714A";alert("Please enter your full phone number with country code e.g. +15551234567");return;}
+      if(!raw||raw.length<8){phoneIn.style.borderColor="#C4714A";showPhoneErr("Please enter your full phone number.");return;}
       sendBtn.textContent="Sending...";sendBtn.style.background="#D4B8A8";
       // Init invisible reCAPTCHA
       if(!window.recaptchaVerifier){
@@ -1124,7 +1146,7 @@ function buildOnboarding(){
         })
         .catch(function(e){
           sendBtn.textContent="Send Code";sendBtn.style.background="#C4714A";
-          alert("Error: "+e.message+"\n\nMake sure you include your country code e.g. +1 for US");
+          showPhoneErr(friendlyAuthError(e));
           if(window.recaptchaVerifier){window.recaptchaVerifier.clear();window.recaptchaVerifier=null;}
         });
     });
@@ -1140,13 +1162,17 @@ function buildOnboarding(){
     var body=d({cls:"ob-body"});
     body.appendChild(d({cls:"ob-title"},"Enter the code"));
     body.appendChild(d({cls:"ob-sub"},"Check your texts for a 6-digit verification code."));
-    var codeIn=document.createElement("input");codeIn.type="number";codeIn.placeholder="123456";
+    var codeIn=document.createElement("input");codeIn.type="tel";codeIn.inputMode="numeric";codeIn.placeholder="123456";codeIn.maxLength=6;
     codeIn.style.cssText="width:100%;padding:14px 16px;border-radius:14px;border:2px solid #E8956D;background:#FFF9F2;font-size:24px;color:#3D2314;outline:none;font-family:inherit;margin-bottom:12px;text-align:center;letter-spacing:8px;";
     body.appendChild(codeIn);
+    var codeErrBox=d({css:{display:"none",background:"#FDECEA",border:"1.5px solid #F0B4AC",borderRadius:"12px",padding:"10px 14px",fontSize:"13px",color:"#C0392B",marginBottom:"12px",lineHeight:1.5}});
+    body.appendChild(codeErrBox);
     body.appendChild(d({cls:"ob-spacer"}));
-    var verifyBtn=makeBtn("Verify",function(){
+    function showCodeErr(msg){codeErrBox.textContent=msg;codeErrBox.style.display="block";}
+    function doVerify(){
       var code=codeIn.value.trim();
-      if(!code){return;}
+      if(code.length!==6){return;}
+      codeErrBox.style.display="none";
       verifyBtn.textContent="Verifying...";verifyBtn.style.background="#D4B8A8";
       window.confirmationResult.confirm(code)
         .then(function(result){
@@ -1156,11 +1182,21 @@ function buildOnboarding(){
         })
         .catch(function(e){
           verifyBtn.textContent="Verify";verifyBtn.style.background="#C4714A";
-          alert("Invalid code. Please try again.");
+          var code2=e&&e.code||"";
+          if(code2==="auth/code-expired")showCodeErr("This code expired. Tap \u201CResend code\u201D below to get a new one.");
+          else showCodeErr("That code doesn't look right. Please check your texts and try again.");
+          codeIn.select();
         });
+    }
+    var verifyBtn=makeBtn("Verify",doVerify);
+    // Auto-submit once 6 digits are entered - one less tap for the user
+    codeIn.addEventListener("input",function(){
+      codeIn.value=codeIn.value.replace(/\D/g,"").slice(0,6);
+      codeErrBox.style.display="none";
+      if(codeIn.value.length===6)doVerify();
     });
     body.appendChild(verifyBtn);
-    var resendBtn=b({css:{width:"100%",padding:"12px",borderRadius:"50px",background:"transparent",border:"none",color:"#9B7B62",fontSize:"14px",cursor:"pointer",fontFamily:"inherit",marginTop:"8px"}},"Resend code");
+    var resendBtn=b({css:{width:"100%",padding:"12px",borderRadius:"50px",background:"transparent",border:"none",color:"#9B7B62",fontSize:"14px",cursor:"pointer",fontFamily:"inherit",marginTop:"8px"}},"Resend code / change number");
     resendBtn.addEventListener("click",function(){ST.obStep=0.5;window.recaptchaVerifier=null;redraw();});
     body.appendChild(resendBtn);
     scr.appendChild(body);wrap.appendChild(scr);
@@ -1176,7 +1212,10 @@ function buildOnboarding(){
     inp.value=ST.obName;inp.addEventListener("input",function(){ST.obName=this.value;});
     inp.addEventListener("keydown",function(e){if(e.key==="Enter"){ST.obStep=2;redraw();}});
     body.appendChild(inp);body.appendChild(d({cls:"ob-spacer"}));
-    body.appendChild(makeBtn("Continue",function(){ST.obStep=2;redraw();}));
+    body.appendChild(makeBtn("Continue",function(){
+      if(!ST.obName.trim()){inp.focus();inp.style.borderColor="#C4714A";return;}
+      ST.obStep=2;redraw();
+    }));
     scr.appendChild(body);wrap.appendChild(scr);
     setTimeout(function(){var i=document.querySelector(".ob-input");if(i)i.focus();},80);
     return wrap;
@@ -1220,17 +1259,7 @@ function buildOnboarding(){
       body.appendChild(makeBtn("Join this group",function(){ST.obStep=4;redraw();}));
       scr.appendChild(body);wrap.appendChild(scr);return wrap;
     }
-    if(ST.joinInvite&&ST.obGrpName){
-      // Joining via invite - show the group they're joining
-      body.appendChild(d({cls:"ob-title"},"You're joining"));
-      var jcard=d({css:{background:"#F5DDD1",borderRadius:"18px",padding:"20px",textAlign:"center",marginBottom:"20px",border:"2px solid #E8956D"}});
-      var jicon=d({css:{fontSize:"40px",marginBottom:"8px"}});jicon.textContent=ST.obGrpEmoji||"\uD83C\uDFE1";jcard.appendChild(jicon);
-      jcard.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"22px",fontWeight:600,color:"#3D2314",marginBottom:"4px"}},ST.obGrpName));
-      jcard.appendChild(d({css:{fontSize:"13px",color:"#9B7B62"}},"Family group"));
-      body.appendChild(jcard);
-      body.appendChild(d({cls:"ob-spacer"}));
-      body.appendChild(makeBtn("Join "+ST.obGrpName,function(){ST.obStep=4;redraw();}));
-    } else {
+    {
       // Creating a new group
       body.appendChild(d({cls:"ob-title"},"Create your first family group"));
       body.appendChild(d({cls:"ob-sub"},"Give it a name your family will recognise."));
@@ -1294,27 +1323,41 @@ function buildOnboarding(){
       localStorage.setItem("ku_admin",ST.joinInvite?"0":"1"); // Creator is admin
       try{localStorage.setItem("ku_grp",JSON.stringify({label:ST.obGrpName,icon:ST.obGrpEmoji,id:finalGrpId}));}catch(e){}
       var grpsToSave=[{id:finalGrpId,label:ST.obGrpName,icon:ST.obGrpEmoji}];
-      // Write to Firestore - userGroups first (most critical)
-      db.collection("userGroups").doc(uid).set({groups:grpsToSave,updatedAt:firebase.firestore.FieldValue.serverTimestamp()})
-        .catch(function(e){console.log("userGroups write failed",e);});
-      // Write member profile
-      db.collection("members").doc(uid).set({
-        uid:uid,name:ST.obName,av:safeAv,
-        groupId:finalGrpId,groupLabel:ST.obGrpName,groupIcon:ST.obGrpEmoji,
-        isAdmin:!ST.joinInvite,
-        joinedAt:firebase.firestore.FieldValue.serverTimestamp()
-      }).catch(function(e){console.log("member write failed",e);});
-      // Start app
-      syncOn();
-      fetchAllFeeds();
-      setTimeout(function(){ST.appReady=true;redraw();},500);
-      // Request notifications
-      if(typeof Notification!=="undefined"&&Notification.permission!=="denied"){
-        setTimeout(function(){
-          Notification.requestPermission().then(function(p){if(p==="granted")setTimeout(initNotifications,1000);});
-        },2000);
-      }
-      redraw();
+      var completeBtn=this;
+      completeBtn.textContent="Setting things up...";completeBtn.style.background="#D4B8A8";
+      // Write to Firestore - userGroups and member profile are both critical;
+      // if either fails, don't silently proceed into a broken state
+      Promise.all([
+        db.collection("userGroups").doc(uid).set({groups:grpsToSave,updatedAt:firebase.firestore.FieldValue.serverTimestamp()}),
+        db.collection("members").doc(uid).set({
+          uid:uid,name:ST.obName,av:safeAv,
+          groupId:finalGrpId,groupLabel:ST.obGrpName,groupIcon:ST.obGrpEmoji,
+          isAdmin:!ST.joinInvite,
+          joinedAt:firebase.firestore.FieldValue.serverTimestamp()
+        })
+      ]).then(function(){
+        // Start app
+        syncOn();
+        fetchAllFeeds();
+        setTimeout(function(){ST.appReady=true;redraw();},500);
+        // Request notifications
+        if(typeof Notification!=="undefined"&&Notification.permission!=="denied"){
+          setTimeout(function(){
+            Notification.requestPermission().then(function(p){if(p==="granted")setTimeout(initNotifications,1000);});
+          },2000);
+        }
+        redraw();
+      }).catch(function(e){
+        console.log("onboarding save failed",e);
+        completeBtn.textContent="Take me to Keep Up";completeBtn.style.background="#C4714A";
+        var setupErrBox=document.getElementById("ob-setup-err");
+        if(!setupErrBox){
+          setupErrBox=d({id:"ob-setup-err",css:{background:"#FDECEA",border:"1.5px solid #F0B4AC",borderRadius:"12px",padding:"12px 16px",fontSize:"13px",color:"#C0392B",marginTop:"12px",lineHeight:1.5,textAlign:"center"}});
+          completeBtn.parentNode.insertBefore(setupErrBox,completeBtn.nextSibling);
+        }
+        setupErrBox.textContent="Couldn't finish setting up — check your connection and tap the button again.";
+      });
+      return;
     }));
     scr.appendChild(body);wrap.appendChild(scr);return wrap;
   }
@@ -3802,16 +3845,60 @@ function checkPendingInvite(){
     processInviteToken(pending);
   }
 }
-function processInviteToken(token){
+function showTopToast(msg){
+  var toast=document.createElement("div");
+  toast.style.cssText="position:fixed;top:70px;left:50%;transform:translateX(-50%);background:#3D2314;color:white;padding:12px 20px;border-radius:50px;font-family:Nunito,sans-serif;font-size:14px;font-weight:700;z-index:999;max-width:85vw;text-align:center;animation:fadeUp .3s ease;";
+  toast.textContent=msg;
+  document.body.appendChild(toast);
+  setTimeout(function(){toast.remove();},3500);
+}
+function joinAdditionalGroupViaToken(token){
   db.collection("inviteTokens").doc(token).get().then(function(doc){
-    if(!doc.exists){
-      alert("This invite link is invalid. Please ask for a new one.");
+    if(!doc.exists||doc.data().used){
+      showTopToast(doc.exists?"That invite link has already been used.":"That invite link doesn't look right.");
+      ST.appReady=true;redraw();
       return;
     }
     var data=doc.data();
-    if(data.used){
-      alert("This invite link has already been used. Please ask for a new one.");
+    var gid=data.groupId;
+    if(!gid){showTopToast("Something went wrong with that invite link.");ST.appReady=true;redraw();return;}
+    var alreadyMember=ST.groups.some(function(g){return g.id===gid;});
+    if(alreadyMember){
+      showTopToast("You're already in "+(data.groupLabel||"that group")+"!");
+      ST.group=gid;ST.tab="feed";ST.appReady=true;redraw();
       return;
+    }
+    var newGroup={id:gid,label:data.groupLabel||"Family",icon:data.groupIcon||"\u2764\uFE0F"};
+    ST.groups.push(newGroup);
+    ST.feed[gid]=[];ST.chatMsgs[gid]=[];
+    try{localStorage.setItem("ku_groups",JSON.stringify(ST.groups));}catch(e){}
+    db.collection("userGroups").doc(currentUser.uid).set({groups:ST.groups,updatedAt:firebase.firestore.FieldValue.serverTimestamp()}).catch(function(){});
+    db.collection("members").doc(currentUser.uid+"_"+gid).set({
+      uid:currentUser.uid,name:ST.name,av:ST.avatar&&ST.avatar.startsWith("data:")?"\uD83D\uDC64":(ST.avatar||"\uD83D\uDC64"),
+      groupId:gid,groupLabel:newGroup.label,groupIcon:newGroup.icon,isAdmin:false,
+      joinedAt:firebase.firestore.FieldValue.serverTimestamp()
+    }).catch(function(){});
+    db.collection("inviteTokens").doc(token).update({used:true,usedAt:firebase.firestore.FieldValue.serverTimestamp()}).catch(function(){});
+    ST.group=gid;ST.tab="feed";ST.appReady=true;
+    fetchAllFeeds();syncOn();
+    showTopToast("Joined "+newGroup.label+"! \uD83C\uDF89");
+    redraw();
+  }).catch(function(e){
+    console.log("join additional group failed",e);
+    showTopToast("Couldn't check that invite link — check your connection and try the link again.");
+    ST.appReady=true;redraw();
+  });
+}
+function processInviteToken(token){
+  db.collection("inviteTokens").doc(token).get().then(function(doc){
+    if(!doc.exists){
+      ST.inviteError="This invite link doesn't look right. It may have been mistyped or removed. You can still create your own group below, or ask whoever invited you for a fresh link.";
+      redraw();return;
+    }
+    var data=doc.data();
+    if(data.used){
+      ST.inviteError="This invite link has already been used. If you're trying to join "+(data.groupLabel||"a family group")+", ask an admin in that group to send you a fresh invite link. In the meantime, you can create your own group below.";
+      redraw();return;
     }
     // Dont mark used until onboarding completes
     ST.pendingInviteToken=token;
@@ -3824,7 +3911,8 @@ function processInviteToken(token){
     redraw();
   }).catch(function(e){
     console.log("token error:",e);
-    alert("Could not validate invite link. Please try again.");
+    ST.inviteError="We couldn't check that invite link right now — this is usually a connection issue. You can try again, or create your own group below.";
+    redraw();
   });
 }
 
@@ -3909,6 +3997,13 @@ auth.onAuthStateChanged(function(user){
       var t=_pendingToken||pendingLS;
       _pendingToken=null;
       localStorage.removeItem("ku_pending_token");
+      var alreadyOnboarded=localStorage.getItem("ku_ob")==="1";
+      if(alreadyOnboarded){
+        // Existing user accepting another invite (e.g. a second family group) -
+        // join directly, no need to redo phone verification/name/avatar setup
+        joinAdditionalGroupViaToken(t);
+        return;
+      }
       ST.appReady=true; // Show onboarding not splash while token loads
       ST.boarded=false;
       redraw();
