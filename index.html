@@ -29,6 +29,7 @@ html,body{height:100%;background:#FAF6F0;font-family:Nunito,sans-serif;overflow:
 @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
 @keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
 @keyframes slideDown{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:translateY(0)}}
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 button{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;}
 img{-webkit-touch-callout:none;-webkit-user-select:none;}
 .no-select{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;}
@@ -1743,20 +1744,32 @@ function buildItem(item,t){
   if(item.type==="photo"||item.type==="video"){
     var card=d({cls:"card",css:{background:"#FFF9F2",overflow:"hidden",marginBottom:"1px"}});
     if(item.uploading){
-      var upCard=d({css:{background:"#FFF9F2",border:"none",borderBottom:"1px solid #F5DDD1",padding:"20px 16px",marginBottom:"1px"}});
-      var upTop=d({css:{display:"flex",alignItems:"center",gap:"12px",marginBottom:"14px"}});
-      var upIcon=d({css:{fontSize:"28px",flexShrink:0}});upIcon.textContent=ST.upIsVideo?"\uD83C\uDFA5":"\uD83D\uDCF8";upTop.appendChild(upIcon);
-      var upTxt=d({css:{flex:1}});
-      upTxt.appendChild(d({css:{fontSize:"14px",fontWeight:800,color:"#3D2314",marginBottom:"2px"}},ST.upIsVideo?"Uploading your video...":"Uploading your photo..."));
-      upTxt.appendChild(d({css:{fontSize:"12px",color:"#9B7B62"}},ST.upIsVideo?"Hang tight \u2014 this may take up to a minute":"Almost there..."));
-      upTop.appendChild(upTxt);upCard.appendChild(upTop);
-      // Progress bar track
-      var track=d({css:{background:"#F0EDE8",borderRadius:"50px",height:"8px",overflow:"hidden",marginBottom:"8px"}});
-      var bar=d({id:"upload-progress-bar",css:{background:"linear-gradient(90deg,#C4714A,#E8956D)",height:"100%",borderRadius:"50px",width:"0%",transition:"width .3s ease"}});
-      track.appendChild(bar);upCard.appendChild(track);
-      var pctTxt=d({id:"upload-progress-pct",css:{fontSize:"11px",color:"#9B7B62",textAlign:"right"}});
-      pctTxt.textContent="0%";upCard.appendChild(pctTxt);
-      wrap.appendChild(upCard);return wrap;
+      var upWrap=d({css:{position:"relative",background:"#000"}});
+      if(item.isVideo&&item.localPreviewUrl){
+        var upVid=document.createElement("video");
+        upVid.src=item.localPreviewUrl;
+        upVid.style.cssText="width:100%;min-height:60vh;max-height:85vh;object-fit:cover;display:block;background:#000;";
+        upVid.autoplay=true;upVid.muted=true;upVid.loop=true;upVid.playsInline=true;
+        upVid.setAttribute("playsinline","");upVid.setAttribute("webkit-playsinline","");
+        upWrap.appendChild(upVid);
+      } else if(item.localPreviewUrl){
+        var upImg=el("img",{css:{width:"100%",maxHeight:"85vh",objectFit:"contain",display:"block",background:"#1a1a1a"}});
+        upImg.src=item.localPreviewUrl;
+        upWrap.appendChild(upImg);
+      }
+      // Subtle posting indicator overlay at bottom, doesn't block viewing the content
+      var upOverlay=d({css:{position:"absolute",left:"0",right:"0",bottom:"0",background:"linear-gradient(transparent,rgba(0,0,0,.65))",padding:"24px 16px 12px"}});
+      var upRow=d({css:{display:"flex",alignItems:"center",gap:"8px",marginBottom:"8px"}});
+      var upSpin=d({css:{width:"14px",height:"14px",border:"2px solid rgba(255,255,255,.4)",borderTopColor:"white",borderRadius:"50%",animation:"spin .8s linear infinite"}});
+      upRow.appendChild(upSpin);
+      upRow.appendChild(d({css:{fontSize:"12px",fontWeight:700,color:"white"}},"Posting..."));
+      upOverlay.appendChild(upRow);
+      var track=d({css:{background:"rgba(255,255,255,.25)",borderRadius:"50px",height:"5px",overflow:"hidden"}});
+      var bar=d({id:"upload-progress-bar",css:{background:"white",height:"100%",borderRadius:"50px",width:"0%",transition:"width .3s ease"}});
+      track.appendChild(bar);upOverlay.appendChild(track);
+      var pctTxt=d({id:"upload-progress-pct",css:{display:"none"}});upOverlay.appendChild(pctTxt);
+      upWrap.appendChild(upOverlay);
+      wrap.appendChild(upWrap);return wrap;
     }
     // Author overlay will be placed over photo
     var hdr=d({css:{display:"none"}}); // hidden - replaced by overlay
@@ -3691,9 +3704,10 @@ ST.upImg=null;
       });
       uploadRef=photoTask.then(function(s){return s.ref.getDownloadURL();});
     }
-    // Show uploading indicator in feed
+    // Show uploading indicator in feed - use actual local file as instant preview
     var tempId="temp-"+Date.now();
-    var tempPost={id:tempId,type:"photo",av:postAv,name:postName,time:"Just now",cap:postCap,groupId:postGroup,emoji:"\uD83D\uDCF7",uploading:true};
+    var localPreviewUrl=isVid&&vidFile?URL.createObjectURL(vidFile):imgData;
+    var tempPost={id:tempId,type:isVid?"video":"photo",isVideo:isVid,av:postAv,name:postName,time:"Just now",cap:postCap,groupId:postGroup,emoji:isVid?"\uD83C\uDFA5":"\uD83D\uDCF7",uploading:true,localPreviewUrl:localPreviewUrl};
     if(!ST.feed[postGroup])ST.feed[postGroup]=[];
     ST.feed[postGroup].unshift(tempPost);
     // Make sure tab is on feed and group is correct
@@ -3704,6 +3718,7 @@ ST.upImg=null;
     uploadRef.then(function(url){
       // Remove temp post
       ST.feed[postGroup]=ST.feed[postGroup].filter(function(x){return x.id!==tempId;});
+      if(isVid&&vidFile){try{URL.revokeObjectURL(localPreviewUrl);}catch(e){}}
       p.imgUrl=url;
       if(isVid&&cfResultThumb)p.thumbUrl=cfResultThumb; // Cloudflare-hosted thumbnail URL (short), not base64
       return postToFeed(p);
@@ -3726,6 +3741,7 @@ ST.upImg=null;
       }).catch(function(){redraw();});
     }).catch(function(e){
       console.log("photo post failed:",e.message||e);
+      if(isVid&&vidFile){try{URL.revokeObjectURL(localPreviewUrl);}catch(e2){}}
       // Remove temp post only - do NOT post without the image, and do NOT
       // re-fetch the feed here (the live watchFeed listener already keeps
       // ST.feed sorted correctly; an unordered .get() here was causing the
