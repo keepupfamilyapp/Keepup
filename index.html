@@ -1835,6 +1835,21 @@ function buildItem(item,t){
         vidWrap.appendChild(vidEl);vidWrap.appendChild(vPlay);
         vidWrap.addEventListener("click",function(){vPlay.style.display="none";vidEl.controls=true;vidEl.play().catch(function(){});});
       }
+      // Delete button top-right if own post
+      if(item.name===(ST.name||"You")||item.av===ST.avatar){
+        var vDelOv=b({css:{position:"absolute",top:"8px",right:"8px",background:"rgba(0,0,0,.45)",border:"none",color:"white",fontSize:"13px",borderRadius:"50px",padding:"4px 10px",cursor:"pointer",fontFamily:"inherit",backdropFilter:"blur(4px)",zIndex:2}},"···");
+        (function(postId){
+          vDelOv.addEventListener("click",function(e){
+            e.stopPropagation();
+            if(confirm("Delete this post?")){
+              db.collection("feed").doc(postId).delete().then(function(){
+                ST.feed[ST.group]=ST.feed[ST.group].filter(function(x){return x.id!==postId;});redraw();
+              });
+            }
+          });
+        })(item.id);
+        vidWrap.appendChild(vDelOv);
+      }
       card.appendChild(vidWrap);
     } else if(item.imgUrl){
       var img=el("img",{css:{width:"100%",maxHeight:"85vh",objectFit:"contain",display:"block",cursor:"zoom-in",background:"#1a1a1a",WebkitTouchCallout:"none",WebkitUserSelect:"none",pointerEvents:"auto"}});
