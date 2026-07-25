@@ -10,12 +10,19 @@ body{font-family:Nunito,sans-serif;background:#FAF6F0;display:flex;flex-directio
 .logo{font-family:Georgia,serif;font-size:36px;font-style:italic;color:#C4714A;margin-bottom:8px;}
 p{color:#9B7B62;font-size:15px;margin-bottom:24px;line-height:1.6;}
 .btn{background:#C4714A;color:white;border:none;padding:16px 32px;border-radius:50px;font-size:16px;font-weight:700;cursor:pointer;text-decoration:none;display:inline-block;margin-top:8px;}
+.sub{font-size:13px;color:#9B7B62;margin-top:14px;}
+.iab-card{background:#F5DDD1;border:2px solid #E8956D;border-radius:16px;padding:18px 20px;max-width:340px;margin-bottom:18px;}
+.iab-card .step{display:flex;align-items:center;gap:10px;text-align:left;font-size:14px;color:#3D2314;font-weight:700;margin-bottom:8px;}
+.iab-card .dots{font-size:20px;flex-shrink:0;}
 </style>
 </head>
 <body>
 <div class="logo">keep up</div>
-<p>You've been invited to join a family group on Keep Up.</p>
-<a class="btn" id="joinBtn">Open Keep Up</a>
+<div id="content">
+  <p>You've been invited to join a family group on Keep Up.</p>
+  <a class="btn" id="joinBtn">Open Keep Up</a>
+  <div class="sub" id="statusMsg">Redirecting you now&hellip;</div>
+</div>
 <script>
 var params=new URLSearchParams(window.location.search);
 var token=params.get("token");
@@ -26,8 +33,40 @@ if(token){
   appUrl+="#token="+token;
 }
 document.getElementById("joinBtn").href=appUrl;
-// Auto redirect
-setTimeout(function(){window.location.href=appUrl;},1500);
+
+var ua=navigator.userAgent||"";
+// Common in-app browser signatures (Facebook, Instagram, Messenger, TikTok,
+// Snapchat, Line, Twitter/X). These often have unreliable storage and can
+// mishandle redirects, so we treat them specially instead of the normal
+// auto-redirect.
+var isInAppBrowser=/FBAN|FBAV|FB_IAB|Instagram|Line\/|MessengerForiOS|musical_ly|TikTok|Snapchat|Twitter/i.test(ua);
+var isAndroid=/Android/i.test(ua);
+var isIOS=/iPhone|iPad|iPod/i.test(ua);
+
+if(isInAppBrowser&&isAndroid){
+  // Most Android in-app browsers are Chrome-based webviews. An intent:// URL
+  // can escape straight into real Chrome, where storage/redirects work
+  // normally, without the user having to do anything.
+  var cleanUrl=appUrl.replace(/^https?:\/\//,"");
+  var intentUrl="intent://"+cleanUrl+"#Intent;scheme=https;package=com.android.chrome;end";
+  document.getElementById("statusMsg").textContent="Opening in your browser\u2026";
+  setTimeout(function(){window.location.href=intentUrl;},400);
+  // Fallback in case the intent link doesn't fire (older/unusual devices)
+  setTimeout(function(){window.location.href=appUrl;},2000);
+} else if(isInAppBrowser&&isIOS){
+  // iOS deliberately blocks pages from force-opening Safari, so show clear
+  // instructions instead of a silent redirect that may not work reliably here.
+  document.getElementById("content").innerHTML=
+    '<p>You\u2019re viewing this inside an app that can sometimes cause issues with Keep Up. For the best experience, please open this link in Safari:</p>'+
+    '<div class="iab-card">'+
+      '<div class="step"><span class="dots">\u2022\u2022\u2022</span> Tap the menu button (usually top-right or bottom-right)</div>'+
+      '<div class="step">\uD83C\uDF10 Choose \u201COpen in Safari\u201D or \u201COpen in Browser\u201D</div>'+
+    '</div>'+
+    '<a class="btn" id="joinBtn2" href="'+appUrl+'">Or tap here to try anyway</a>';
+} else {
+  // Normal browser - auto redirect as before
+  setTimeout(function(){window.location.href=appUrl;},1500);
+}
 </script>
 </body>
 </html>
