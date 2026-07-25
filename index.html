@@ -1797,28 +1797,29 @@ function buildItem(item,t){
         vidWrap.style.backgroundImage="url("+item.thumbUrl+")";
         vidWrap.style.backgroundSize="cover";
         vidWrap.style.backgroundPosition="center";
-        vidWrap.style.minHeight="200px";
+        vidWrap.style.minHeight="60vh";
       }
       if(isCFStream){
         // Extract video UID from URL
         var cfUid=item.imgUrl.split("cloudflarestream.com/")[1];
         if(cfUid)cfUid=cfUid.split("/")[0];
         // Show thumbnail until tapped
-        var cfThumb=d({css:{width:"100%",minHeight:"200px",background:"#000",position:"relative",cursor:"pointer"}});
+        var cfThumb=d({css:{width:"100%",minHeight:"60vh",background:"#000",position:"relative",cursor:"pointer"}});
         if(item.thumbUrl){
           cfThumb.style.backgroundImage="url("+item.thumbUrl+")";
           cfThumb.style.backgroundSize="cover";
           cfThumb.style.backgroundPosition="center";
         }
-        var cfPlay=d({css:{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:"56px",height:"56px",borderRadius:"50%",background:"rgba(0,0,0,.55)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"24px"}});
-        cfPlay.textContent="\u25B6\uFE0F";
+        var cfPlay=d({css:{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:"64px",height:"64px",borderRadius:"50%",background:"rgba(0,0,0,.35)",backdropFilter:"blur(6px)",border:"1.5px solid rgba(255,255,255,.85)",display:"flex",alignItems:"center",justifyContent:"center"}});
+        var cfPlayTri=d({css:{width:"0",height:"0",borderTop:"11px solid transparent",borderBottom:"11px solid transparent",borderLeft:"18px solid white",marginLeft:"4px"}});
+        cfPlay.appendChild(cfPlayTri);
         cfThumb.appendChild(cfPlay);
         vidWrap.appendChild(cfThumb);
         cfThumb.addEventListener("click",function(){
           cfThumb.remove();
           var iframe=document.createElement("iframe");
           iframe.src="https://"+CF_CUSTOMER_SUBDOMAIN+".cloudflarestream.com/"+cfUid+"/iframe?autoplay=true&muted=false";
-          iframe.style.cssText="width:100%;height:280px;border:none;display:block;background:#000;";
+          iframe.style.cssText="width:100%;height:60vh;border:none;display:block;background:#000;";
           iframe.setAttribute("allow","accelerometer;gyroscope;autoplay;encrypted-media;picture-in-picture;");
           iframe.setAttribute("allowfullscreen","true");
           vidWrap.appendChild(iframe);
@@ -1826,12 +1827,13 @@ function buildItem(item,t){
       } else {
         var vidEl=document.createElement("video");
         vidEl.src=item.imgUrl;
-        vidEl.style.cssText="width:100%;max-height:80vh;object-fit:cover;display:block;background:#000;";
+        vidEl.style.cssText="width:100%;min-height:60vh;max-height:80vh;object-fit:cover;display:block;background:#000;";
         vidEl.controls=false;vidEl.playsInline=true;vidEl.preload="metadata";
         vidEl.setAttribute("playsinline","");vidEl.setAttribute("webkit-playsinline","");
         vidEl.addEventListener("loadedmetadata",function(){vidEl.currentTime=0.001;});
-        var vPlay=d({css:{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:"56px",height:"56px",borderRadius:"50%",background:"rgba(0,0,0,.45)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"22px",pointerEvents:"none"}});
-        vPlay.textContent="\u25B6\uFE0F";
+        var vPlay=d({css:{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:"64px",height:"64px",borderRadius:"50%",background:"rgba(0,0,0,.35)",backdropFilter:"blur(6px)",border:"1.5px solid rgba(255,255,255,.85)",display:"flex",alignItems:"center",justifyContent:"center",pointerEvents:"none"}});
+        var vPlayTri=d({css:{width:"0",height:"0",borderTop:"11px solid transparent",borderBottom:"11px solid transparent",borderLeft:"18px solid white",marginLeft:"4px"}});
+        vPlay.appendChild(vPlayTri);
         vidWrap.appendChild(vidEl);vidWrap.appendChild(vPlay);
         vidWrap.addEventListener("click",function(){vPlay.style.display="none";vidEl.controls=true;vidEl.play().catch(function(){});});
       }
