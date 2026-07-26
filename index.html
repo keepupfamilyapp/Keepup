@@ -61,9 +61,34 @@ img{-webkit-touch-callout:none;-webkit-user-select:none;}
 <div id="debug" style="display:none;position:fixed;bottom:0;left:0;right:0;background:#3D2314;color:white;padding:12px;font-size:11px;font-family:monospace;max-height:40vh;overflow-y:auto;z-index:9999;"></div>
 <script>
 // Catch all errors and show them
+var _errLogCount=0;
+function logErrorRemote(info){
+  try{
+    if(typeof db==="undefined"||!db)return; // Firebase not ready yet
+    if(_errLogCount>=15)return; // avoid flooding if something loops
+    _errLogCount++;
+    var uidForLog="unknown";
+    try{uidForLog=(typeof currentUser!=="undefined"&&currentUser&&currentUser.uid)||localStorage.getItem("ku_uid")||"unknown";}catch(e){}
+    var nameForLog="unknown";
+    try{nameForLog=(typeof ST!=="undefined"&&ST&&ST.name)||localStorage.getItem("ku_name")||"unknown";}catch(e){}
+    db.collection("errorLogs").add({
+      message:String(info.message||"").substring(0,500),
+      stack:String(info.stack||"").substring(0,1000),
+      source:info.source||"",
+      line:info.line||null,
+      col:info.col||null,
+      userUid:uidForLog,
+      userName:nameForLog,
+      userAgent:navigator.userAgent,
+      url:window.location.href,
+      createdAt:firebase.firestore.FieldValue.serverTimestamp()
+    }).catch(function(){}); // never let a logging failure cause more errors
+  }catch(e){/* swallow - error logging must never itself crash the app */}
+}
 window.onerror=function(msg,src,line,col,err){
   var d=document.getElementById("debug");
   if(d){d.style.display="block";d.innerHTML+="<div style='margin-bottom:4px'>ERROR: "+msg+" (line "+line+")</div>";}
+  logErrorRemote({message:msg,stack:err&&err.stack,source:src,line:line,col:col});
   return false;
 };
 window.addEventListener("unhandledrejection",function(e){
@@ -81,6 +106,7 @@ window.addEventListener("unhandledrejection",function(e){
   // Show debug info for other errors
   var d=document.getElementById("debug");
   if(d){d.style.display="block";d.innerHTML+="<div style='margin-bottom:4px'>ERROR: "+msg+"</div>";}
+  logErrorRemote({message:msg,stack:e.reason&&e.reason.stack});
 });
 </script>
 <script>
@@ -1210,7 +1236,47 @@ function buildOnboarding(){
         .then(function(result){
           currentUser=result.user;
           localStorage.setItem("ku_uid",result.user.uid);
-          ST.obStep=1;redraw();
+          // Check if this phone number already has an account - Firebase
+          // Phone Auth always returns the same UID for the same number, so
+          // someone who lost local storage/their bookmark and re-verifies
+          // should be logged straight back in, not sent through onboarding again.
+          db.collection("members").doc(result.user.uid).get().then(function(doc){
+            if(doc.exists){
+              var m=doc.data();
+              if(m.name){ST.name=m.name;localStorage.setItem("ku_name",m.name);}
+              if(m.av){
+                var isValidAv=m.av.startsWith("http")||m.av.startsWith("data:")||m.av.length<=8;
+                ST.avatar=isValidAv?m.av:"\uD83D\uDC64";
+                localStorage.setItem("ku_av",ST.avatar);
+              }
+              if(m.groupLabel){
+                ST.groups[0].label=m.groupLabel;
+                ST.groups[0].icon=m.groupIcon||ST.groups[0].icon;
+                localStorage.setItem("ku_grp",JSON.stringify({label:m.groupLabel,icon:m.groupIcon||ST.groups[0].icon}));
+              }
+              if(m.isAdmin!==undefined)localStorage.setItem("ku_admin",m.isAdmin?"1":"0");
+              db.collection("userGroups").doc(result.user.uid).get().then(function(gdoc){
+                if(gdoc.exists&&gdoc.data().groups&&gdoc.data().groups.length>0){
+                  ST.groups=gdoc.data().groups;
+                  ST.group=ST.groups[0].id;
+                  try{localStorage.setItem("ku_groups",JSON.stringify(ST.groups));}catch(e){}
+                }
+                ST.boarded=true;localStorage.setItem("ku_ob","1");
+                fetchAllFeeds();syncOn();
+                showTopToast("Welcome back, "+(ST.name||"friend")+"! \uD83D\uDC4B");
+                redraw();
+              }).catch(function(){
+                ST.boarded=true;localStorage.setItem("ku_ob","1");
+                fetchAllFeeds();syncOn();redraw();
+              });
+            } else {
+              // Genuinely new account for this phone number - continue onboarding
+              ST.obStep=1;redraw();
+            }
+          }).catch(function(){
+            // Couldn't check - fall back to normal onboarding rather than blocking them
+            ST.obStep=1;redraw();
+          });
         })
         .catch(function(e){
           verifyBtn.textContent="Verify";verifyBtn.style.background="#C4714A";
@@ -3139,6 +3205,44 @@ function buildProfile(t){
     redraw();
   });
   body.appendChild(so);
+
+  // Error log viewer - admin only, for beta troubleshooting
+  if(isAdmin()){
+    var errCard=d({css:{background:"#FFF9F2",borderRadius:"18px",overflow:"hidden",boxShadow:"0 2px 12px rgba(0,0,0,.08)",marginBottom:"12px"}});
+    errCard.appendChild(d({css:{padding:"13px 15px 9px",fontSize:"12px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".5px",borderBottom:"1px solid #F5DDD1"}},"Recent Errors (Beta)"));
+    var errBody=d({css:{padding:"10px 15px"}});
+    var errViewBtn=b({css:{width:"100%",padding:"10px",borderRadius:"12px",background:"#FAF6F0",border:"1.5px solid #F5DDD1",fontSize:"13px",fontWeight:700,color:"#C4714A",cursor:"pointer",fontFamily:"inherit"}},"View Recent Errors");
+    var errList=d({css:{marginTop:"10px",display:"none"}});
+    errViewBtn.addEventListener("click",function(){
+      if(errList.style.display==="block"){errList.style.display="none";return;}
+      errViewBtn.textContent="Loading...";
+      db.collection("errorLogs").orderBy("createdAt","desc").limit(20).get().then(function(snap){
+        errViewBtn.textContent="View Recent Errors";
+        errList.innerHTML="";
+        if(snap.empty){
+          errList.appendChild(d({css:{fontSize:"13px",color:"#9B7B62",textAlign:"center",padding:"12px"}},"No errors logged recently \uD83C\uDF89"));
+        } else {
+          snap.forEach(function(doc){
+            var e=doc.data();
+            var row=d({css:{padding:"10px 0",borderBottom:"1px solid #F5DDD1"}});
+            var when=e.createdAt&&e.createdAt.toDate?e.createdAt.toDate().toLocaleString():"Unknown time";
+            row.appendChild(d({css:{fontSize:"11px",color:"#9B7B62",marginBottom:"3px"}},when+" \u2014 "+(e.userName||"unknown")));
+            row.appendChild(d({css:{fontSize:"12px",color:"#C0392B",fontWeight:600,wordBreak:"break-word"}},String(e.message||"").substring(0,200)));
+            errList.appendChild(row);
+          });
+        }
+        errList.style.display="block";
+      }).catch(function(err){
+        errViewBtn.textContent="View Recent Errors";
+        errList.innerHTML="";
+        errList.appendChild(d({css:{fontSize:"13px",color:"#C0392B",textAlign:"center",padding:"12px"}},"Couldn't load error logs: "+err.message));
+        errList.style.display="block";
+      });
+    });
+    errBody.appendChild(errViewBtn);errBody.appendChild(errList);errCard.appendChild(errBody);
+    body.appendChild(errCard);
+  }
+
   // Delete account button
   var delAccBtn=b({css:{width:"100%",padding:"13px",borderRadius:"50px",background:"transparent",border:"2px solid #FFCDD2",color:"#C0392B",fontSize:"13px",fontWeight:700,cursor:"pointer",fontFamily:"inherit",marginTop:"4px"}},"Delete My Account");
   delAccBtn.addEventListener("click",function(){
