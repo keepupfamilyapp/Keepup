@@ -1113,7 +1113,17 @@ function redraw(){
     else document.body.appendChild(next);
     if(prevScrollTop!==null&&ST.group===prevGroup){
       var newScrollEl=document.getElementById("feed-list");
-      if(newScrollEl)newScrollEl.scrollTop=prevScrollTop;
+      if(newScrollEl){
+        // Wait for layout/paint before restoring scroll - setting it
+        // immediately can get silently clamped if restored images/videos
+        // haven't finished laying out yet, making the container appear
+        // shorter than it will actually be.
+        requestAnimationFrame(function(){
+          requestAnimationFrame(function(){
+            newScrollEl.scrollTop=prevScrollTop;
+          });
+        });
+      }
     }
   }catch(err){
     var e2=document.getElementById("app");
