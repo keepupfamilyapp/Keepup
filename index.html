@@ -383,7 +383,14 @@ function showSendToChatPicker(feedItem){
   // DMs
   (ST.dms||[]).forEach(function(dm){
     var row=b({css:{display:"flex",alignItems:"center",gap:"10px",padding:"10px 12px",borderRadius:"12px",background:"#FFF9F2",border:"1.5px solid #F5DDD1",cursor:"pointer",fontFamily:"inherit",textAlign:"left",width:"100%"}});
-    var ic=d({css:{fontSize:"20px"}});ic.textContent=(dm.members&&dm.members[0]&&dm.members[0].av)||"\uD83D\uDC64";row.appendChild(ic);
+    var ic=d({css:{width:"32px",height:"32px",borderRadius:"50%",fontSize:"18px",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,overflow:"hidden",background:"#F5DDD1"}});
+    var dmAv=dm.members&&dm.members[0]&&dm.members[0].av;
+    if(dmAv&&(dmAv.startsWith("http")||dmAv.startsWith("data:"))){
+      ic.style.backgroundImage="url("+dmAv+")";ic.style.backgroundSize="cover";ic.style.backgroundPosition="center";
+    } else {
+      ic.textContent=(dmAv&&dmAv.length<=8)?dmAv:"\uD83D\uDC64";
+    }
+    row.appendChild(ic);
     var lbl=d({css:{flex:1}});lbl.appendChild(d({css:{fontSize:"14px",fontWeight:700,color:"#3D2314"}},dm.members.map(function(m){return m.name;}).join(", ")));
     lbl.appendChild(d({css:{fontSize:"11px",color:"#9B7B62"}},"Direct message"));
     row.appendChild(lbl);
@@ -3505,7 +3512,14 @@ function buildComments(t){
   if(!pc.length)list.appendChild(d({css:{textAlign:"center",padding:"20px",color:"#9B7B62",fontSize:"13px"}},"No comments yet. Be first!"));
   pc.forEach(function(c){
     var row=d({css:{display:"flex",gap:"8px",marginBottom:"12px"}});
-    var av=d({css:{width:"30px",height:"30px",borderRadius:"50%",background:t.ap,border:"2px solid "+t.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"15px",flexShrink:0}});av.textContent=c.av;row.appendChild(av);
+    var av=d({css:{width:"30px",height:"30px",borderRadius:"50%",background:t.ap,border:"2px solid "+t.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"15px",flexShrink:0,overflow:"hidden"}});
+    var cAvIsUrl=c.av&&(c.av.startsWith("http")||c.av.startsWith("data:"));
+    if(cAvIsUrl){
+      av.style.backgroundImage="url("+c.av+")";av.style.backgroundSize="cover";av.style.backgroundPosition="center";
+    } else {
+      av.textContent=(c.av&&c.av.length<=8)?c.av:"\uD83D\uDC64";
+    }
+    row.appendChild(av);
     var cd=d({css:{flex:1}});var cb2=d({css:{background:t.bg,borderRadius:"5px 13px 13px 13px",padding:"8px 11px",border:"1px solid "+t.ap}});
     cb2.appendChild(d({css:{fontSize:"11px",fontWeight:800,color:t.ad,marginBottom:"2px"}},c.name));cb2.appendChild(d({css:{fontSize:"13px",color:"#3D2314",lineHeight:"1.5"}},c.text));cd.appendChild(cb2);
     cd.appendChild(d({css:{fontSize:"10px",color:"#9B7B62",marginTop:"2px"}},c.time));row.appendChild(cd);list.appendChild(row);
