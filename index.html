@@ -933,6 +933,7 @@ var TH={
 function th(id){return TH[id]||TH.imm;}
 
 var ST={
+  feedRendered:{},
   boarded:false,obStep:0,obName:"",obAvatar:"\uD83D\uDC69",obPhoto:null,
   obGrpName:"",obGrpEmoji:"\u2764\uFE0F",obGrpPhoto:null,joinInvite:false,inviteError:null,fbMembers:{},
   editingGroup:null,editingBirthdays:false,creatingGroup:false,showGroupSwitcher:false,navExpanded:false,showTutorial:false,tutorialStep:0,replyTo:null,profileWallpaper:null,sessionStart:Date.now(),memoryDay:null,memoryPosts:null,appReady:false,
@@ -1099,9 +1100,21 @@ function timeAgo(ts){
 function redraw(){
   try{
     var old=document.getElementById("app");
+    // redraw() fully rebuilds the DOM, which would otherwise silently
+    // reset anyone's scroll position back to the top of the feed on
+    // every single interaction (commenting, reacting, posting, etc).
+    // Capture and restore it here, alongside the virtual-scroll item
+    // count already being preserved in ST.feedRendered.
+    var prevScrollEl=document.getElementById("feed-list");
+    var prevScrollTop=prevScrollEl?prevScrollEl.scrollTop:null;
+    var prevGroup=ST.group;
     var next=buildApp();
     if(old)old.replaceWith(next);
     else document.body.appendChild(next);
+    if(prevScrollTop!==null&&ST.group===prevGroup){
+      var newScrollEl=document.getElementById("feed-list");
+      if(newScrollEl)newScrollEl.scrollTop=prevScrollTop;
+    }
   }catch(err){
     var e2=document.getElementById("app");
     if(e2)e2.innerHTML='<div style="padding:32px;font-family:sans-serif;color:#C4714A;font-size:13px;"><b>Error:</b> '+err.message+'<br><pre style="font-size:10px;margin-top:8px;white-space:pre-wrap">'+err.stack+'</pre></div>';
@@ -1641,7 +1654,7 @@ function buildFeed(t,grp){
   var ptr=d({css:{textAlign:"center",padding:"0",fontSize:"12px",color:"#9B7B62",fontWeight:700,flexShrink:0,height:"0px",overflow:"hidden",transition:"height .15s ease,opacity .15s ease",opacity:"0"}});
   ptr.textContent="Release to refresh";wrap.appendChild(ptr);
   // Compose bar removed - use + button instead
-  var list=d({cls:"scr",css:{padding:"0 0 90px",display:"flex",flexDirection:"column",gap:"0"}});
+  var list=d({id:"feed-list",cls:"scr",css:{padding:"0 0 90px",display:"flex",flexDirection:"column",gap:"0"}});
 
   // Pull to refresh touch handling
   var touchStartY=0;var pulling=false;
@@ -1704,17 +1717,21 @@ function buildFeed(t,grp){
     var rendered=0;
     var rendering=false;
     var allItems=feedItems;
+    // Restore however many items were loaded before the last redraw,
+    // instead of always resetting back to just the first batch
+    var targetInitial=Math.min(Math.max(BATCH,ST.feedRendered[grp.id]||0),allItems.length);
 
-    function renderBatch(){
+    function renderBatch(isLoadMore){
       if(rendering||rendered>=allItems.length)return;
       rendering=true;
-      var end=Math.min(rendered+BATCH,allItems.length);
+      var end=isLoadMore?Math.min(rendered+BATCH,allItems.length):targetInitial;
       var frag=document.createDocumentFragment();
       for(var i=rendered;i<end;i++){
         frag.appendChild(buildItem(allItems[i],t));
       }
       list.appendChild(frag);
       rendered=end;
+      ST.feedRendered[grp.id]=rendered;
       rendering=false;
       // Add load more sentinel if more items remain
       if(rendered<allItems.length){
@@ -1730,7 +1747,7 @@ function buildFeed(t,grp){
               if(entries[0].isIntersecting){
                 obs.disconnect();
                 sentinel.remove();
-                renderBatch();
+                renderBatch(true);
               }
             },{rootMargin:"200px"});
             obs.observe(sentinel);
@@ -1738,7 +1755,7 @@ function buildFeed(t,grp){
         }
       }
     }
-    renderBatch();
+    renderBatch(false);
   }
   wrap.appendChild(list);
   // FAB + vertical slide-up with horizontal sub-options
