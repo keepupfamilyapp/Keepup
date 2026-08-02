@@ -2020,14 +2020,35 @@ function buildItem(item,t){
         cfPlay.appendChild(cfPlayTri);
         cfThumb.appendChild(cfPlay);
         vidWrap.appendChild(cfThumb);
-        cfThumb.addEventListener("click",function(){
-          cfThumb.remove();
+        function loadCfIframe(){
+          var oldFrame=vidWrap.querySelector("iframe");
+          if(oldFrame)oldFrame.remove();
+          var oldRetry=document.getElementById("cf-retry-"+item.id);
+          if(oldRetry)oldRetry.remove();
           var iframe=document.createElement("iframe");
-          iframe.src="https://"+CF_CUSTOMER_SUBDOMAIN+".cloudflarestream.com/"+cfUid+"/iframe?autoplay=true&muted=false";
+          // Cache-bust so a retry actually re-requests instead of reusing a
+          // failed load
+          iframe.src="https://"+CF_CUSTOMER_SUBDOMAIN+".cloudflarestream.com/"+cfUid+"/iframe?autoplay=true&muted=false&_r="+Date.now();
           iframe.style.cssText="width:100%;height:60vh;border:none;display:block;background:#000;";
           iframe.setAttribute("allow","accelerometer;gyroscope;autoplay;encrypted-media;picture-in-picture;");
           iframe.setAttribute("allowfullscreen","true");
           vidWrap.appendChild(iframe);
+          // A brand new video may still be encoding on Cloudflare's side for
+          // a short window after upload - if that's likely the case here,
+          // offer an easy in-app retry instead of making the user restart
+          // the whole app (we can't see inside the cross-origin iframe to
+          // detect the error directly, so just offer this proactively).
+          var ageMs=item.createdAt&&item.createdAt.toMillis?(Date.now()-item.createdAt.toMillis()):99999999;
+          if(ageMs<180000){
+            var retryPill=b({id:"cf-retry-"+item.id,css:{position:"absolute",bottom:"12px",left:"50%",transform:"translateX(-50%)",background:"rgba(0,0,0,.6)",color:"white",border:"none",borderRadius:"50px",padding:"8px 16px",fontSize:"12px",fontWeight:700,cursor:"pointer",fontFamily:"inherit",backdropFilter:"blur(4px)",zIndex:3}},"Video still processing? Tap to retry");
+            retryPill.addEventListener("click",function(e){e.stopPropagation();loadCfIframe();});
+            vidWrap.appendChild(retryPill);
+            setTimeout(function(){if(retryPill&&retryPill.parentNode)retryPill.remove();},15000);
+          }
+        }
+        cfThumb.addEventListener("click",function(){
+          cfThumb.remove();
+          loadCfIframe();
         });
       } else {
         var vidEl=document.createElement("video");
