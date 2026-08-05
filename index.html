@@ -4115,15 +4115,18 @@ function showPostReactionPicker(postId,touchX,touchY){
     eb.addEventListener("click",function(e){
       e.stopPropagation();
       var curRx=ST.reactions[postId];
-      ST.reactions[postId]=curRx===em?null:em;
+      var newRx=curRx===em?null:em;
       picker.remove();
       var grpId=ST.group||"imm";
-      if(currentUser&&ST.reactions[postId]){
-        db.collection("reactions").doc(postId+"_"+currentUser.uid).set({postId:postId,uid:currentUser.uid,em:ST.reactions[postId],name:ST.name||"Someone",groupId:grpId}).catch(function(){});
+      if(currentUser&&newRx){
+        db.collection("reactions").doc(postId+"_"+currentUser.uid).set({postId:postId,uid:currentUser.uid,em:newRx,name:ST.name||"Someone",groupId:grpId})
+          .then(function(){ST.reactions[postId]=newRx;redraw();})
+          .catch(function(err){console.log("reaction save failed",err);showTopToast("Couldn't save your reaction — check your connection.");});
       } else if(currentUser){
-        db.collection("reactions").doc(postId+"_"+currentUser.uid).delete().catch(function(){});
+        db.collection("reactions").doc(postId+"_"+currentUser.uid).delete()
+          .then(function(){ST.reactions[postId]=newRx;redraw();})
+          .catch(function(err){console.log("reaction remove failed",err);showTopToast("Couldn't update your reaction — check your connection.");});
       }
-      redraw();
     });
     picker.appendChild(eb);
   });
