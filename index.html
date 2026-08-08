@@ -4449,6 +4449,9 @@ redraw();
 var _lastUid=null;
 // Handle Android back button
 window.addEventListener("popstate",function(){
+  if(ST.cmtOpen){ST.cmtOpen=null;ST.cmtIn="";redraw();history.pushState(null,"",location.href);return;}
+  if(ST.upOpen){ST.upOpen=false;ST.upStep=1;ST.upCap="";ST.upCi="";redraw();history.pushState(null,"",location.href);return;}
+  if(ST.compose){ST.compose=false;redraw();history.pushState(null,"",location.href);return;}
   if(ST.openChat){ST.openChat=null;redraw();history.pushState(null,"",location.href);return;}
   if(ST.tab!=="feed"){ST.tab="feed";redraw();history.pushState(null,"",location.href);return;}
 });
