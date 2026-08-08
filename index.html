@@ -954,7 +954,7 @@ var TH={
 function th(id){return TH[id]||TH.imm;}
 
 var ST={
-  feedRendered:{},allReactions:{},
+  feedRendered:{},allReactions:{},upPhotos:[],
   boarded:false,obStep:0,obName:"",obAvatar:"\uD83D\uDC69",obPhoto:null,
   obGrpName:"",obGrpEmoji:"\u2764\uFE0F",obGrpPhoto:null,joinInvite:false,inviteError:null,fbMembers:{},
   editingGroup:null,editingBirthdays:false,creatingGroup:false,showGroupSwitcher:false,navExpanded:false,showTutorial:false,tutorialStep:0,replyTo:null,profileWallpaper:null,sessionStart:Date.now(),memoryDay:null,memoryPosts:null,appReady:false,
@@ -1949,6 +1949,10 @@ function buildItem(item,t){
         upImg.src=item.localPreviewUrl;
         upWrap.appendChild(upImg);
       }
+      if(item.extraCount>0){
+        var upExtraBadge=d({css:{position:"absolute",top:"10px",right:"10px",background:"rgba(0,0,0,.55)",color:"white",fontSize:"11px",fontWeight:800,padding:"4px 10px",borderRadius:"50px"}},"+"+item.extraCount+" more");
+        upWrap.appendChild(upExtraBadge);
+      }
       // Subtle posting indicator overlay at bottom, doesn't block viewing the content
       var upOverlay=d({css:{position:"absolute",left:"0",right:"0",bottom:"0",background:"linear-gradient(transparent,rgba(0,0,0,.65))",padding:"24px 16px 12px"}});
       var upRow=d({css:{display:"flex",alignItems:"center",gap:"8px",marginBottom:"8px"}});
@@ -2095,6 +2099,79 @@ function buildItem(item,t){
         vidWrap.appendChild(vRxStack);
       }
       card.appendChild(vidWrap);
+    } else if(item.imgUrls&&item.imgUrls.length>1){
+      var carousel=d({css:{display:"flex",overflowX:"auto",scrollSnapType:"x mandatory",WebkitOverflowScrolling:"touch",background:"#1a1a1a"}});
+      carousel.style.scrollbarWidth="none";
+      item.imgUrls.forEach(function(cUrl){
+        var slide=el("img",{css:{width:"100%",flexShrink:0,scrollSnapAlign:"start",maxHeight:"85vh",objectFit:"contain",display:"block",cursor:"zoom-in",background:"#1a1a1a"}});
+        slide.src=cUrl;
+        slide.addEventListener("click",function(){showFullScreen(cUrl);});
+        carousel.appendChild(slide);
+      });
+      attachLongPressReact(carousel,item.id);
+      var carouselWrap=d({css:{position:"relative"}});
+      carouselWrap.appendChild(carousel);
+      // Author overlay top-left (same as single photo)
+      var cAuthorOv=d({css:{position:"absolute",top:"8px",left:"8px",display:"flex",alignItems:"center",gap:"7px",background:"rgba(0,0,0,.45)",borderRadius:"50px",padding:"4px 10px 4px 4px",backdropFilter:"blur(4px)"}});
+      var cOav=d({css:{width:"26px",height:"26px",borderRadius:"50%",overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"14px",flexShrink:0,background:"rgba(255,255,255,.2)"}});
+      var cOavVal=item.av||"\uD83D\uDC64";
+      if(cOavVal.startsWith("http")||cOavVal.startsWith("data:")){
+        var cOavImg=document.createElement("img");cOavImg.src=cOavVal;cOavImg.style.cssText="width:100%;height:100%;object-fit:cover;border-radius:50%;";cOav.appendChild(cOavImg);
+      } else if(!cOavVal||cOavVal.length>8||/^[A-Za-z0-9_-]{8,}$/.test(cOavVal)){cOav.textContent="\uD83D\uDC64";}
+      else{cOav.textContent=cOavVal;}
+      cAuthorOv.appendChild(cOav);
+      var cAuthorTxt=d({css:{display:"flex",flexDirection:"column"}});
+      cAuthorTxt.appendChild(d({css:{fontSize:"12px",fontWeight:800,color:"white",lineHeight:"1.2"}},item.name));
+      cAuthorTxt.appendChild(d({css:{fontSize:"10px",color:"rgba(255,255,255,.75)"}},item.createdAt?timeAgo(item.createdAt):item.time));
+      cAuthorOv.appendChild(cAuthorTxt);
+      carouselWrap.appendChild(cAuthorOv);
+      // Photo counter badge, top-right
+      var countBadge=d({css:{position:"absolute",top:"8px",right:"8px",background:"rgba(0,0,0,.5)",color:"white",fontSize:"11px",fontWeight:700,padding:"4px 10px",borderRadius:"50px"}});
+      countBadge.textContent="1/"+item.imgUrls.length;
+      carouselWrap.appendChild(countBadge);
+      // Delete button - shown below the counter if own post
+      if(item.name===(ST.name||"You")||item.av===ST.avatar){
+        var cDelOv=b({css:{position:"absolute",top:"42px",right:"8px",background:"rgba(0,0,0,.45)",border:"none",color:"white",fontSize:"13px",borderRadius:"50px",padding:"4px 10px",cursor:"pointer",fontFamily:"inherit",backdropFilter:"blur(4px)"}},"···");
+        (function(postId){
+          cDelOv.addEventListener("click",function(){
+            if(confirm("Delete this post?")){
+              db.collection("feed").doc(postId).delete().then(function(){
+                ST.feed[ST.group]=ST.feed[ST.group].filter(function(x){return x.id!==postId;});redraw();
+              });
+            }
+          });
+        })(item.id);
+        carouselWrap.appendChild(cDelOv);
+      }
+      // Dot indicators, bottom-center
+      var dotsRow=d({css:{position:"absolute",bottom:"8px",left:"50%",transform:"translateX(-50%)",display:"flex",gap:"5px",background:"rgba(0,0,0,.4)",padding:"5px 8px",borderRadius:"50px"}});
+      var dotEls=item.imgUrls.map(function(_,dIdx){
+        var dot=d({css:{width:"6px",height:"6px",borderRadius:"50%",background:dIdx===0?"white":"rgba(255,255,255,.4)",transition:"background .2s"}});
+        dotsRow.appendChild(dot);return dot;
+      });
+      carouselWrap.appendChild(dotsRow);
+      carousel.addEventListener("scroll",function(){
+        var idx=Math.round(carousel.scrollLeft/Math.max(carousel.clientWidth,1));
+        dotEls.forEach(function(dot,i){dot.style.background=i===idx?"white":"rgba(255,255,255,.4)";});
+        countBadge.textContent=(idx+1)+"/"+item.imgUrls.length;
+      });
+      // Stacked reaction bubbles - same as single photo
+      var cRxList=(ST.allReactions&&ST.allReactions[item.id])||[];
+      if(cRxList.length){
+        var cRxStack=d({css:{position:"absolute",bottom:"8px",right:"8px",display:"flex",flexDirection:"row-reverse",alignItems:"center"}});
+        var cShown=cRxList.slice(-5);
+        cShown.forEach(function(r,idx){
+          var cBub=d({css:{width:"28px",height:"28px",borderRadius:"50%",background:"white",border:"2px solid white",boxShadow:"0 1px 4px rgba(0,0,0,.25)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"14px",marginLeft:idx===0?"0":"-10px",flexShrink:0}});
+          cBub.textContent=r.em;cRxStack.appendChild(cBub);
+        });
+        if(cRxList.length>cShown.length){
+          var cMoreBub=d({css:{width:"28px",height:"28px",borderRadius:"50%",background:"rgba(0,0,0,.6)",border:"2px solid white",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"10px",color:"white",fontWeight:800,marginLeft:"-10px",flexShrink:0}});
+          cMoreBub.textContent="+"+(cRxList.length-cShown.length);cRxStack.appendChild(cMoreBub);
+        }
+        cRxStack.addEventListener("click",function(e){e.stopPropagation();showPostReactionPicker(item.id,e.clientX,e.clientY);});
+        carouselWrap.appendChild(cRxStack);
+      }
+      card.appendChild(carouselWrap);
     } else if(item.imgUrl){
       var img=el("img",{css:{width:"100%",maxHeight:"85vh",objectFit:"contain",display:"block",cursor:"zoom-in",background:"#1a1a1a",WebkitTouchCallout:"none",WebkitUserSelect:"none",pointerEvents:"auto"}});
       img.addEventListener("contextmenu",function(e){e.preventDefault();return false;});
@@ -3426,7 +3503,7 @@ function buildCompose(t,grp){
     var row=d({css:{display:"flex",alignItems:"center",gap:"10px",padding:"13px",borderRadius:"14px",background:t.bg,border:"2px solid "+t.ap,cursor:"pointer",marginBottom:"8px"}});
     var ic=d({html:opt[0],css:{fontSize:"22px",width:"42px",height:"42px",borderRadius:"11px",background:"white",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}});row.appendChild(ic);
     row.appendChild(d({css:{fontSize:"14px",fontWeight:700,color:"#3D2314"}},opt[1]));row.appendChild(d({css:{marginLeft:"auto",fontSize:"18px",color:t.al}},">"));
-    row.addEventListener("click",function(){ST.upType=opt[2];ST.upStep=opt[2]==="photo"?2:3;ST.upCap="";ST.upCi="";ST.upImg=null;ST.compose=false;ST.upOpen=true;redraw();});sh.appendChild(row);
+    row.addEventListener("click",function(){ST.upType=opt[2];ST.upStep=opt[2]==="photo"?2:3;ST.upCap="";ST.upCi="";ST.upImg=null;ST.upPhotos=[];ST.upIsVideo=false;ST.upVideoFile=null;ST.compose=false;ST.upOpen=true;redraw();});sh.appendChild(row);
   });ov.appendChild(sh);return ov;
 }
 
@@ -3492,26 +3569,77 @@ function buildUpload(t,grp){
     ov.appendChild(sh);return ov;
   }
   if(ST.upStep===2){
-    sh.appendChild(upHdr(ST.upIsVideo?"Add Video":"Add Photo",null));
+    sh.appendChild(upHdr(ST.upIsVideo?"Add Video":"Add Photos",null));
     var body=d({cls:"scr",css:{padding:"14px 15px"}});
-    var fi=el("input",{type:"file",accept:"image/*,video/*",capture:false,css:{display:"none"}});
+    if(!ST.upPhotos)ST.upPhotos=[]; // [{dataUrl,file}] - supports multiple photos per post
+    var fi=el("input",{type:"file",accept:"image/*,video/*",capture:false,multiple:true,css:{display:"none"}});
     // No capture attribute - lets user choose camera or gallery
     fi.addEventListener("change",function(){
-      var f=this.files&&this.files[0];if(!f)return;
-      ST.upIsVideo=f.type.startsWith("video/");
-      ST.upVideoFile=f;
-      // Warn if video is over 50MB
-      // Cloudflare Stream handles compression - no size limit needed
-      var r=new FileReader();
-      r.onload=function(e){ST.upImg=e.target.result;redraw();};
-      r.readAsDataURL(f);
+      var files=Array.prototype.slice.call(this.files||[]);
+      if(!files.length)return;
+      // If the first selected file is a video, treat as single-video mode
+      // (photos and video aren't mixed in one post, matching how most
+      // photo/video apps handle multi-select)
+      if(files[0].type.startsWith("video/")){
+        ST.upIsVideo=true;ST.upVideoFile=files[0];ST.upPhotos=[];
+        var vr=new FileReader();
+        vr.onload=function(e){ST.upImg=e.target.result;redraw();};
+        vr.readAsDataURL(files[0]);
+        return;
+      }
+      ST.upIsVideo=false;ST.upVideoFile=null;
+      var photoFiles=files.filter(function(f){return f.type.startsWith("image/");});
+      var remaining=photoFiles.length;
+      photoFiles.forEach(function(f){
+        var r=new FileReader();
+        r.onload=function(e){
+          ST.upPhotos.push({dataUrl:e.target.result,file:f});
+          remaining--;
+          if(remaining===0)redraw();
+        };
+        r.readAsDataURL(f);
+      });
     });
-    var pa=d({css:{width:"100%",aspectRatio:"4/3",borderRadius:"16px",border:"2.5px dashed "+t.al,background:"linear-gradient(135deg,"+t.ap+","+t.sb+")",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",marginBottom:"12px",overflow:"hidden",position:"relative"}});
-    if(ST.upImg){var pi=el("img",{css:{width:"100%",height:"100%",objectFit:"cover"}});pi.src=ST.upImg;pa.appendChild(pi);var changeBtn=b({css:{position:"absolute",bottom:"10px",right:"10px",padding:"6px 12px",borderRadius:"50px",background:"rgba(0,0,0,.55)",border:"none",color:"white",fontSize:"12px",fontWeight:700,cursor:"pointer",fontFamily:"inherit"}},"Change");changeBtn.addEventListener("click",function(e){e.stopPropagation();fi.click();});pa.appendChild(changeBtn);}
-    else{var ico=d({css:{fontSize:"38px",marginBottom:"6px"}});ico.textContent="\uD83D\uDCF7";pa.appendChild(ico);pa.appendChild(d({css:{fontSize:"14px",fontWeight:700,color:t.ad}},"Tap to add a photo"));
-    var tapBtn=b({css:{marginTop:"10px",padding:"9px 22px",borderRadius:"50px",background:t.a,border:"none",color:"white",fontSize:"13px",fontWeight:700,cursor:"pointer",fontFamily:"inherit"}},"Choose Photo");
-    tapBtn.addEventListener("click",function(e){e.stopPropagation();fi.click();});pa.appendChild(tapBtn);}
-    pa.addEventListener("click",function(){fi.click();});body.appendChild(pa);body.appendChild(fi);
+    var pa=d({css:{width:"100%",borderRadius:"16px",border:"2.5px dashed "+t.al,background:"linear-gradient(135deg,"+t.ap+","+t.sb+")",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",marginBottom:"12px",overflow:"hidden",position:"relative"}});
+    if(!ST.upIsVideo&&ST.upPhotos.length>0){
+      pa.style.border="none";pa.style.background="transparent";pa.style.aspectRatio="";pa.style.cursor="default";
+      var stripWrap=d({css:{display:"flex",flexDirection:"column",gap:"8px"}});
+      var strip=d({css:{display:"flex",gap:"8px",overflowX:"auto",paddingBottom:"4px"}});
+      ST.upPhotos.forEach(function(ph,idx){
+        var thumb=d({css:{position:"relative",width:"88px",height:"88px",borderRadius:"12px",overflow:"hidden",flexShrink:0,background:"#1a1a1a"}});
+        var thumbImg=document.createElement("img");thumbImg.src=ph.dataUrl;
+        thumbImg.style.cssText="width:100%;height:100%;object-fit:cover;display:block;";
+        thumb.appendChild(thumbImg);
+        if(idx===0){
+          var mainBadge=d({css:{position:"absolute",top:"4px",left:"4px",background:"rgba(0,0,0,.6)",color:"white",fontSize:"9px",fontWeight:800,padding:"2px 6px",borderRadius:"50px"}},"COVER");
+          thumb.appendChild(mainBadge);
+        }
+        var rmBtn=b({css:{position:"absolute",top:"4px",right:"4px",width:"20px",height:"20px",borderRadius:"50%",background:"rgba(0,0,0,.65)",border:"none",color:"white",fontSize:"12px",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0,fontFamily:"inherit"}},"\u2715");
+        rmBtn.addEventListener("click",function(e){e.stopPropagation();ST.upPhotos.splice(idx,1);redraw();});
+        thumb.appendChild(rmBtn);
+        strip.appendChild(thumb);
+      });
+      var addMoreBtn=d({css:{width:"88px",height:"88px",borderRadius:"12px",border:"2px dashed "+t.al,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0,color:t.ad,fontSize:"11px",fontWeight:700,gap:"4px"}});
+      addMoreBtn.appendChild(d({css:{fontSize:"20px"}},"+"));
+      addMoreBtn.appendChild(document.createTextNode("Add more"));
+      addMoreBtn.addEventListener("click",function(){fi.click();});
+      strip.appendChild(addMoreBtn);
+      stripWrap.appendChild(strip);
+      if(ST.upPhotos.length>1){
+        stripWrap.appendChild(d({css:{fontSize:"11px",color:t.ad,textAlign:"center"}},ST.upPhotos.length+" photos \u2014 first one is the cover"));
+      }
+      pa.appendChild(stripWrap);
+    } else if(!ST.upIsVideo){
+      var ico=d({css:{fontSize:"38px",marginBottom:"6px"}});ico.textContent="\uD83D\uDCF7";pa.appendChild(ico);pa.appendChild(d({css:{fontSize:"14px",fontWeight:700,color:t.ad}},"Tap to add photos"));
+      var tapBtn=b({css:{marginTop:"10px",padding:"9px 22px",borderRadius:"50px",background:t.a,border:"none",color:"white",fontSize:"13px",fontWeight:700,cursor:"pointer",fontFamily:"inherit"}},"Choose Photos");
+      tapBtn.addEventListener("click",function(e){e.stopPropagation();fi.click();});pa.appendChild(tapBtn);
+      pa.style.aspectRatio="4/3";
+      pa.addEventListener("click",function(){fi.click();});
+    }
+    if(ST.upIsVideo){
+      pa.style.display="none";
+    }
+    body.appendChild(pa);body.appendChild(fi);
     if(ST.upIsVideo&&ST.upImg){
       var vidPrev=d({css:{borderRadius:"12px",overflow:"hidden",marginBottom:"12px",position:"relative",background:"#1a1a1a"}});
       if(ST.upImg!=="video-placeholder"){
@@ -3537,7 +3665,9 @@ function buildUpload(t,grp){
         fallback.appendChild(d({css:{fontSize:"13px",color:"rgba(255,255,255,.7)"}},ST.upVideoFile?ST.upVideoFile.name:"Video ready"));
         vidPrev.appendChild(fallback);
       }
-      body.appendChild(vidPrev);
+      var changeVidBtn=b({css:{width:"100%",padding:"8px",borderRadius:"12px",background:t.ap,border:"none",fontSize:"12px",fontWeight:700,color:t.ad,cursor:"pointer",fontFamily:"inherit",marginTop:"6px"}},"Choose Different Video");
+      changeVidBtn.addEventListener("click",function(){fi.click();});
+      body.appendChild(vidPrev);body.appendChild(changeVidBtn);
     }sh.appendChild(body);
     var ft=d({css:{padding:"12px 15px 26px",flexShrink:0}});
     // Caption input directly on photo step
@@ -3547,9 +3677,10 @@ function buildUpload(t,grp){
     capTa.style.cssText="width:100%;padding:10px 12px;border-radius:12px;border:1.5px solid #F5DDD1;background:#FAF6F0;font-size:14px;color:#3D2314;outline:none;resize:none;line-height:1.5;font-family:inherit;margin-bottom:8px;";
     capTa.value=ST.upCap;capTa.addEventListener("input",function(){ST.upCap=this.value;});
     body.appendChild(capTa);
-    var nb=b({css:{width:"100%",padding:"13px",borderRadius:"50px",background:t.a,border:"none",color:"white",fontSize:"14px",fontWeight:800,cursor:"pointer",fontFamily:"inherit"}},ST.upImg?"Share":"Tap photo above to add");
+    var hasContent=ST.upIsVideo?!!ST.upImg:ST.upPhotos.length>0;
+    var nb=b({css:{width:"100%",padding:"13px",borderRadius:"50px",background:t.a,border:"none",color:"white",fontSize:"14px",fontWeight:800,cursor:"pointer",fontFamily:"inherit"}},hasContent?("Share"+(ST.upPhotos.length>1?" "+ST.upPhotos.length+" Photos":"")):"Add a photo or video first");
     nb.addEventListener("click",function(){
-      if(!ST.upImg){pa.style.border="2.5px solid #C4714A";setTimeout(function(){pa.style.border="2.5px dashed "+t.al;},800);return;}
+      if(!hasContent){pa.style.border="2.5px solid #C4714A";setTimeout(function(){pa.style.border="2.5px dashed "+t.al;},800);return;}
       submitPost();
     });ft.appendChild(nb);sh.appendChild(ft);
   }
@@ -3929,6 +4060,7 @@ function submitPost(){
   var imgData=ST.upImg;
   var vidFile=ST.upVideoFile;
   var isVid=ST.upIsVideo;
+  var photosArr=(ST.upPhotos||[]).slice(); // multiple photos, if selected
   var postType=ST.upType;
   var postStatus=ST.upCi;
   var postCap=ST.upCap;
@@ -3940,7 +4072,7 @@ function submitPost(){
 
   // Close sheet immediately
   ST.upOpen=false;ST.upStep=1;ST.upCi="";ST.upCap="";
-ST.upImg=null;
+ST.upImg=null;ST.upPhotos=[];
   redraw();
 
   var p;
@@ -3986,14 +4118,36 @@ ST.upImg=null;
     }
     var uploadRef;
     var cfResultThumb=null;
+    var multiUrls=null; // set if uploading more than one photo
     if(isVid&&vidFile){
       uploadRef=uploadToCloudflareStream(vidFile,updateProgress).then(function(result){
         cfResultThumb=result.thumbUrl;
         return result.videoUrl;
       });
+    } else if(photosArr.length>1){
+      // Multiple photos - upload all in parallel, combine progress across all of them
+      var fileProgress=photosArr.map(function(){return 0;});
+      function updateCombinedProgress(){
+        var total=fileProgress.reduce(function(a,b){return a+b;},0)/fileProgress.length;
+        updateProgress(total);
+      }
+      var uploadPromises=photosArr.map(function(ph,idx){
+        var pRef=storage.ref("photos/"+uid+"/"+Date.now()+"_"+idx+".jpg");
+        var pTask=pRef.put(dataUrlToBlob(ph.dataUrl));
+        pTask.on("state_changed",function(snap){
+          fileProgress[idx]=snap.bytesTransferred/snap.totalBytes*100;
+          updateCombinedProgress();
+        });
+        return pTask.then(function(s){return s.ref.getDownloadURL();});
+      });
+      uploadRef=Promise.all(uploadPromises).then(function(urls){
+        multiUrls=urls;
+        return urls[0];
+      });
     } else {
+      var singlePhotoData=photosArr.length===1?photosArr[0].dataUrl:imgData;
       var photoRef=storage.ref("photos/"+uid+"/"+Date.now()+".jpg");
-      var photoTask=photoRef.put(dataUrlToBlob(imgData));
+      var photoTask=photoRef.put(dataUrlToBlob(singlePhotoData));
       photoTask.on("state_changed",function(snap){
         var pct=snap.bytesTransferred/snap.totalBytes*100;
         updateProgress(pct);
@@ -4002,8 +4156,8 @@ ST.upImg=null;
     }
     // Show uploading indicator in feed - use actual local file as instant preview
     var tempId="temp-"+Date.now();
-    var localPreviewUrl=isVid&&vidFile?URL.createObjectURL(vidFile):imgData;
-    var tempPost={id:tempId,type:isVid?"video":"photo",isVideo:isVid,av:postAv,name:postName,time:"Just now",cap:postCap,groupId:postGroup,emoji:isVid?"\uD83C\uDFA5":"\uD83D\uDCF7",uploading:true,localPreviewUrl:localPreviewUrl};
+    var localPreviewUrl=isVid&&vidFile?URL.createObjectURL(vidFile):(photosArr.length?photosArr[0].dataUrl:imgData);
+    var tempPost={id:tempId,type:isVid?"video":"photo",isVideo:isVid,av:postAv,name:postName,time:"Just now",cap:postCap,groupId:postGroup,emoji:isVid?"\uD83C\uDFA5":"\uD83D\uDCF7",uploading:true,localPreviewUrl:localPreviewUrl,extraCount:photosArr.length>1?photosArr.length-1:0};
     if(!ST.feed[postGroup])ST.feed[postGroup]=[];
     ST.feed[postGroup].unshift(tempPost);
     // Make sure tab is on feed and group is correct
@@ -4016,14 +4170,15 @@ ST.upImg=null;
       ST.feed[postGroup]=ST.feed[postGroup].filter(function(x){return x.id!==tempId;});
       if(isVid&&vidFile){try{URL.revokeObjectURL(localPreviewUrl);}catch(e){}}
       p.imgUrl=url;
+      if(multiUrls&&multiUrls.length>1)p.imgUrls=multiUrls;
       if(isVid&&cfResultThumb)p.thumbUrl=cfResultThumb; // Cloudflare-hosted thumbnail URL (short), not base64
       return postToFeed(p);
     }).then(function(){
-      broadcastNotif(postName+" posted","Shared a "+(isVid?"video":"photo"),postGroup);
+      broadcastNotif(postName+" posted","Shared a "+(isVid?"video":(multiUrls&&multiUrls.length>1?multiUrls.length+" photos":"photo")),postGroup);
       // Show success toast
       var toast=document.createElement("div");
       toast.style.cssText="position:fixed;top:70px;left:50%;transform:translateX(-50%);background:#3D2314;color:white;padding:12px 20px;border-radius:50px;font-family:Nunito,sans-serif;font-size:14px;font-weight:700;z-index:999;white-space:nowrap;animation:fadeUp .3s ease;";
-      toast.textContent=(isVid?"\uD83C\uDFA5":"\uD83D\uDCF8")+" "+(isVid?"Video":"Photo")+" posted!";
+      toast.textContent=(isVid?"\uD83C\uDFA5":"\uD83D\uDCF8")+" "+(isVid?"Video":(multiUrls&&multiUrls.length>1?multiUrls.length+" photos":"Photo"))+" posted!";
       document.body.appendChild(toast);
       setTimeout(function(){toast.remove();},3000);
       // Refresh feed
