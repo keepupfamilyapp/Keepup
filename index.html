@@ -3572,26 +3572,14 @@ function buildUpload(t,grp){
     sh.appendChild(upHdr(ST.upIsVideo?"Add Video":"Add Photos",null));
     var body=d({cls:"scr",css:{padding:"14px 15px"}});
     if(!ST.upPhotos)ST.upPhotos=[]; // [{dataUrl,file}] - supports multiple photos per post
-    var fi=el("input",{type:"file",accept:"image/*,video/*",css:{display:"none"}});
-    fi.multiple=true; // set directly rather than via generic setAttribute, for reliability across browsers
-    // No capture attribute - lets user choose camera or gallery
-    fi.addEventListener("change",function(){
+    var fiPhotos=el("input",{type:"file",accept:"image/*",css:{display:"none"}});
+    fiPhotos.multiple=true;
+    fiPhotos.addEventListener("change",function(){
       var files=Array.prototype.slice.call(this.files||[]);
       if(!files.length)return;
-      // If the first selected file is a video, treat as single-video mode
-      // (photos and video aren't mixed in one post, matching how most
-      // photo/video apps handle multi-select)
-      if(files[0].type.startsWith("video/")){
-        ST.upIsVideo=true;ST.upVideoFile=files[0];ST.upPhotos=[];
-        var vr=new FileReader();
-        vr.onload=function(e){ST.upImg=e.target.result;redraw();};
-        vr.readAsDataURL(files[0]);
-        return;
-      }
       ST.upIsVideo=false;ST.upVideoFile=null;
-      var photoFiles=files.filter(function(f){return f.type.startsWith("image/");});
-      var remaining=photoFiles.length;
-      photoFiles.forEach(function(f){
+      var remaining=files.length;
+      files.forEach(function(f){
         var r=new FileReader();
         r.onload=function(e){
           ST.upPhotos.push({dataUrl:e.target.result,file:f});
@@ -3601,6 +3589,15 @@ function buildUpload(t,grp){
         r.readAsDataURL(f);
       });
     });
+    var fiVideo=el("input",{type:"file",accept:"video/*",css:{display:"none"}});
+    fiVideo.addEventListener("change",function(){
+      var f=this.files&&this.files[0];if(!f)return;
+      ST.upIsVideo=true;ST.upVideoFile=f;ST.upPhotos=[];
+      var vr=new FileReader();
+      vr.onload=function(e){ST.upImg=e.target.result;redraw();};
+      vr.readAsDataURL(f);
+    });
+    var fi=fiPhotos; // kept for compatibility with references below
     var pa=d({css:{width:"100%",borderRadius:"16px",border:"2.5px dashed "+t.al,background:"linear-gradient(135deg,"+t.ap+","+t.sb+")",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",marginBottom:"12px",overflow:"hidden",position:"relative"}});
     if(!ST.upIsVideo&&ST.upPhotos.length>0){
       pa.style.border="none";pa.style.background="transparent";pa.style.aspectRatio="";pa.style.cursor="default";
@@ -3633,14 +3630,16 @@ function buildUpload(t,grp){
     } else if(!ST.upIsVideo){
       var ico=d({css:{fontSize:"38px",marginBottom:"6px"}});ico.textContent="\uD83D\uDCF7";pa.appendChild(ico);pa.appendChild(d({css:{fontSize:"14px",fontWeight:700,color:t.ad}},"Tap to add photos"));
       var tapBtn=b({css:{marginTop:"10px",padding:"9px 22px",borderRadius:"50px",background:t.a,border:"none",color:"white",fontSize:"13px",fontWeight:700,cursor:"pointer",fontFamily:"inherit"}},"Choose Photos");
-      tapBtn.addEventListener("click",function(e){e.stopPropagation();fi.click();});pa.appendChild(tapBtn);
+      tapBtn.addEventListener("click",function(e){e.stopPropagation();fiPhotos.click();});pa.appendChild(tapBtn);
+      var vidLink=b({css:{marginTop:"8px",padding:"6px 14px",borderRadius:"50px",background:"transparent",border:"none",color:t.ad,fontSize:"12px",fontWeight:700,cursor:"pointer",fontFamily:"inherit",textDecoration:"underline"}},"or add a video instead");
+      vidLink.addEventListener("click",function(e){e.stopPropagation();fiVideo.click();});pa.appendChild(vidLink);
       pa.style.aspectRatio="4/3";
-      pa.addEventListener("click",function(){fi.click();});
+      pa.addEventListener("click",function(){fiPhotos.click();});
     }
     if(ST.upIsVideo){
       pa.style.display="none";
     }
-    body.appendChild(pa);body.appendChild(fi);
+    body.appendChild(pa);body.appendChild(fiPhotos);body.appendChild(fiVideo);
     if(ST.upIsVideo&&ST.upImg){
       var vidPrev=d({css:{borderRadius:"12px",overflow:"hidden",marginBottom:"12px",position:"relative",background:"#1a1a1a"}});
       if(ST.upImg!=="video-placeholder"){
@@ -3667,7 +3666,7 @@ function buildUpload(t,grp){
         vidPrev.appendChild(fallback);
       }
       var changeVidBtn=b({css:{width:"100%",padding:"8px",borderRadius:"12px",background:t.ap,border:"none",fontSize:"12px",fontWeight:700,color:t.ad,cursor:"pointer",fontFamily:"inherit",marginTop:"6px"}},"Choose Different Video");
-      changeVidBtn.addEventListener("click",function(){fi.click();});
+      changeVidBtn.addEventListener("click",function(){fiVideo.click();});
       body.appendChild(vidPrev);body.appendChild(changeVidBtn);
     }sh.appendChild(body);
     var ft=d({css:{padding:"12px 15px 26px",flexShrink:0}});
