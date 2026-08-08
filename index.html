@@ -3631,6 +3631,8 @@ function buildUpload(t,grp){
       var ico=d({css:{fontSize:"38px",marginBottom:"6px"}});ico.textContent="\uD83D\uDCF7";pa.appendChild(ico);pa.appendChild(d({css:{fontSize:"14px",fontWeight:700,color:t.ad}},"Tap to add photos"));
       var tapBtn=b({css:{marginTop:"10px",padding:"9px 22px",borderRadius:"50px",background:t.a,border:"none",color:"white",fontSize:"13px",fontWeight:700,cursor:"pointer",fontFamily:"inherit"}},"Choose Photos");
       tapBtn.addEventListener("click",function(e){e.stopPropagation();fiPhotos.click();});pa.appendChild(tapBtn);
+      var tipTxt=d({css:{marginTop:"10px",fontSize:"11px",color:t.ad,textAlign:"center",lineHeight:1.5,maxWidth:"220px"}},"Only picking one at a time? Just tap \u201CChoose Photos\u201D again after each one \u2014 they'll add up together.");
+      pa.appendChild(tipTxt);
       var vidLink=b({css:{marginTop:"8px",padding:"6px 14px",borderRadius:"50px",background:"transparent",border:"none",color:t.ad,fontSize:"12px",fontWeight:700,cursor:"pointer",fontFamily:"inherit",textDecoration:"underline"}},"or add a video instead");
       vidLink.addEventListener("click",function(e){e.stopPropagation();fiVideo.click();});pa.appendChild(vidLink);
       pa.style.aspectRatio="4/3";
