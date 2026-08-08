@@ -3572,7 +3572,8 @@ function buildUpload(t,grp){
     sh.appendChild(upHdr(ST.upIsVideo?"Add Video":"Add Photos",null));
     var body=d({cls:"scr",css:{padding:"14px 15px"}});
     if(!ST.upPhotos)ST.upPhotos=[]; // [{dataUrl,file}] - supports multiple photos per post
-    var fi=el("input",{type:"file",accept:"image/*,video/*",capture:false,multiple:true,css:{display:"none"}});
+    var fi=el("input",{type:"file",accept:"image/*,video/*",css:{display:"none"}});
+    fi.multiple=true; // set directly rather than via generic setAttribute, for reliability across browsers
     // No capture attribute - lets user choose camera or gallery
     fi.addEventListener("change",function(){
       var files=Array.prototype.slice.call(this.files||[]);
