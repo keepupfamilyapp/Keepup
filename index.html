@@ -208,8 +208,14 @@ function initNotifications(){
     })
     .catch(function(e){console.log("Notification setup failed:",e.code,e.message);});
 
-  // Handle foreground messages
-  if(messaging){messaging.onMessage(function(payload){
+  // Handle foreground messages - guarded so this only ever attaches once,
+  // since initNotifications() can legitimately be called multiple times
+  // (onboarding, retries, existing-user restore) and each call would
+  // otherwise stack another listener, causing duplicate notification banners
+  // for a single real message.
+  if(messaging&&!window._fgMsgListenerAttached){
+    window._fgMsgListenerAttached=true;
+    messaging.onMessage(function(payload){
     var title=payload.notification&&payload.notification.title||"Keep Up";
     var body=payload.notification&&payload.notification.body||"New activity in your family";
     showInAppNotif(title,body);
@@ -528,7 +534,10 @@ function syncOn(){
   var dot=document.getElementById("sync-dot");if(dot)dot.style.display="block";
   // Load notification mute preferences
   db.collection("fcmTokens").doc(currentUser.uid).get().then(function(doc){
-    ST.mutedGroups=(doc.exists&&doc.data().mutedGroups)||[];
+    var d=doc.exists?doc.data():{};
+    ST.mutedGroups=d.mutedGroups||[];
+    ST.muteComments=!!d.muteComments;
+    ST.muteDailyReminder=!!d.muteDailyReminder;
     if(ST.tab==="profile")redraw();
   }).catch(function(){});
   doSync();
@@ -959,7 +968,7 @@ var TH={
 function th(id){return TH[id]||TH.imm;}
 
 var ST={
-  feedRendered:{},allReactions:{},upPhotos:[],mutedGroups:[],
+  feedRendered:{},allReactions:{},upPhotos:[],mutedGroups:[],muteComments:false,muteDailyReminder:false,
   boarded:false,obStep:0,obName:"",obAvatar:"\uD83D\uDC69",obPhoto:null,
   obGrpName:"",obGrpEmoji:"\u2764\uFE0F",obGrpPhoto:null,joinInvite:false,inviteError:null,fbMembers:{},
   editingGroup:null,editingBirthdays:false,creatingGroup:false,showGroupSwitcher:false,navExpanded:false,showTutorial:false,tutorialStep:0,replyTo:null,profileWallpaper:null,sessionStart:Date.now(),memoryDay:null,memoryPosts:null,appReady:false,
@@ -3416,6 +3425,35 @@ function buildProfile(t){
     notifBody.appendChild(nRow);
   });
   notifCard.appendChild(notifBody);
+
+  // Simple on/off preferences (not per-group)
+  function buildSimpleToggle(label,sub,stField,fsField){
+    var sRow=d({css:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"9px 0",borderBottom:"1px solid #F5DDD1"}});
+    var sLeft=d({css:{display:"flex",flexDirection:"column"}});
+    sLeft.appendChild(d({css:{fontSize:"13px",fontWeight:700,color:"#3D2314"}},label));
+    if(sub)sLeft.appendChild(d({css:{fontSize:"11px",color:"#9B7B62",marginTop:"1px"}},sub));
+    sRow.appendChild(sLeft);
+    var isOn=!ST[stField];
+    var sToggle=d({css:{width:"42px",height:"24px",borderRadius:"50px",background:isOn?"#C4714A":"#E8DDD3",position:"relative",cursor:"pointer",transition:"background .2s",flexShrink:0}});
+    var sKnob=d({css:{width:"18px",height:"18px",borderRadius:"50%",background:"white",position:"absolute",top:"3px",left:isOn?"21px":"3px",transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,.2)"}});
+    sToggle.appendChild(sKnob);
+    sToggle.addEventListener("click",function(){
+      ST[stField]=!ST[stField];
+      var nowOn=!ST[stField];
+      sToggle.style.background=nowOn?"#C4714A":"#E8DDD3";
+      sKnob.style.left=nowOn?"21px":"3px";
+      if(currentUser){
+        var upd={};upd[fsField]=ST[stField];
+        db.collection("fcmTokens").doc(currentUser.uid).set(upd,{merge:true}).catch(function(e){console.log("pref save failed",e);showTopToast("Couldn't save that preference - check your connection.");});
+      }
+    });
+    sRow.appendChild(sToggle);
+    return sRow;
+  }
+  var simpleWrap=d({css:{padding:"2px 15px 12px"}});
+  simpleWrap.appendChild(buildSimpleToggle("Comments on my posts","When someone comments on something you shared","muteComments","muteComments"));
+  simpleWrap.appendChild(buildSimpleToggle("Evening reminder","A gentle nudge to check the feed each evening","muteDailyReminder","muteDailyReminder"));
+  notifCard.appendChild(simpleWrap);
   body.appendChild(notifCard);
 
   // Sign out
@@ -4264,7 +4302,7 @@ ST.upImg=null;ST.upPhotos=[];
 function addComment(){
   if(!ST.cmtIn.trim()||!currentUser)return;
   var pid=ST.cmtOpen;
-  var cmt={av:ST.avatar&&ST.avatar.startsWith("data:")?"\uD83D\uDC64":(ST.avatar||"\uD83D\uDC64"),name:ST.name||"You",text:ST.cmtIn.trim(),time:"Just now",postId:String(pid)};
+  var cmt={av:ST.avatar&&ST.avatar.startsWith("data:")?"\uD83D\uDC64":(ST.avatar||"\uD83D\uDC64"),name:ST.name||"You",text:ST.cmtIn.trim(),time:"Just now",postId:String(pid),uid:currentUser.uid};
   ST.cmtIn="";redraw();
   db.collection("comments").add(Object.assign({},cmt,{
     createdAt:firebase.firestore.FieldValue.serverTimestamp()
