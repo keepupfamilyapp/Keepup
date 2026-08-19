@@ -197,7 +197,7 @@ function initNotifications(){
             token:token,uid:uid,name:ST.name,
             groupIds:groupIds,
             updatedAt:firebase.firestore.FieldValue.serverTimestamp()
-          }).then(function(){console.log("Token saved to Firestore!");}).catch(function(e){console.log("token save failed",e);});
+          },{merge:true}).then(function(){console.log("Token saved to Firestore!");}).catch(function(e){console.log("token save failed",e);});
         } else {
           console.log("No uid found - retrying in 3s");
           setTimeout(initNotifications,3000);
@@ -526,6 +526,11 @@ function syncOn(){
   if(!currentUser)return;
   unsubscribers.forEach(function(u){u();});unsubscribers=[];
   var dot=document.getElementById("sync-dot");if(dot)dot.style.display="block";
+  // Load notification mute preferences
+  db.collection("fcmTokens").doc(currentUser.uid).get().then(function(doc){
+    ST.mutedGroups=(doc.exists&&doc.data().mutedGroups)||[];
+    if(ST.tab==="profile")redraw();
+  }).catch(function(){});
   doSync();
 }
 function doSync(){
@@ -954,7 +959,7 @@ var TH={
 function th(id){return TH[id]||TH.imm;}
 
 var ST={
-  feedRendered:{},allReactions:{},upPhotos:[],
+  feedRendered:{},allReactions:{},upPhotos:[],mutedGroups:[],
   boarded:false,obStep:0,obName:"",obAvatar:"\uD83D\uDC69",obPhoto:null,
   obGrpName:"",obGrpEmoji:"\u2764\uFE0F",obGrpPhoto:null,joinInvite:false,inviteError:null,fbMembers:{},
   editingGroup:null,editingBirthdays:false,creatingGroup:false,showGroupSwitcher:false,navExpanded:false,showTutorial:false,tutorialStep:0,replyTo:null,profileWallpaper:null,sessionStart:Date.now(),memoryDay:null,memoryPosts:null,appReady:false,
@@ -3374,6 +3379,45 @@ function buildProfile(t){
   bdayRow.appendChild(bdayDisp);bdayRow.appendChild(bdayEditBtn);
   bdayCard.appendChild(bdayRow);body.appendChild(bdayCard);
 
+  // Notification preferences - per group toggle for "new post" alerts
+  var notifCard=d({css:{background:"#FFF9F2",borderRadius:"18px",overflow:"hidden",boxShadow:"0 2px 12px rgba(0,0,0,.08)",marginBottom:"12px"}});
+  notifCard.appendChild(d({css:{padding:"13px 15px 9px",fontSize:"12px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".5px",borderBottom:"1px solid #F5DDD1"}},"Notifications"));
+  var notifBody=d({css:{padding:"6px 15px 12px"}});
+  notifBody.appendChild(d({css:{fontSize:"12px",color:"#9B7B62",padding:"6px 0 4px"}},"Get notified when someone posts in each group:"));
+  ST.groups.forEach(function(g){
+    var nRow=d({css:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"9px 0",borderBottom:"1px solid #F5DDD1"}});
+    var nLeft=d({css:{display:"flex",alignItems:"center",gap:"8px"}});
+    nLeft.appendChild(d({css:{fontSize:"18px"}},g.icon||"\u2764\uFE0F"));
+    nLeft.appendChild(d({css:{fontSize:"13px",fontWeight:700,color:"#3D2314"}},g.label));
+    nRow.appendChild(nLeft);
+    var isMuted=ST.mutedGroups.indexOf(g.id)!==-1;
+    var toggle=d({css:{width:"42px",height:"24px",borderRadius:"50px",background:isMuted?"#E8DDD3":"#C4714A",position:"relative",cursor:"pointer",transition:"background .2s",flexShrink:0}});
+    var knob=d({css:{width:"18px",height:"18px",borderRadius:"50%",background:"white",position:"absolute",top:"3px",left:isMuted?"3px":"21px",transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,.2)"}});
+    toggle.appendChild(knob);
+    (function(gid,toggleEl,knobEl){
+      toggleEl.addEventListener("click",function(){
+        var nowMuted=ST.mutedGroups.indexOf(gid)!==-1;
+        if(nowMuted){
+          ST.mutedGroups=ST.mutedGroups.filter(function(x){return x!==gid;});
+        } else {
+          ST.mutedGroups.push(gid);
+        }
+        var stillMuted=ST.mutedGroups.indexOf(gid)!==-1;
+        toggleEl.style.background=stillMuted?"#E8DDD3":"#C4714A";
+        knobEl.style.left=stillMuted?"3px":"21px";
+        if(currentUser){
+          db.collection("fcmTokens").doc(currentUser.uid).set({
+            mutedGroups:ST.mutedGroups
+          },{merge:true}).catch(function(e){console.log("mute pref save failed",e);showTopToast("Couldn't save that preference - check your connection.");});
+        }
+      });
+    })(g.id,toggle,knob);
+    nRow.appendChild(toggle);
+    notifBody.appendChild(nRow);
+  });
+  notifCard.appendChild(notifBody);
+  body.appendChild(notifCard);
+
   // Sign out
   var so=b({css:{width:"100%",padding:"13px",borderRadius:"50px",background:"transparent",border:"2px solid #F5DDD1",color:"#9B7B62",fontSize:"14px",fontWeight:700,cursor:"pointer",fontFamily:"inherit",marginTop:"4px"}},"Sign Out");
   so.addEventListener("click",function(){
@@ -3811,7 +3855,10 @@ function buildCreateGroup(){
     ST.group=newGid;ST.creatingGroup=false;
     // Save updated groups to localStorage
     try{localStorage.setItem("ku_groups",JSON.stringify(ST.groups));}catch(e){}
-    if(currentUser){db.collection("userGroups").doc(currentUser.uid).set({groups:ST.groups}).catch(function(){});}
+    if(currentUser){
+      db.collection("userGroups").doc(currentUser.uid).set({groups:ST.groups}).catch(function(){});
+      db.collection("fcmTokens").doc(currentUser.uid).set({groupIds:ST.groups.map(function(gr){return gr.id;})},{merge:true}).catch(function(){});
+    }
     redraw();
   });
   sh.appendChild(saveBtn);
@@ -4078,8 +4125,10 @@ ST.upImg=null;ST.upPhotos=[];
   redraw();
 
   var p;
+  var postGroupObj=ST.groups.find(function(g){return g.id===postGroup;});
+  var postGroupLabel=postGroupObj?postGroupObj.label:"your group";
   if(postType==="checkin"){
-    p={type:"checkin",av:postAv,name:postName,time:"Just now",status:postStatus,groupId:postGroup};
+    p={type:"checkin",av:postAv,name:postName,time:"Just now",status:postStatus,groupId:postGroup,groupLabel:postGroupLabel};
     postToFeed(p).then(function(){
       broadcastNotif(postName+" checked in",postStatus.substring(0,60),postGroup);
       // Refresh feed after posting
@@ -4091,7 +4140,7 @@ ST.upImg=null;ST.upPhotos=[];
       });
     }).catch(function(e){console.log("checkin post failed",e);});
   } else {
-    p={type:isVid?"video":"photo",isVideo:isVid,av:postAv,name:postName,time:"Just now",emoji:"\uD83C\uDF3B",imgUrl:null,cap:postCap,groupId:postGroup};
+    p={type:isVid?"video":"photo",isVideo:isVid,av:postAv,name:postName,time:"Just now",emoji:"\uD83C\uDF3B",imgUrl:null,cap:postCap,groupId:postGroup,groupLabel:postGroupLabel};
     // Must have real Firebase auth uid for Storage
     if(!currentUser){
       var errB=document.createElement("div");
@@ -4348,6 +4397,7 @@ function joinAdditionalGroupViaToken(token){
       joinedAt:firebase.firestore.FieldValue.serverTimestamp()
     }).catch(function(){});
     db.collection("inviteTokens").doc(token).update({used:true,usedAt:firebase.firestore.FieldValue.serverTimestamp()}).catch(function(){});
+    db.collection("fcmTokens").doc(currentUser.uid).set({groupIds:ST.groups.map(function(gr){return gr.id;})},{merge:true}).catch(function(){});
     ST.group=gid;ST.tab="feed";ST.appReady=true;
     fetchAllFeeds();syncOn();
     showTopToast("Joined "+newGroup.label+"! \uD83C\uDF89");
@@ -4539,15 +4589,36 @@ auth.onAuthStateChanged(function(user){
           redraw();
         });
       } else if(ST.boarded){
-        // No Firebase profile but locally boarded
-        // Check if they have a userGroups doc
+        // No Firebase profile but locally boarded - this can happen after
+        // data loss. Self-heal by rebuilding the members doc from this
+        // device's own cached profile data instead of forcing them through
+        // onboarding again (which would create duplicate/wrong groups).
         db.collection("userGroups").doc(user.uid).get().then(function(gdoc){
-          if(gdoc.exists&&gdoc.data().groups&&gdoc.data().groups.length>0){
-            ST.groups=gdoc.data().groups;
-            ST.group=ST.groups[0].id;
+          var hasGroups=gdoc.exists&&gdoc.data().groups&&gdoc.data().groups.length>0;
+          if(hasGroups){ST.groups=gdoc.data().groups;ST.group=ST.groups[0].id;}
+          var localName=localStorage.getItem("ku_name");
+          if(localName||hasGroups){
+            var rebuiltGroup=ST.groups[0]||{id:"imm",label:"Family",icon:"\u2764\uFE0F"};
+            if(!hasGroups){
+              try{
+                var lg=JSON.parse(localStorage.getItem("ku_grp")||"{}");
+                if(lg.label)rebuiltGroup={id:ST.group||"imm",label:lg.label,icon:lg.icon||"\u2764\uFE0F"};
+              }catch(e){}
+            }
+            db.collection("members").doc(user.uid).set({
+              uid:user.uid,
+              name:localName||ST.name||"Family member",
+              av:ST.avatar||"\uD83D\uDC64",
+              groupId:rebuiltGroup.id,groupLabel:rebuiltGroup.label,groupIcon:rebuiltGroup.icon,
+              isAdmin:localStorage.getItem("ku_admin")==="1",
+              joinedAt:firebase.firestore.FieldValue.serverTimestamp(),
+              selfHealed:true
+            },{merge:true}).then(function(){
+              console.log("Self-healed members profile for",user.uid);
+            }).catch(function(e){console.log("self-heal failed",e);});
             fetchAllFeeds();syncOn();redraw();
           } else {
-            // No groups found - reset and show onboarding
+            // Genuinely no usable local data anywhere - fall back to onboarding
             ST.boarded=false;
             localStorage.removeItem("ku_ob");
             ST.appReady=true;
