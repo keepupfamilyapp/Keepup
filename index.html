@@ -543,6 +543,15 @@ function syncOn(){
   doSync();
 }
 function doSync(){
+  // Scope queries to only the groups this user is actually in, instead of
+  // listening to entire collections system-wide (a real cost/perf problem
+  // at scale - every client was previously downloading every other family's
+  // comments/reactions/rsvps/members/events too).
+  // Firestore's "in" operator supports at most 10 values, so clamp
+  // defensively - no realistic family-app user should hit this, but it's
+  // cheap insurance against a hard crash if someone somehow did.
+  var myGroupIds=(ST.groups||[]).map(function(g){return g.id;}).slice(0,10);
+  if(myGroupIds.length===0)myGroupIds=["imm"];
 
   // Fetch feed for all groups
   function fetchFeed(gid){
@@ -856,7 +865,7 @@ function doSync(){
   unsubscribers.push(notifUnsub);
 
   // Listen to members
-  var memUnsub=db.collection("members").onSnapshot(function(snap){
+  var memUnsub=db.collection("members").where("groupId","in",myGroupIds).onSnapshot(function(snap){
     ST.fbMembers=ST.fbMembers||{};
     snap.forEach(function(doc){
       var m=doc.data();
@@ -873,7 +882,7 @@ function doSync(){
   unsubscribers.push(memUnsub);
 
   // Listen to comments
-  var cmtUnsub=db.collection("comments").onSnapshot(function(snap){
+  var cmtUnsub=db.collection("comments").where("groupId","in",myGroupIds).onSnapshot(function(snap){
     // Rebuild all comments from scratch on each snapshot to avoid dupes
     ST.comments={};
     snap.forEach(function(doc){
@@ -896,7 +905,7 @@ function doSync(){
 
   // Listen to RSVPs
   // Listen to all reactions (aggregated per post, for stacked reaction display)
-  var reactUnsub=db.collection("reactions").onSnapshot(function(snap){
+  var reactUnsub=db.collection("reactions").where("groupId","in",myGroupIds).onSnapshot(function(snap){
     ST.allReactions={};
     snap.forEach(function(doc){
       var r=doc.data();
@@ -909,7 +918,7 @@ function doSync(){
   },function(err){handleGenericListenerErr(err,"reactions");});
   unsubscribers.push(reactUnsub);
 
-  var rsvpUnsub=db.collection("rsvps").onSnapshot(function(snap){
+  var rsvpUnsub=db.collection("rsvps").where("groupId","in",myGroupIds).onSnapshot(function(snap){
     snap.forEach(function(doc){
       var r=doc.data();
       if(r.evId)ST.rsvp[r.evId]=r.going;
@@ -918,7 +927,7 @@ function doSync(){
   unsubscribers.push(rsvpUnsub);
 
   // Listen to events
-  var evUnsub=db.collection("events")
+  var evUnsub=db.collection("events").where("groupId","in",myGroupIds)
     .onSnapshot(function(snap){
       snap.docChanges().forEach(function(change){
         var data=Object.assign({},change.doc.data(),{id:change.doc.id});
@@ -2328,7 +2337,7 @@ function buildItem(item,t){
     hdr.appendChild(dt);var inf=d();inf.appendChild(d({css:{fontSize:"14px",fontWeight:700,color:"#3D2314"}},item.title));inf.appendChild(d({css:{fontSize:"11px",color:"#9B7B62",marginTop:"2px"}},item.who));hdr.appendChild(inf);card.appendChild(hdr);
     var acts=d({css:{display:"flex",gap:"8px"}});
     var gb=b({css:{flex:1,padding:"8px",borderRadius:"50px",border:"2px solid #D4922A",background:ST.rsvp[item.id]?"#D4922A":"transparent",fontSize:"12px",fontWeight:700,color:ST.rsvp[item.id]?"white":"#D4922A",cursor:"pointer",fontFamily:"inherit"}},ST.rsvp[item.id]?"Going!":"I'll Be There");
-    gb.addEventListener("click",function(){ST.rsvp[item.id]=!ST.rsvp[item.id];syncRsvp(item.id,ST.rsvp[item.id]);redraw();});acts.appendChild(gb);
+    gb.addEventListener("click",function(){ST.rsvp[item.id]=!ST.rsvp[item.id];syncRsvp(item.id,ST.rsvp[item.id],item.groupId);redraw();});acts.appendChild(gb);
     acts.appendChild(b({css:{flex:1,padding:"8px",borderRadius:"50px",border:"2px solid #D4922A",background:"transparent",fontSize:"12px",fontWeight:700,color:"#D4922A",cursor:"pointer",fontFamily:"inherit"}},"Maybe"));
     card.appendChild(acts);wrap.appendChild(card);
   }
@@ -3072,7 +3081,7 @@ function buildEvCard(ev,gt){
   info.appendChild(d({css:{fontSize:"11px",color:gt.a,marginTop:"2px"}},ev.going+" going - "+ev.maybe+" maybe"));
   row.appendChild(info);
   var rb=b({css:{padding:"7px 12px",borderRadius:"50px",border:"2px solid "+gt.a,background:ST.rsvp[ev.id]?gt.a:"transparent",fontSize:"11px",fontWeight:700,color:ST.rsvp[ev.id]?"white":gt.a,cursor:"pointer",fontFamily:"inherit",flexShrink:0}},ST.rsvp[ev.id]?"Going!":"RSVP");
-  rb.addEventListener("click",function(){ST.rsvp[ev.id]=!ST.rsvp[ev.id];syncRsvp(ev.id,ST.rsvp[ev.id]);redraw();});
+  rb.addEventListener("click",function(){ST.rsvp[ev.id]=!ST.rsvp[ev.id];syncRsvp(ev.id,ST.rsvp[ev.id],ev.groupId);redraw();});
   row.appendChild(rb);return row;
 }
 
@@ -4134,10 +4143,10 @@ function fallbackCopy(text,btn,origColor){
   document.body.removeChild(ta);
 }
 
-function syncRsvp(evId,going){
+function syncRsvp(evId,going,groupId){
   var uid=localStorage.getItem("ku_uid")||"anon";
   db.collection("rsvps").doc(evId+"_"+uid).set({
-    evId:String(evId),uid:uid,name:ST.name,going:going,
+    evId:String(evId),uid:uid,name:ST.name,going:going,groupId:groupId||"imm",
     updatedAt:firebase.firestore.FieldValue.serverTimestamp()
   }).catch(function(e){console.log("rsvp sync failed",e);});
 }
@@ -4302,7 +4311,13 @@ ST.upImg=null;ST.upPhotos=[];
 function addComment(){
   if(!ST.cmtIn.trim()||!currentUser)return;
   var pid=ST.cmtOpen;
-  var cmt={av:ST.avatar&&ST.avatar.startsWith("data:")?"\uD83D\uDC64":(ST.avatar||"\uD83D\uDC64"),name:ST.name||"You",text:ST.cmtIn.trim(),time:"Just now",postId:String(pid),uid:currentUser.uid};
+  var postObj=null;
+  Object.keys(ST.feed||{}).some(function(gid){
+    var found=(ST.feed[gid]||[]).find(function(x){return x.id===pid;});
+    if(found){postObj=found;return true;}
+    return false;
+  });
+  var cmt={av:ST.avatar&&ST.avatar.startsWith("data:")?"\uD83D\uDC64":(ST.avatar||"\uD83D\uDC64"),name:ST.name||"You",text:ST.cmtIn.trim(),time:"Just now",postId:String(pid),uid:currentUser.uid,groupId:(postObj&&postObj.groupId)||ST.group||"imm"};
   ST.cmtIn="";redraw();
   db.collection("comments").add(Object.assign({},cmt,{
     createdAt:firebase.firestore.FieldValue.serverTimestamp()
