@@ -3964,7 +3964,9 @@ function buildCreateGroup(){
     // Save updated groups to localStorage
     try{localStorage.setItem("ku_groups",JSON.stringify(ST.groups));}catch(e){}
     if(currentUser){
-      db.collection("userGroups").doc(currentUser.uid).set({groups:ST.groups}).catch(function(){});
+      db.collection("userGroups").doc(currentUser.uid).set({
+        groups:firebase.firestore.FieldValue.arrayUnion(newGroup)
+      },{merge:true}).catch(function(){});
       db.collection("fcmTokens").doc(currentUser.uid).set({groupIds:ST.groups.map(function(gr){return gr.id;})},{merge:true}).catch(function(){});
     }
     redraw();
@@ -4504,7 +4506,10 @@ function joinAdditionalGroupViaToken(token){
     ST.groups.push(newGroup);
     ST.feed[gid]=[];ST.chatMsgs[gid]=[];
     try{localStorage.setItem("ku_groups",JSON.stringify(ST.groups));}catch(e){}
-    db.collection("userGroups").doc(currentUser.uid).set({groups:ST.groups,updatedAt:firebase.firestore.FieldValue.serverTimestamp()}).catch(function(){});
+    db.collection("userGroups").doc(currentUser.uid).set({
+      groups:firebase.firestore.FieldValue.arrayUnion(newGroup),
+      updatedAt:firebase.firestore.FieldValue.serverTimestamp()
+    },{merge:true}).catch(function(){});
     db.collection("members").doc(currentUser.uid+"_"+gid).set({
       uid:currentUser.uid,name:ST.name,av:ST.avatar&&ST.avatar.startsWith("data:")?"\uD83D\uDC64":(ST.avatar||"\uD83D\uDC64"),
       groupId:gid,groupLabel:newGroup.label,groupIcon:newGroup.icon,isAdmin:false,
