@@ -1380,8 +1380,10 @@ function buildOnboarding(){
                   redraw();
                 }
                 if(hasGroups){
-                  db.collection("members").doc(result.user.uid+"_"+ST.groups[0].id).get().then(function(mdoc){
-                    if(mdoc.exists&&mdoc.data().isAdmin!==undefined)localStorage.setItem("ku_admin",mdoc.data().isAdmin?"1":"0");
+                  db.collection("members").where("uid","==",result.user.uid).get().then(function(mSnap){
+                    var isAdminAnywhere=false;
+                    mSnap.forEach(function(mdoc){if(mdoc.data().isAdmin)isAdminAnywhere=true;});
+                    localStorage.setItem("ku_admin",isAdminAnywhere?"1":"0");
                     finishRestore();
                   }).catch(finishRestore);
                 } else {
@@ -4687,8 +4689,10 @@ auth.onAuthStateChanged(function(user){
             redraw();
           }
           if(hasGroups){
-            db.collection("members").doc(user.uid+"_"+ST.groups[0].id).get().then(function(mdoc){
-              if(mdoc.exists&&mdoc.data().isAdmin!==undefined)localStorage.setItem("ku_admin",mdoc.data().isAdmin?"1":"0");
+            db.collection("members").where("uid","==",user.uid).get().then(function(mSnap){
+              var isAdminAnywhere=false;
+              mSnap.forEach(function(mdoc){if(mdoc.data().isAdmin)isAdminAnywhere=true;});
+              localStorage.setItem("ku_admin",isAdminAnywhere?"1":"0");
               finishSignin();
             }).catch(finishSignin);
           } else {
