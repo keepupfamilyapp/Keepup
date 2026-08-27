@@ -7,8 +7,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
 <meta name="apple-mobile-web-app-title" content="Keep Up"/>
-<link rel="manifest" href="/Keepup/manifest.json"/>
-<link rel="apple-touch-icon" href="/Keepup/icon.svg"/>
+<link rel="manifest" href="manifest.json"/>
+<link rel="apple-touch-icon" href="icon.svg"/>
 <title>Keep Up</title><!-- v2.2 -->
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Lora:ital,wght@0,600;1,400&display=swap" rel="stylesheet"/>
 <style>
@@ -110,15 +110,33 @@ window.addEventListener("unhandledrejection",function(e){
 });
 </script>
 <script>
-// Firebase init
-firebase.initializeApp({
+// Firebase init - automatically uses staging config when running on the
+// staging URL, production config everywhere else (including GitHub Pages
+// prod, localhost testing, etc). This lets the exact same file be deployed
+// to both environments with zero risk of the code itself drifting apart.
+var IS_STAGING=window.location.pathname.indexOf("keep-up-staging")!==-1;
+var FIREBASE_CONFIG_PROD={
     apiKey: "AIzaSyBLUsaETkcXh_1f2KOayMAkhM9jPb1XE9Y",
     authDomain: "keep-up-f9d1c.firebaseapp.com",
     projectId: "keep-up-f9d1c",
     storageBucket: "keep-up-f9d1c.firebasestorage.app",
     messagingSenderId: "216417089419",
     appId: "1:216417089419:web:0f736931c79dbe4ed8618e"
-});
+};
+// PLACEHOLDER - replace every value below with the real config from the
+// staging Firebase project once it's created (Project Settings > General >
+// Your apps > Web app > SDK setup and configuration). Until then IS_STAGING
+// will just be false everywhere and this object is unused.
+var FIREBASE_CONFIG_STAGING={
+    apiKey: "AIzaSyDm29MTp6VJ6REZUti1P_EX1i2S-u_GWKM",
+    authDomain: "keep-up-staging.firebaseapp.com",
+    projectId: "keep-up-staging",
+    storageBucket: "keep-up-staging.firebasestorage.app",
+    messagingSenderId: "100434668086",
+    appId: "1:100434668086:web:d6d300f9bc639efd64c697"
+};
+firebase.initializeApp(IS_STAGING?FIREBASE_CONFIG_STAGING:FIREBASE_CONFIG_PROD);
+if(IS_STAGING)console.log("%cRUNNING IN STAGING MODE","background:#C4714A;color:white;padding:4px 8px;font-weight:bold;");
 var db=firebase.firestore();
 // Enable offline persistence so app works without internet
 db.enablePersistence({synchronizeTabs:true}).catch(function(err){
@@ -136,7 +154,9 @@ var unsubscribers=[];
 // Cloudflare Stream - upload via Cloud Function (token stored server-side)
 var CF_ACCOUNT_ID="f6991628f350e3ae320b0ee72805b9f3";
 var CF_CUSTOMER_SUBDOMAIN="customer-32e18pqrf6myogys"; // Stream playback domain - different from account ID
-var CF_FUNC_URL="https://us-central1-keep-up-f9d1c.cloudfunctions.net/uploadVideo";
+// PLACEHOLDER for staging - replace with the real staging uploadVideo
+// function URL once Cloud Functions are deployed to the staging project.
+var CF_FUNC_URL=IS_STAGING?"https://us-central1-keep-up-staging.cloudfunctions.net/uploadVideo":"https://us-central1-keep-up-f9d1c.cloudfunctions.net/uploadVideo";
 
 function uploadToCloudflareStream(file,onProgress){
   // Step 1: ask our Cloud Function for a one-time, single-use Cloudflare
@@ -181,7 +201,7 @@ var VAPID_KEY="BJOij4wvBLe4ZgNbMuhHSVarzr9k65tSbnbF5oeSjsvOg_rTJN-ffZmCsLfz1iX_U
 function initNotifications(){
   if(!messaging||!("serviceWorker" in navigator)||typeof Notification==="undefined")return;
   console.log("initNotifications called, permission:",Notification.permission);
-  navigator.serviceWorker.register("/Keepup/firebase-messaging-sw.js")
+  navigator.serviceWorker.register("firebase-messaging-sw.js")
     .then(function(reg){
       console.log("SW registered:",reg.scope);
       return messaging.getToken({vapidKey:VAPID_KEY,serviceWorkerRegistration:reg});
@@ -849,11 +869,11 @@ function doSync(){
                 navigator.serviceWorker.ready.then(function(reg){
                   reg.showNotification(n.title||"Keep Up",{
                     body:n.body||"New activity in your family",
-                    icon:"/Keepup/icon.svg"
+                    icon:"icon.svg"
                   });
                 }).catch(function(){});
               } else {
-                try{new Notification(n.title||"Keep Up",{body:n.body||"New activity in your family",icon:"/Keepup/icon.svg"});}
+                try{new Notification(n.title||"Keep Up",{body:n.body||"New activity in your family",icon:"icon.svg"});}
                 catch(e){console.log("Notification not supported:",e);}
               }
             }
@@ -867,6 +887,7 @@ function doSync(){
   // Listen to members
   var memUnsub=db.collection("members").where("groupId","in",myGroupIds).onSnapshot(function(snap){
     ST.fbMembers=ST.fbMembers||{};
+    var uidsSeen={};
     snap.forEach(function(doc){
       var m=doc.data();
       var gid=m.groupId||"imm";
@@ -875,9 +896,34 @@ function doSync(){
         var safeAv=(m.av&&m.av.length<=8)?m.av:"\uD83D\uDC64";
         var safeName=(m.name&&m.name.length<40&&!/^[A-Za-z0-9_-]{20,}$/.test(m.name))?m.name:"Family member";
         ST.fbMembers[gid].push(Object.assign({},m,{av:safeAv,name:safeName,_docId:doc.id}));
+        if(m.uid)uidsSeen[m.uid]=true;
       }
     });
     if(ST.tab==="profile")redraw();
+    // Merge in real profile data (name/avatar/etc now live in profiles/{uid},
+    // separate from group membership, so editing your profile once updates
+    // it everywhere instead of only your first group). Batched by uid
+    // instead of listening to the whole profiles collection, to avoid
+    // reintroducing an unscoped collection-wide read.
+    var allUids=Object.keys(uidsSeen);
+    function fetchProfileBatch(uidBatch){
+      if(!uidBatch.length)return;
+      db.collection("profiles").where(firebase.firestore.FieldPath.documentId(),"in",uidBatch).get()
+        .then(function(pSnap){
+          pSnap.forEach(function(pDoc){
+            var p=pDoc.data();
+            Object.keys(ST.fbMembers).forEach(function(gid){
+              var entry=ST.fbMembers[gid].find(function(x){return x.uid===pDoc.id;});
+              if(entry){
+                if(p.name)entry.name=p.name;
+                if(p.av)entry.av=(p.av.length<=8||p.av.startsWith("http")||p.av.startsWith("data:"))?p.av:entry.av;
+              }
+            });
+          });
+          if(ST.tab==="profile")redraw();
+        }).catch(function(){});
+    }
+    for(var bi=0;bi<allUids.length;bi+=10){fetchProfileBatch(allUids.slice(bi,bi+10));}
   },function(err){handleGenericListenerErr(err,"members");});
   unsubscribers.push(memUnsub);
 
@@ -1238,11 +1284,14 @@ function buildOnboarding(){
     body.appendChild(d({cls:"ob-spacer"}));
     function friendlyAuthError(e){
       var code=e&&e.code||"";
-      if(code==="auth/invalid-phone-number")return"That doesn't look like a valid phone number. Double-check the digits and try again.";
-      if(code==="auth/too-many-requests")return"Too many attempts. Please wait a few minutes and try again.";
-      if(code==="auth/quota-exceeded")return"We've hit a temporary limit sending codes. Please try again in a few minutes.";
-      if(code==="auth/network-request-failed")return"No internet connection. Check your connection and try again.";
-      return"Something went wrong sending your code. Please double-check your number and try again.";
+      var msg=e&&e.message||"";
+      var friendly;
+      if(code==="auth/invalid-phone-number")friendly="That doesn't look like a valid phone number. Double-check the digits and try again.";
+      else if(code==="auth/too-many-requests")friendly="Too many attempts. Please wait a few minutes and try again.";
+      else if(code==="auth/quota-exceeded")friendly="We've hit a temporary limit sending codes. Please try again in a few minutes.";
+      else if(code==="auth/network-request-failed")friendly="No internet connection. Check your connection and try again.";
+      else friendly="Something went wrong sending your code. Please double-check your number and try again.";
+      return friendly+(code?" ["+code+"]":"")+(msg&&msg!==code?" - "+msg.substring(0,150):"");
     }
     var sendBtn=makeBtn("Send Code",function(){
       hidePhoneErr();
@@ -1307,31 +1356,37 @@ function buildOnboarding(){
           // Phone Auth always returns the same UID for the same number, so
           // someone who lost local storage/their bookmark and re-verifies
           // should be logged straight back in, not sent through onboarding again.
-          db.collection("members").doc(result.user.uid).get().then(function(doc){
-            if(doc.exists){
-              var m=doc.data();
-              if(m.name){ST.name=m.name;localStorage.setItem("ku_name",m.name);}
-              if(m.av){
-                var isValidAv=m.av.startsWith("http")||m.av.startsWith("data:")||m.av.length<=8;
-                ST.avatar=isValidAv?m.av:"\uD83D\uDC64";
+          db.collection("profiles").doc(result.user.uid).get().then(function(pdoc){
+            if(pdoc.exists){
+              var p=pdoc.data();
+              if(p.name){ST.name=p.name;localStorage.setItem("ku_name",p.name);}
+              if(p.av){
+                var isValidAv=p.av.startsWith("http")||p.av.startsWith("data:")||p.av.length<=8;
+                ST.avatar=isValidAv?p.av:"\uD83D\uDC64";
                 localStorage.setItem("ku_av",ST.avatar);
               }
-              if(m.groupLabel){
-                ST.groups[0].label=m.groupLabel;
-                ST.groups[0].icon=m.groupIcon||ST.groups[0].icon;
-                localStorage.setItem("ku_grp",JSON.stringify({label:m.groupLabel,icon:m.groupIcon||ST.groups[0].icon}));
-              }
-              if(m.isAdmin!==undefined)localStorage.setItem("ku_admin",m.isAdmin?"1":"0");
               db.collection("userGroups").doc(result.user.uid).get().then(function(gdoc){
-                if(gdoc.exists&&gdoc.data().groups&&gdoc.data().groups.length>0){
+                var hasGroups=gdoc.exists&&gdoc.data().groups&&gdoc.data().groups.length>0;
+                if(hasGroups){
                   ST.groups=gdoc.data().groups;
                   ST.group=ST.groups[0].id;
                   try{localStorage.setItem("ku_groups",JSON.stringify(ST.groups));}catch(e){}
+                  try{localStorage.setItem("ku_grp",JSON.stringify({label:ST.groups[0].label,icon:ST.groups[0].icon}));}catch(e){}
                 }
-                ST.boarded=true;localStorage.setItem("ku_ob","1");
-                fetchAllFeeds();syncOn();
-                showTopToast("Welcome back, "+(ST.name||"friend")+"! \uD83D\uDC4B");
-                redraw();
+                function finishRestore(){
+                  ST.boarded=true;localStorage.setItem("ku_ob","1");
+                  fetchAllFeeds();syncOn();
+                  showTopToast("Welcome back, "+(ST.name||"friend")+"! \uD83D\uDC4B");
+                  redraw();
+                }
+                if(hasGroups){
+                  db.collection("members").doc(result.user.uid+"_"+ST.groups[0].id).get().then(function(mdoc){
+                    if(mdoc.exists&&mdoc.data().isAdmin!==undefined)localStorage.setItem("ku_admin",mdoc.data().isAdmin?"1":"0");
+                    finishRestore();
+                  }).catch(finishRestore);
+                } else {
+                  finishRestore();
+                }
               }).catch(function(){
                 ST.boarded=true;localStorage.setItem("ku_ob","1");
                 fetchAllFeeds();syncOn();redraw();
@@ -1494,7 +1549,10 @@ function buildOnboarding(){
       // if either fails, don't silently proceed into a broken state
       Promise.all([
         db.collection("userGroups").doc(uid).set({groups:grpsToSave,updatedAt:firebase.firestore.FieldValue.serverTimestamp()}),
-        db.collection("members").doc(uid).set({
+        db.collection("profiles").doc(uid).set({
+          name:ST.obName,av:safeAv
+        },{merge:true}),
+        db.collection("members").doc(uid+"_"+finalGrpId).set({
           uid:uid,name:ST.obName,av:safeAv,
           groupId:finalGrpId,groupLabel:ST.obGrpName,groupIcon:ST.obGrpEmoji,
           isAdmin:!ST.joinInvite,
@@ -3131,7 +3189,7 @@ function buildProfile(t){
           .then(function(url){
             ST.avatar=url;
             localStorage.setItem("ku_av",url);
-            db.collection("members").doc(currentUser.uid).update({av:url}).catch(function(){});
+            db.collection("profiles").doc(currentUser.uid).set({av:url},{merge:true}).catch(function(){});
             redraw();
           })
           .catch(function(e){console.log("Avatar upload failed",e);});
@@ -3154,7 +3212,7 @@ function buildProfile(t){
     var newName=prompt("Your name:",ST.name||"");
     if(newName&&newName.trim()){
       ST.name=newName.trim();
-      if(currentUser)db.collection("members").doc(currentUser.uid).update({name:ST.name}).catch(function(){});
+      if(currentUser)db.collection("profiles").doc(currentUser.uid).set({name:ST.name},{merge:true}).catch(function(){});
       redraw();
     }
   });
@@ -3172,7 +3230,7 @@ function buildProfile(t){
       if(currentUser){
         storage.ref("wallpapers/"+currentUser.uid+".jpg").putString(e.target.result,"data_url")
           .then(function(snap){return snap.ref.getDownloadURL();})
-          .then(function(url){ST.profileWallpaper=url;db.collection("members").doc(currentUser.uid).update({wallpaper:url}).catch(function(){});redraw();})
+          .then(function(url){ST.profileWallpaper=url;db.collection("profiles").doc(currentUser.uid).set({wallpaper:url},{merge:true}).catch(function(){});redraw();})
           .catch(function(){redraw();});
       }
       redraw();
@@ -3270,7 +3328,8 @@ function buildProfile(t){
           createdBy:currentUser.uid,createdAt:firebase.firestore.FieldValue.serverTimestamp(),
           used:false
         }).then(function(){
-          var link="https://keepupfamilyapp.github.io/Keepup/#token="+token;
+          var appBaseUrl=window.location.origin+window.location.pathname.replace(/index\.html$/,"");
+          var link=appBaseUrl+"#token="+token;
           if(navigator.clipboard&&navigator.clipboard.writeText){
             navigator.clipboard.writeText(link).then(function(){
               btn.textContent="\u2713 Copied!";btn.style.background="#4A7C59";
@@ -3294,7 +3353,7 @@ function buildProfile(t){
   eni.value=ST.name;eni.addEventListener("input",function(){ST.name=this.value;});
   eni.addEventListener("change",function(){
     try{localStorage.setItem("ku_name",ST.name);}catch(e){}
-    if(currentUser)db.collection("members").doc(currentUser.uid).update({name:ST.name}).catch(function(){});
+    if(currentUser)db.collection("profiles").doc(currentUser.uid).set({name:ST.name},{merge:true}).catch(function(){});
     redraw();
   });
   enp.appendChild(eni);enc.appendChild(enp);body.appendChild(enc);
@@ -3311,7 +3370,7 @@ function buildProfile(t){
   apFi.addEventListener("change",function(){var f=this.files&&this.files[0];if(!f)return;var r=new FileReader();r.onload=function(e){ST.avatar=e.target.result;try{localStorage.setItem("ku_av",ST.avatar);}catch(e2){}
     // Only save emoji avatars directly - photo URLs already saved by upload handler
     if(currentUser&&ST.avatar&&!ST.avatar.startsWith("data:")){
-      db.collection("members").doc(currentUser.uid).update({av:ST.avatar}).catch(function(){});
+      db.collection("profiles").doc(currentUser.uid).set({av:ST.avatar},{merge:true}).catch(function(){});
     }
     redraw();};r.readAsDataURL(f);});
   apC.addEventListener("click",function(){apFi.click();});
@@ -3323,7 +3382,7 @@ function buildProfile(t){
     var ab=b({css:{width:"42px",height:"42px",borderRadius:"12px",background:ST.avatar===a?t.ap:"#FAF6F0",border:"2px solid "+(ST.avatar===a?t.a:"rgba(107,66,38,.12)"),fontSize:"22px",cursor:"pointer",fontFamily:"inherit"}},a);
     ab.addEventListener("click",function(){
       ST.avatar=a;try{localStorage.setItem("ku_av",a);}catch(e){}
-      if(currentUser)db.collection("members").doc(currentUser.uid).update({av:a}).catch(function(){});
+      if(currentUser)db.collection("profiles").doc(currentUser.uid).set({av:a},{merge:true}).catch(function(){});
       redraw();
     });apg.appendChild(ab);
   });
@@ -3382,7 +3441,7 @@ function buildProfile(t){
     var bdayStr=MNAMES3[m-1]+" "+dy;
     localStorage.setItem("ku_bday_"+(currentUser?currentUser.uid:""),bdayStr);
     if(currentUser){
-      db.collection("members").doc(currentUser.uid).update({birthdayMonth:m,birthdayDay:dy,birthday:true}).catch(function(){});
+      db.collection("profiles").doc(currentUser.uid).set({birthdayMonth:m,birthdayDay:dy,birthday:true},{merge:true}).catch(function(){});
       ST.groups.forEach(function(g){
         var bdayId="member-"+currentUser.uid;
         var safeAv=ST.avatar&&ST.avatar.startsWith("http")?ST.avatar:(ST.avatar&&ST.avatar.length<=8?ST.avatar:"\uD83D\uDC64");
@@ -4586,7 +4645,7 @@ auth.onAuthStateChanged(function(user){
       return;
     }
     // Always check Firebase for existing profile - even if not boarded locally
-    db.collection("members").doc(user.uid).get().then(function(doc){
+    db.collection("profiles").doc(user.uid).get().then(function(doc){
       if(doc.exists){
         var m=doc.data();
         // Restore profile from Firebase
@@ -4603,34 +4662,38 @@ auth.onAuthStateChanged(function(user){
           localStorage.setItem("ku_ob","1");
           localStorage.setItem("ku_name",m.name||ST.name);
         }
-        if(m.groupLabel){
-          ST.groups[0].label=m.groupLabel;
-          ST.groups[0].icon=m.groupIcon||ST.groups[0].icon;
-          localStorage.setItem("ku_grp",JSON.stringify({label:m.groupLabel,icon:m.groupIcon||ST.groups[0].icon}));
-        }
-        if(m.isAdmin!==undefined){
-          localStorage.setItem("ku_admin",m.isAdmin?"1":"0");
-        }
         // Load groups from Firestore
         db.collection("userGroups").doc(user.uid).get().then(function(gdoc){
-          if(gdoc.exists&&gdoc.data().groups&&gdoc.data().groups.length>0){
+          var hasGroups=gdoc.exists&&gdoc.data().groups&&gdoc.data().groups.length>0;
+          if(hasGroups){
             // Replace groups entirely - dont merge with default imm group
             ST.groups=gdoc.data().groups;
             ST.group=ST.groups[0].id;
             try{localStorage.setItem("ku_groups",JSON.stringify(ST.groups));}catch(e){}
+            try{localStorage.setItem("ku_grp",JSON.stringify({label:ST.groups[0].label,icon:ST.groups[0].icon}));}catch(e){}
           }
-          ST.boarded=true;
-          localStorage.setItem("ku_ob","1");
-          fetchAllFeeds();
-          syncOn();
-          setTimeout(checkContextualChatReminders,4000);
-          // Init notifications on every signin
-          if(typeof Notification!=="undefined"&&Notification.permission==="granted"){
-            setTimeout(initNotifications,2000);
-          } else if(typeof Notification!=="undefined"&&Notification.permission!=="denied"){
-            Notification.requestPermission().then(function(p){if(p==="granted")setTimeout(initNotifications,2000);});
+          function finishSignin(){
+            ST.boarded=true;
+            localStorage.setItem("ku_ob","1");
+            fetchAllFeeds();
+            syncOn();
+            setTimeout(checkContextualChatReminders,4000);
+            // Init notifications on every signin
+            if(typeof Notification!=="undefined"&&Notification.permission==="granted"){
+              setTimeout(initNotifications,2000);
+            } else if(typeof Notification!=="undefined"&&Notification.permission!=="denied"){
+              Notification.requestPermission().then(function(p){if(p==="granted")setTimeout(initNotifications,2000);});
+            }
+            redraw();
           }
-          redraw();
+          if(hasGroups){
+            db.collection("members").doc(user.uid+"_"+ST.groups[0].id).get().then(function(mdoc){
+              if(mdoc.exists&&mdoc.data().isAdmin!==undefined)localStorage.setItem("ku_admin",mdoc.data().isAdmin?"1":"0");
+              finishSignin();
+            }).catch(finishSignin);
+          } else {
+            finishSignin();
+          }
         }).catch(function(){
           ST.boarded=true;
           localStorage.setItem("ku_ob","1");
@@ -4643,9 +4706,9 @@ auth.onAuthStateChanged(function(user){
         });
       } else if(ST.boarded){
         // No Firebase profile but locally boarded - this can happen after
-        // data loss. Self-heal by rebuilding the members doc from this
-        // device's own cached profile data instead of forcing them through
-        // onboarding again (which would create duplicate/wrong groups).
+        // data loss. Self-heal by rebuilding the profile and membership docs
+        // from this device's own cached data instead of forcing them
+        // through onboarding again (which would create duplicate/wrong groups).
         db.collection("userGroups").doc(user.uid).get().then(function(gdoc){
           var hasGroups=gdoc.exists&&gdoc.data().groups&&gdoc.data().groups.length>0;
           if(hasGroups){ST.groups=gdoc.data().groups;ST.group=ST.groups[0].id;}
@@ -4658,7 +4721,11 @@ auth.onAuthStateChanged(function(user){
                 if(lg.label)rebuiltGroup={id:ST.group||"imm",label:lg.label,icon:lg.icon||"\u2764\uFE0F"};
               }catch(e){}
             }
-            db.collection("members").doc(user.uid).set({
+            db.collection("profiles").doc(user.uid).set({
+              name:localName||ST.name||"Family member",
+              av:ST.avatar||"\uD83D\uDC64"
+            },{merge:true}).catch(function(e){console.log("self-heal profile failed",e);});
+            db.collection("members").doc(user.uid+"_"+rebuiltGroup.id).set({
               uid:user.uid,
               name:localName||ST.name||"Family member",
               av:ST.avatar||"\uD83D\uDC64",
@@ -4667,7 +4734,7 @@ auth.onAuthStateChanged(function(user){
               joinedAt:firebase.firestore.FieldValue.serverTimestamp(),
               selfHealed:true
             },{merge:true}).then(function(){
-              console.log("Self-healed members profile for",user.uid);
+              console.log("Self-healed profile for",user.uid);
             }).catch(function(e){console.log("self-heal failed",e);});
             fetchAllFeeds();syncOn();redraw();
           } else {
