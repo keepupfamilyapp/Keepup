@@ -581,11 +581,7 @@ function doSync(){
         snap.forEach(function(doc){
           ST.feed[gid].push(Object.assign({},doc.data(),{id:doc.id}));
         });
-        ST.feed[gid].sort(function(a,b){
-          var ta=a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():0;
-          var tb=b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():0;
-          return tb-ta;
-        });
+        ST.feed[gid].sort(function(a,b){return tsMillis(b.createdAt)-tsMillis(a.createdAt);});
         if(ST.tab==="feed")redraw();
       }).catch(function(e){console.log("fetchFeed error:",e);});
   }
@@ -602,11 +598,7 @@ function doSync(){
           if(existing>=0)ST.feed[gid][existing]=data;
           else ST.feed[gid].push(data);
         });
-        ST.feed[gid].sort(function(a,b){
-          var ta=a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():0;
-          var tb=b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():0;
-          return tb-ta;
-        });
+        ST.feed[gid].sort(function(a,b){return tsMillis(b.createdAt)-tsMillis(a.createdAt);});
         if(ST.tab==="feed")redraw();
       },function(err){handleGroupListenerErr(err,gid);});
     unsubscribers.push(unsub);
@@ -640,11 +632,7 @@ function doSync(){
           if(change.type==="removed"){ST.chatMsgs[gid]=ST.chatMsgs[gid].filter(function(x){return x.id!==data.id;});}
         });
         // Sort by time
-        ST.chatMsgs[gid].sort(function(a,b){
-          var ta=a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():0;
-          var tb=b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():0;
-          return ta-tb;
-        });
+        ST.chatMsgs[gid].sort(function(a,b){return tsMillis(a.createdAt)-tsMillis(b.createdAt);});
         if(ST.tab==="chat"){
             if(ST.openChat===gid&&document.activeElement&&document.activeElement.tagName==="INPUT"){
               setTimeout(function(){var _cl=document.getElementById("chat-msg-list");if(_cl)_cl.scrollTop=_cl.scrollHeight;},80);
@@ -885,7 +873,7 @@ function doSync(){
   unsubscribers.push(notifUnsub);
 
   // Listen to members
-  var memUnsub=db.collection("members").where("groupId","in",myGroupIds).onSnapshot(function(snap){
+  watchGroupScoped("members",myGroupIds,function(snap){
     ST.fbMembers=ST.fbMembers||{};
     var uidsSeen={};
     snap.forEach(function(doc){
@@ -924,11 +912,10 @@ function doSync(){
         }).catch(function(){});
     }
     for(var bi=0;bi<allUids.length;bi+=10){fetchProfileBatch(allUids.slice(bi,bi+10));}
-  },function(err){handleGenericListenerErr(err,"members");});
-  unsubscribers.push(memUnsub);
+  });
 
   // Listen to comments
-  var cmtUnsub=db.collection("comments").where("groupId","in",myGroupIds).onSnapshot(function(snap){
+  watchGroupScoped("comments",myGroupIds,function(snap){
     // Rebuild all comments from scratch on each snapshot to avoid dupes
     ST.comments={};
     snap.forEach(function(doc){
@@ -939,19 +926,14 @@ function doSync(){
     });
     // Sort each post's comments by createdAt
     Object.keys(ST.comments).forEach(function(pid){
-      ST.comments[pid].sort(function(a,b){
-        var ta=a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():0;
-        var tb=b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():0;
-        return ta-tb;
-      });
+      ST.comments[pid].sort(function(a,b){return tsMillis(a.createdAt)-tsMillis(b.createdAt);});
     });
     if(ST.cmtOpen!==null)redraw();
-  },function(err){handleGenericListenerErr(err,"comments");});
-  unsubscribers.push(cmtUnsub);
+  });
 
   // Listen to RSVPs
   // Listen to all reactions (aggregated per post, for stacked reaction display)
-  var reactUnsub=db.collection("reactions").where("groupId","in",myGroupIds).onSnapshot(function(snap){
+  watchGroupScoped("reactions",myGroupIds,function(snap){
     ST.allReactions={};
     snap.forEach(function(doc){
       var r=doc.data();
@@ -961,30 +943,26 @@ function doSync(){
       if(currentUser&&r.uid===currentUser.uid)ST.reactions[r.postId]=r.em;
     });
     if(ST.tab==="feed")redraw();
-  },function(err){handleGenericListenerErr(err,"reactions");});
-  unsubscribers.push(reactUnsub);
+  });
 
-  var rsvpUnsub=db.collection("rsvps").where("groupId","in",myGroupIds).onSnapshot(function(snap){
+  watchGroupScoped("rsvps",myGroupIds,function(snap){
     snap.forEach(function(doc){
       var r=doc.data();
       if(r.evId)ST.rsvp[r.evId]=r.going;
     });
-  },function(err){handleGenericListenerErr(err,"rsvps");});
-  unsubscribers.push(rsvpUnsub);
+  });
 
   // Listen to events
-  var evUnsub=db.collection("events").where("groupId","in",myGroupIds)
-    .onSnapshot(function(snap){
-      snap.docChanges().forEach(function(change){
-        var data=Object.assign({},change.doc.data(),{id:change.doc.id});
-        if(change.type==="added"&&!ST.evs.find(function(x){return x.id===data.id;})){
-          ST.evs.push(data);
-        }
-        if(change.type==="removed"){ST.evs=ST.evs.filter(function(x){return x.id!==data.id;});}
-      });
-      if(ST.tab==="calendar")redraw();
-    },function(err){handleGenericListenerErr(err,"events");});
-  unsubscribers.push(evUnsub);
+  watchGroupScoped("events",myGroupIds,function(snap){
+    snap.docChanges().forEach(function(change){
+      var data=Object.assign({},change.doc.data(),{id:change.doc.id});
+      if(change.type==="added"&&!ST.evs.find(function(x){return x.id===data.id;})){
+        ST.evs.push(data);
+      }
+      if(change.type==="removed"){ST.evs=ST.evs.filter(function(x){return x.id!==data.id;});}
+    });
+    if(ST.tab==="calendar")redraw();
+  });
 } // end doSync
 
 function postToFeed(item){
@@ -1049,6 +1027,11 @@ var ST={
 
 function el(tag,attrs,children){
   var e=document.createElement(tag);
+  // Elements that carry live event listener closures, form state, or media
+  // playback state must never be silently reused during DOM morphing -
+  // always fully replace them so they always get fresh, correct behavior.
+  var NOMORPH_TAGS={BUTTON:1,INPUT:1,TEXTAREA:1,SELECT:1,VIDEO:1,IFRAME:1,AUDIO:1};
+  if(NOMORPH_TAGS[tag.toUpperCase()])e.setAttribute("data-nomorph","1");
   if(attrs){
     if(attrs.cls){e.className=attrs.cls;delete attrs.cls;}
     if(attrs.css){Object.assign(e.style,attrs.css);delete attrs.css;}
@@ -1187,20 +1170,168 @@ function timeAgo(ts){
   var d=new Date(ms);return(d.getMonth()+1)+"/"+d.getDate();
 }
 
+// Firestore timestamps need .toMillis() before they can be compared/sorted,
+// but a doc that hasn't synced its server timestamp yet has a null field -
+// this was being reimplemented identically in 5 different places across
+// the file's sort callbacks. One shared helper now, so a future format
+// change (or bug fix) only has to happen once.
+function tsMillis(ts){return ts&&ts.toMillis?ts.toMillis():0;}
+
+// members/comments/reactions/rsvps/events listeners in doSync() all queried
+// their collection scoped to the user's groups and reported errors through
+// handleGenericListenerErr the same way - this was being retyped identically
+// 5 times. The actual per-collection processing logic stays where it was;
+// only this shared wrapper (query + error handling + cleanup registration)
+// moved out.
+function watchGroupScoped(collectionName,groupIds,onData){
+  var unsub=db.collection(collectionName).where("groupId","in",groupIds)
+    .onSnapshot(onData,function(err){handleGenericListenerErr(err,collectionName);});
+  unsubscribers.push(unsub);
+  return unsub;
+}
+
+
+// ============================================================
+// DOM MORPHING ENGINE
+// ============================================================
+// Patches an existing DOM tree to match a freshly-built one, updating only
+// what actually changed instead of tearing down and rebuilding everything
+// on every single interaction. This is what makes redraw() cheap at scale.
+//
+// SAFETY RULE (do not weaken this): any element that can carry a live
+// event-listener closure or independent runtime state - buttons, inputs,
+// textareas, selects, video/iframe/audio - is ALWAYS fully replaced, never
+// morphed in place. Reusing those nodes would silently keep the PREVIOUS
+// render's closures and captured values (e.g. a delete button still bound
+// to yesterday's postId), which is a worse and harder-to-notice bug than
+// the performance problem this system solves. This check is by tag name,
+// not just the data-nomorph attribute, so it's safe even for elements
+// created outside the el()/b() helpers.
+var NOMORPH_TAGSET={BUTTON:1,INPUT:1,TEXTAREA:1,SELECT:1,VIDEO:1,IFRAME:1,AUDIO:1,CANVAS:1};
+function shouldReplaceNotMorph(node){
+  if(!node||node.nodeType!==1)return false;
+  if(NOMORPH_TAGSET[node.tagName])return true;
+  if(node.hasAttribute&&node.hasAttribute("data-nomorph"))return true;
+  return false;
+}
+
+function morphNode(oldNode,newNode){
+  if(!oldNode)return newNode;
+  if(!newNode){oldNode.remove();return null;}
+
+  if(oldNode.nodeType!==newNode.nodeType){
+    oldNode.replaceWith(newNode);
+    return newNode;
+  }
+  if(oldNode.nodeType===3){ // text node
+    if(oldNode.textContent!==newNode.textContent)oldNode.textContent=newNode.textContent;
+    return oldNode;
+  }
+  if(oldNode.nodeType!==1){ // comment nodes etc
+    if(oldNode.nodeValue!==newNode.nodeValue)oldNode.replaceWith(newNode);
+    return oldNode;
+  }
+  if(oldNode.tagName!==newNode.tagName){
+    oldNode.replaceWith(newNode);
+    return newNode;
+  }
+  if(shouldReplaceNotMorph(oldNode)||shouldReplaceNotMorph(newNode)){
+    if(oldNode!==newNode)oldNode.replaceWith(newNode);
+    return newNode;
+  }
+
+  // Sync attributes (covers style/class since those are attributes too)
+  var oldAttrs=oldNode.attributes;
+  for(var i=oldAttrs.length-1;i>=0;i--){
+    var an=oldAttrs[i].name;
+    if(!newNode.hasAttribute(an))oldNode.removeAttribute(an);
+  }
+  var newAttrs=newNode.attributes;
+  for(var j=0;j<newAttrs.length;j++){
+    var na=newAttrs[j].name;var nv=newAttrs[j].value;
+    if(oldNode.getAttribute(na)!==nv)oldNode.setAttribute(na,nv);
+  }
+
+  morphChildren(oldNode,newNode);
+  return oldNode;
+}
+
+function morphChildren(oldParent,newParent){
+  var oldKids=Array.prototype.slice.call(oldParent.childNodes);
+  var newKids=Array.prototype.slice.call(newParent.childNodes);
+
+  // Elements with a stable id are matched by that id regardless of position
+  // (so a post inserted at the top of the feed doesn't confuse everything
+  // below it). Everything else is matched positionally among its own
+  // unkeyed siblings, which is a reasonable fallback for ordinary
+  // structural content that doesn't reorder.
+  var oldById={};
+  var oldUnkeyed=[];
+  oldKids.forEach(function(k){
+    if(k.nodeType===1&&k.id)oldById[k.id]=k;
+    else oldUnkeyed.push(k);
+  });
+  var usedOldIds={};
+  var unkeyedCursor=0;
+
+  var cursor=null;
+  newKids.forEach(function(nk){
+    var match=null;
+    if(nk.nodeType===1&&nk.id){
+      if(oldById[nk.id]&&!usedOldIds[nk.id]){
+        match=oldById[nk.id];
+        usedOldIds[nk.id]=true;
+      }
+    } else if(unkeyedCursor<oldUnkeyed.length){
+      match=oldUnkeyed[unkeyedCursor];
+      unkeyedCursor++;
+    }
+    var result=match?morphNode(match,nk):nk;
+    var afterCursor=cursor?cursor.nextSibling:oldParent.firstChild;
+    if(result!==afterCursor)oldParent.insertBefore(result,afterCursor);
+    cursor=result;
+  });
+
+  // Remove leftover old children that weren't reused
+  oldKids.forEach(function(k){
+    if(k.id){if(usedOldIds[k.id])return;}
+    else{var idx=oldUnkeyed.indexOf(k);if(idx!==-1&&idx<unkeyedCursor)return;}
+    if(k.parentNode===oldParent)k.remove();
+  });
+}
+
 function redraw(){
   try{
     var old=document.getElementById("app");
-    // redraw() fully rebuilds the DOM, which would otherwise silently
-    // reset anyone's scroll position back to the top of the feed on
-    // every single interaction (commenting, reacting, posting, etc).
-    // Capture and restore it here, alongside the virtual-scroll item
-    // count already being preserved in ST.feedRendered.
+    // redraw() used to fully rebuild the DOM every time, which silently
+    // reset scroll position on every single interaction. Morphing avoids
+    // that at the source (the live #app element is never destroyed, just
+    // patched), so this manual restore is now mostly a safety net for any
+    // edge case the morphing engine doesn't catch - kept intentionally,
+    // costs nothing if morphing already preserved position correctly.
     var prevScrollEl=document.getElementById("feed-list");
     var prevScrollTop=prevScrollEl?prevScrollEl.scrollTop:null;
     var prevGroup=ST.group;
     var next=buildApp();
-    if(old)old.replaceWith(next);
-    else document.body.appendChild(next);
+    if(old){
+      // Try to morph in place instead of a full teardown/rebuild. Falls
+      // back to the old, proven full-replace behavior if morphing throws
+      // for any reason - this is newer code, so it fails safe rather than
+      // risking a broken screen. ST._useMorph=false is an easy kill-switch
+      // for testing.
+      var morphOk=false;
+      if(ST._useMorph!==false&&localStorage.getItem("_forceNoMorph")!=="1"){
+        try{
+          morphNode(old,next);
+          morphOk=true;
+        }catch(morphErr){
+          console.log("morph failed, falling back to full replace:",morphErr);
+        }
+      }
+      if(!morphOk)old.replaceWith(next);
+    } else {
+      document.body.appendChild(next);
+    }
     if(prevScrollTop!==null&&ST.group===prevGroup){
       var newScrollEl=document.getElementById("feed-list");
       if(newScrollEl){
@@ -1357,6 +1488,28 @@ function buildOnboarding(){
           // someone who lost local storage/their bookmark and re-verifies
           // should be logged straight back in, not sent through onboarding again.
           db.collection("profiles").doc(result.user.uid).get().then(function(pdoc){
+            if(pdoc.exists&&ST.joinInvite&&ST.pendingInviteToken){
+              // Existing account tapped a fresh invite link (Firebase Phone
+              // Auth returns the same account for the same number) - add the
+              // invited group to their existing account instead of silently
+              // restoring their old state and ignoring the invite entirely.
+              var p0=pdoc.data();
+              if(p0.name){ST.name=p0.name;localStorage.setItem("ku_name",p0.name);}
+              if(p0.av){
+                var isValidAv0=p0.av.startsWith("http")||p0.av.startsWith("data:")||p0.av.length<=8;
+                ST.avatar=isValidAv0?p0.av:"\uD83D\uDC64";
+                localStorage.setItem("ku_av",ST.avatar);
+              }
+              ST.boarded=true;localStorage.setItem("ku_ob","1");
+              db.collection("userGroups").doc(result.user.uid).get().then(function(gdoc0){
+                if(gdoc0.exists&&gdoc0.data().groups&&gdoc0.data().groups.length>0){
+                  ST.groups=gdoc0.data().groups;
+                  try{localStorage.setItem("ku_groups",JSON.stringify(ST.groups));}catch(e){}
+                }
+                joinAdditionalGroupViaToken(ST.pendingInviteToken);
+              }).catch(function(){joinAdditionalGroupViaToken(ST.pendingInviteToken);});
+              return;
+            }
             if(pdoc.exists){
               var p=pdoc.data();
               if(p.name){ST.name=p.name;localStorage.setItem("ku_name",p.name);}
@@ -1548,19 +1701,35 @@ function buildOnboarding(){
       var completeBtn=this;
       completeBtn.textContent="Setting things up...";completeBtn.style.background="#D4B8A8";
       // Write to Firestore - userGroups and member profile are both critical;
-      // if either fails, don't silently proceed into a broken state
-      Promise.all([
-        db.collection("userGroups").doc(uid).set({groups:grpsToSave,updatedAt:firebase.firestore.FieldValue.serverTimestamp()}),
-        db.collection("profiles").doc(uid).set({
-          name:ST.obName,av:safeAv
-        },{merge:true}),
-        db.collection("members").doc(uid+"_"+finalGrpId).set({
-          uid:uid,name:ST.obName,av:safeAv,
-          groupId:finalGrpId,groupLabel:ST.obGrpName,groupIcon:ST.obGrpEmoji,
-          isAdmin:!ST.joinInvite,
-          joinedAt:firebase.firestore.FieldValue.serverTimestamp()
-        })
-      ]).then(function(){
+      // if either fails, don't silently proceed into a broken state.
+      // When creating a brand-new group (not joining via invite), the
+      // members doc below gets written with isAdmin:true, and the security
+      // rules verify that against groups/{id}.adminUid - so that groups doc
+      // has to exist and land first, or the members write is correctly
+      // denied. Joining an existing group skips this entirely: isAdmin is
+      // false there, no admin check applies, and creating a groups doc here
+      // would incorrectly stomp on the real owner's document.
+      var createGroupDocFirst=ST.joinInvite
+        ? Promise.resolve()
+        : db.collection("groups").doc(finalGrpId).set({
+            id:finalGrpId,label:ST.obGrpName,icon:ST.obGrpEmoji,
+            adminUid:uid,adminName:ST.obName,
+            createdAt:firebase.firestore.FieldValue.serverTimestamp()
+          });
+      createGroupDocFirst.then(function(){
+        return Promise.all([
+          db.collection("userGroups").doc(uid).set({groups:grpsToSave,updatedAt:firebase.firestore.FieldValue.serverTimestamp()}),
+          db.collection("profiles").doc(uid).set({
+            name:ST.obName,av:safeAv
+          },{merge:true}),
+          db.collection("members").doc(uid+"_"+finalGrpId).set({
+            uid:uid,name:ST.obName,av:safeAv,
+            groupId:finalGrpId,groupLabel:ST.obGrpName,groupIcon:ST.obGrpEmoji,
+            isAdmin:!ST.joinInvite,
+            joinedAt:firebase.firestore.FieldValue.serverTimestamp()
+          })
+        ]);
+      }).then(function(){
         // Start app
         syncOn();
         fetchAllFeeds();
@@ -1589,8 +1758,37 @@ function buildOnboarding(){
   return wrap;
 }
 
+function buildNoGroupsScreen(){
+  var wrap=d({id:"app",css:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center",padding:"32px 24px",height:"100vh",boxSizing:"border-box",background:"#FFF8F0"}});
+  wrap.appendChild(d({css:{fontSize:"56px",marginBottom:"16px"}},"\uD83C\uDFE1"));
+  wrap.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"22px",fontWeight:600,color:"#3D2314",marginBottom:"10px"}},"No family group found"));
+  wrap.appendChild(d({css:{fontSize:"14px",color:"#9B7B62",lineHeight:1.6,marginBottom:"10px",maxWidth:"320px"}},"You're signed in, but you're not currently part of a family group. This can happen if a group was removed or your access changed."));
+  wrap.appendChild(d({css:{fontSize:"13px",color:"#C4714A",fontWeight:700,lineHeight:1.6,marginBottom:"24px",maxWidth:"320px"}},"If you have a family, the fastest fix is asking your group's admin for a fresh invite link - tapping it will get you straight back in."));
+  wrap.appendChild(makeBtn("Start a new group instead",function(){
+    // Deliberately NOT clearing ku_ob here - this person has already been
+    // through phone verification once, and clearing it would force a fresh
+    // invite link (if they get one after this) down the slow full-onboarding
+    // path instead of the fast rejoin path that already handles this case.
+    ST.boarded=false;ST.obStep=0;ST.joinInvite=false;ST.obGrpName=null;
+    redraw();
+  }));
+  var signOutBtn=document.createElement("button");
+  signOutBtn.textContent="Sign out";
+  signOutBtn.style.cssText="margin-top:14px;background:none;border:none;color:#9B7B62;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;text-decoration:underline;";
+  signOutBtn.addEventListener("click",function(){firebase.auth().signOut().then(function(){location.reload();});});
+  wrap.appendChild(signOutBtn);
+  return wrap;
+}
+
 function buildApp(){
   if(!ST.boarded)return buildOnboarding();
+  // ST.groups can legitimately end up empty - a group got deleted, access
+  // was revoked, self-heal found nothing to rebuild from. Every version of
+  // tonight's "Cannot read properties of undefined (reading 'icon')" crash
+  // traces back to this exact spot assuming a group always exists once
+  // someone's boarded. Whatever emptied the list, show a real recovery
+  // screen instead of a blank crash.
+  if(!ST.groups||ST.groups.length===0)return buildNoGroupsScreen();
   var t=th(ST.group);
   var grp=ST.groups.find(function(g){return g.id===ST.group;})||ST.groups[0];
   var wrap=d({id:"app",css:{background:t.bg}});
@@ -1660,11 +1858,11 @@ function buildApp(){
   wrap.appendChild(content);
   // Floating nav
   // Floating nav - home button bottom left, options slide right
-  var navFloat=d({css:{position:"fixed",bottom:"20px",left:"20px",zIndex:45,display:ST.openChat?"none":"flex",flexDirection:"row",alignItems:"center",gap:"8px",WebkitUserSelect:"none",userSelect:"none"}});
+  var navFloat=d({id:"nav-float-wrap",css:{position:"fixed",bottom:"20px",left:"20px",zIndex:45,display:ST.openChat?"none":"flex",flexDirection:"row",alignItems:"center",gap:"8px",WebkitUserSelect:"none",userSelect:"none"}});
   var homeBg=ST.tab==="feed"?t.a:(ST.tab==="profile"?"#E8956D":"white");
   var homeClr=ST.tab==="feed"||ST.tab==="profile"?"white":"#3D2314";
   var homeBox=ST.tab==="profile"?"0 4px 20px rgba(232,149,109,.5)":"0 4px 20px rgba(0,0,0,.2)";
-  var homeBtn=b({css:{width:"52px",height:"52px",borderRadius:"50%",background:homeBg,border:"none",fontSize:"22px",boxShadow:homeBox,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,WebkitUserSelect:"none",userSelect:"none",WebkitTouchCallout:"none"}});
+  var homeBtn=b({id:"home-btn",css:{width:"52px",height:"52px",borderRadius:"50%",background:homeBg,border:"none",fontSize:"22px",boxShadow:homeBox,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,WebkitUserSelect:"none",userSelect:"none",WebkitTouchCallout:"none"}});
   // Count all unread - group chats + DMs
   var totalUnread=0;
   ST.groups.forEach(function(g){if(hasUnread(g.id))totalUnread++;});
@@ -1676,18 +1874,29 @@ function buildApp(){
     ?"<span style='position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;background:#C0392B;border-radius:50px;border:2px solid white;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:white;font-family:inherit;padding:0 4px;box-sizing:border-box;'>"+( totalUnread>99?"99+":String(totalUnread))+"</span>"
     :"");
   homeBtn.addEventListener("click",function(){
+    // Buttons are always fully rebuilt on any redraw, anywhere in the app
+    // (a family member posting elsewhere is enough). This handler skips
+    // calling redraw() itself to avoid a visual flash, but that means the
+    // homeBtn/navFloat captured above can go stale between "tap registered"
+    // and "handler runs" if some OTHER unrelated redraw slipped in during
+    // that gap. Re-fetching the live elements by id (instead of trusting
+    // this closure's copies) and bailing out quietly if they're gone
+    // avoids the insertBefore crash entirely.
+    var liveHome=document.getElementById("home-btn");
+    var liveNav=document.getElementById("nav-float-wrap");
+    if(!liveHome||!liveNav||liveHome.parentNode!==liveNav)return;
     if(ST.tab!=="feed"){
       ST.tab="feed";ST.navExpanded=false;fetchAllFeeds();history.pushState(null,"",location.href);redraw();
     } else {
       // Toggle nav pill without full redraw to avoid flash
       ST.navExpanded=!ST.navExpanded;
       // Update home button badge immediately when nav state changes
-      homeBtn.innerHTML="&#127968;"+((!ST.navExpanded&&totalUnread>0)
+      liveHome.innerHTML="&#127968;"+((!ST.navExpanded&&totalUnread>0)
         ?"<span style='position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;background:#C0392B;border-radius:50px;border:2px solid white;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:white;font-family:inherit;padding:0 4px;box-sizing:border-box;'>"+( totalUnread>99?"99+":String(totalUnread))+"</span>"
         :"");
-      var existingPill=navFloat.querySelector(".nav-pill");
+      var existingPill=liveNav.querySelector(".nav-pill");
       if(ST.navExpanded&&!existingPill){
-        var navPill2=d({css:{background:"white",borderRadius:"50px",padding:"5px 6px",display:"flex",gap:"2px",boxShadow:"0 4px 20px rgba(0,0,0,.15)",animation:"fadeUp .2s ease"}});
+        var navPill2=d({id:"nav-pill-menu",css:{background:"white",borderRadius:"50px",padding:"5px 6px",display:"flex",gap:"2px",boxShadow:"0 4px 20px rgba(0,0,0,.15)",animation:"fadeUp .2s ease"}});
         navPill2.className="nav-pill";
         [["chat","&#128172;","Chat"],["calendar","&#128197;","Cal"],["profile","&#128100;","Me"]].forEach(function(n){
           var nb=b({css:{display:"flex",flexDirection:"column",alignItems:"center",gap:"2px",padding:"5px 12px",borderRadius:"50px",background:ST.tab===n[0]?t.ap:"transparent",border:"none",cursor:"pointer",fontFamily:"inherit",WebkitUserSelect:"none",userSelect:"none"}});
@@ -1701,14 +1910,22 @@ function buildApp(){
             nb.style.position="relative";
             nb.appendChild(cpBadge);
           }
-          nb.addEventListener("click",function(){ST.tab=n[0];ST.navExpanded=false;if(n[0]!=="chat")ST.openChat=null;navFloat.removeChild(navPill2);homeBtn.style.background=t.bg;history.pushState(null,"",location.href);redraw();});
+          nb.addEventListener("click",function(){
+            var curHome=document.getElementById("home-btn");
+            var curNav=document.getElementById("nav-float-wrap");
+            var curPill=document.getElementById("nav-pill-menu");
+            ST.tab=n[0];ST.navExpanded=false;if(n[0]!=="chat")ST.openChat=null;
+            if(curPill&&curNav&&curPill.parentNode===curNav)curNav.removeChild(curPill);
+            if(curHome)curHome.style.background=t.bg;
+            history.pushState(null,"",location.href);redraw();
+          });
           navPill2.appendChild(nb);
         });
-        navFloat.insertBefore(navPill2,homeBtn);
-        homeBtn.style.background=t.ap;
+        liveNav.insertBefore(navPill2,liveHome);
+        liveHome.style.background=t.ap;
       } else if(!ST.navExpanded&&existingPill){
-        navFloat.removeChild(existingPill);
-        homeBtn.style.background=ST.tab==="feed"?t.a:"white";
+        liveNav.removeChild(existingPill);
+        liveHome.style.background=ST.tab==="feed"?t.a:"white";
       }
     }
   });
@@ -1873,20 +2090,30 @@ function buildFeed(t,grp){
   }
   wrap.appendChild(list);
   // FAB + vertical slide-up with horizontal sub-options
-  var fabWrap=d({css:{position:"fixed",bottom:"20px",right:"20px",zIndex:40,display:"flex",flexDirection:"column",alignItems:"flex-end",gap:"10px",WebkitUserSelect:"none",userSelect:"none"}});
+  var fabWrap=d({id:"fab-wrap",css:{position:"fixed",bottom:"20px",right:"20px",zIndex:40,display:"flex",flexDirection:"column",alignItems:"flex-end",gap:"10px",WebkitUserSelect:"none",userSelect:"none"}});
   var qaVisible=false;
+
+  // fabWrap (like every non-button element) can get preserved-in-place by
+  // the morphing engine across redraws rather than replaced - meaning the
+  // fabWrap variable captured in this closure is a disposable template that
+  // was only used to update the REAL, already-on-screen element, and is
+  // never itself attached to the document. Any handler that runs later
+  // (on click, on an outside tap) must look up the actual live element by
+  // id instead of trusting this closure's copy, or it silently manipulates
+  // a detached node - no error, just nothing visibly happens.
+  function liveFabWrap(){return document.getElementById("fab-wrap");}
 
   function hideAll(){
     qaVisible=false;
     fab.style.transform="";fab.textContent="+";fab.style.background=t.a;
-    // Remove all qa rows
-    var rows=fabWrap.querySelectorAll(".qa-row");
+    var lw=liveFabWrap();if(!lw)return;
+    var rows=lw.querySelectorAll(".qa-row");
     rows.forEach(function(r){r.remove();});
   }
 
   function makeSubOptions(items){
     // Slide in from the right - a row of small buttons
-    var row=d({cls:"qa-row",css:{display:"flex",flexDirection:"row",alignItems:"center",gap:"8px",animation:"slideLeft .2s ease"}});
+    var row=d({cls:"qa-row",id:"qa-sub-row",css:{display:"flex",flexDirection:"row",alignItems:"center",gap:"8px",animation:"slideLeft .2s ease"}});
     items.forEach(function(item){
       var btn=b({css:{display:"flex",alignItems:"center",gap:"6px",padding:"9px 14px",borderRadius:"50px",background:"white",border:"none",boxShadow:"0 2px 16px rgba(0,0,0,.15)",fontSize:"13px",fontWeight:700,color:"#3D2314",cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}});
       btn.innerHTML=item[0]+" "+item[1];
@@ -1896,8 +2123,8 @@ function buildFeed(t,grp){
     return row;
   }
 
-  function makeQA(icon,label,onClick){
-    var row=d({cls:"qa-row",css:{display:"flex",flexDirection:"row",alignItems:"center",justifyContent:"flex-end",gap:"8px"}});
+  function makeQA(icon,label,onClick,rowId){
+    var row=d({cls:"qa-row",id:rowId,css:{display:"flex",flexDirection:"row",alignItems:"center",justifyContent:"flex-end",gap:"8px"}});
     var btn=b({css:{display:"flex",alignItems:"center",gap:"10px",padding:"10px 16px",borderRadius:"50px",background:"white",border:"none",boxShadow:"0 2px 16px rgba(0,0,0,.15)",fontSize:"14px",fontWeight:700,color:"#3D2314",cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}});
     btn.innerHTML=icon+" "+label;
     btn.addEventListener("click",onClick);
@@ -1951,44 +2178,63 @@ function buildFeed(t,grp){
   // Photo row with sub-options sliding left
   var photoRow=makeQA("\uD83D\uDCF7","Photo",function(e){
     e.stopPropagation();
+    var lw=liveFabWrap();if(!lw)return;
     // Remove any existing sub-options
-    var existing=fabWrap.querySelector(".qa-sub");if(existing)existing.remove();
+    var existing=lw.querySelector(".qa-sub");if(existing)existing.remove();
     var sub=makeSubOptions([
       ["\uD83D\uDDBC\uFE0F","Gallery",function(){pickFile("image/*",null,handlePhoto);}],
       ["\uD83D\uDCF8","Live",function(){pickFile("image/*","environment",handlePhoto);}]
     ]);
     sub.classList.add("qa-sub");
-    fabWrap.insertBefore(sub,photoRow);
-  });
+    var livePhotoRow=document.getElementById("qa-photo-row");
+    if(livePhotoRow&&livePhotoRow.parentNode===lw)lw.insertBefore(sub,livePhotoRow);
+    else lw.appendChild(sub);
+  },"qa-photo-row");
 
   // Video row with sub-options
   var videoRow=makeQA("\uD83C\uDFA5","Video",function(e){
     e.stopPropagation();
-    var existing=fabWrap.querySelector(".qa-sub");if(existing)existing.remove();
+    var lw=liveFabWrap();if(!lw)return;
+    var existing=lw.querySelector(".qa-sub");if(existing)existing.remove();
     var sub=makeSubOptions([
       ["\uD83D\uDCFC","Gallery",function(){pickFile("video/*",null,handleVideo);}],
       ["\uD83C\uDFA5","Live",function(){pickFile("video/*","camcorder",handleVideo);}]
     ]);
     sub.classList.add("qa-sub");
-    fabWrap.insertBefore(sub,videoRow);
-  });
+    var liveVideoRow=document.getElementById("qa-video-row");
+    if(liveVideoRow&&liveVideoRow.parentNode===lw)lw.insertBefore(sub,liveVideoRow);
+    else lw.appendChild(sub);
+  },"qa-video-row");
 
   var updateRow=makeQA("\u270F\uFE0F","Update",function(){
     hideAll();ST.upType="status";ST.upStep=1;ST.upCap="";ST.upOpen=true;redraw();
-  });
+  },"qa-update-row");
 
-  var fab=b({css:{width:"52px",height:"52px",borderRadius:"50%",background:t.a,border:"none",color:"white",fontSize:"28px",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 18px "+t.a+"88",cursor:"pointer",fontFamily:"inherit",transition:"transform .2s ease",WebkitUserSelect:"none",userSelect:"none",WebkitTouchCallout:"none"}},"+");
+  var fab=b({id:"fab-plus-btn",css:{width:"52px",height:"52px",borderRadius:"50%",background:t.a,border:"none",color:"white",fontSize:"28px",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 18px "+t.a+"88",cursor:"pointer",fontFamily:"inherit",transition:"transform .2s ease",WebkitUserSelect:"none",userSelect:"none",WebkitTouchCallout:"none"}},"+");
 
   fab.addEventListener("click",function(){
     if(qaVisible){hideAll();return;}
+    var lw=liveFabWrap();if(!lw)return;
     qaVisible=true;
     fab.style.transform="rotate(45deg)";fab.textContent="\u2715";
-    [updateRow,videoRow,photoRow].forEach(function(r){fabWrap.insertBefore(r,fab);});
+    [updateRow,videoRow,photoRow].forEach(function(r){
+      if(fab.parentNode===lw)lw.insertBefore(r,fab);
+      else lw.appendChild(r);
+    });
   });
 
-  document.addEventListener("touchstart",function(e){
-    if(qaVisible&&!fabWrap.contains(e.target)){hideAll();}
-  },{passive:true});
+  // This whole FAB gets rebuilt on every redraw (every reaction, comment,
+  // message elsewhere in the app), so this listener was being re-attached
+  // to `document` every single time with no cleanup - the same duplicate-
+  // listener pattern found and fixed for online/offline detection and
+  // foreground notifications earlier. Removing the previous one first
+  // keeps exactly one live at a time, always the current render's.
+  if(window._fabTouchHandler)document.removeEventListener("touchstart",window._fabTouchHandler);
+  window._fabTouchHandler=function(e){
+    var lw=liveFabWrap();
+    if(qaVisible&&lw&&!lw.contains(e.target)){hideAll();}
+  };
+  document.addEventListener("touchstart",window._fabTouchHandler,{passive:true});
 
   fabWrap.appendChild(fab);wrap.appendChild(fabWrap);
   return wrap;
@@ -1996,7 +2242,7 @@ function buildFeed(t,grp){
 
 function buildItem(item,t){
   var rx=ST.reactions[item.id];var pc=ST.comments[item.id]||[];
-  var wrap=d({css:{animation:"fadeUp .3s ease both",borderBottom:"1px solid #F5DDD1",marginBottom:"0"}});
+  var wrap=d({id:"item-"+item.id,css:{animation:"fadeUp .3s ease both",borderBottom:"1px solid #F5DDD1",marginBottom:"0"}});
   if(item.type==="birthday"){
     var card=d({css:{background:"linear-gradient(135deg,#FFF8E8,#FBF0D0)",border:"none",borderBottom:"2px solid #E8C878",padding:"14px 16px",display:"flex",gap:"12px",alignItems:"center"}});
     var cake=d({css:{fontSize:"40px",flexShrink:0}});cake.textContent="\uD83C\uDF82";card.appendChild(cake);
@@ -4245,7 +4491,7 @@ ST.upImg=null;ST.upPhotos=[];
       db.collection("feed").where("groupId","==",postGroup).get().then(function(snap){
         ST.feed[postGroup]=[];
         snap.forEach(function(doc){ST.feed[postGroup].push(Object.assign({},doc.data(),{id:doc.id}));});
-        ST.feed[postGroup].sort(function(a,b){var ta=a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():0;var tb=b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():0;return tb-ta;});
+        ST.feed[postGroup].sort(function(a,b){return tsMillis(b.createdAt)-tsMillis(a.createdAt);});
         redraw();
       });
     }).catch(function(e){console.log("checkin post failed",e);});
@@ -4701,7 +4947,38 @@ auth.onAuthStateChanged(function(user){
               finishSignin();
             }).catch(finishSignin);
           } else {
-            finishSignin();
+            // A profile exists but userGroups is missing or empty - this has
+            // happened to real accounts from earlier data bugs (a wholesale
+            // overwrite instead of a merge, a migration that missed a step).
+            // Rather than proceed with an empty group list and crash later,
+            // check whether real membership docs exist for this person and
+            // silently reconstruct userGroups from them - the same repair
+            // that's had to be done by hand in the Firestore console for
+            // several real users so far.
+            db.collection("members").where("uid","==",user.uid).get().then(function(mSnap){
+              var isAdminAnywhere=false;
+              var rebuiltGroups=[];
+              mSnap.forEach(function(mdoc){
+                var m=mdoc.data();
+                if(m.isAdmin)isAdminAnywhere=true;
+                if(m.groupId&&!rebuiltGroups.find(function(g){return g.id===m.groupId;})){
+                  rebuiltGroups.push({id:m.groupId,label:m.groupLabel||"Family",icon:m.groupIcon||"\u2764\uFE0F"});
+                }
+              });
+              localStorage.setItem("ku_admin",isAdminAnywhere?"1":"0");
+              if(rebuiltGroups.length>0){
+                ST.groups=rebuiltGroups;
+                ST.group=ST.groups[0].id;
+                try{localStorage.setItem("ku_groups",JSON.stringify(ST.groups));}catch(e){}
+                try{localStorage.setItem("ku_grp",JSON.stringify({label:ST.groups[0].label,icon:ST.groups[0].icon}));}catch(e){}
+                db.collection("userGroups").doc(user.uid).set({
+                  groups:rebuiltGroups,
+                  updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
+                  selfHealed:true
+                },{merge:true}).catch(function(){});
+              }
+              finishSignin();
+            }).catch(finishSignin);
           }
         }).catch(function(){
           ST.boarded=true;
