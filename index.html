@@ -265,7 +265,20 @@ function uploadToCloudflareStream(file,onProgress){
     });
 }
 
-var VAPID_KEY="BJOij4wvBLe4ZgNbMuhHSVarzr9k65tSbnbF5oeSjsvOg_rTJN-ffZmCsLfz1iX_UGq5aPmTyWwRRb-fdAHJ7O4";
+// A VAPID key is tied to ONE specific Firebase project's Cloud Messaging
+// config (its "Web Push certificates" key pair) - it can't be reused across
+// projects any more than an API key can. Staging and prod are separate
+// Firebase projects (see FIREBASE_CONFIG_STAGING/PROD above), so they need
+// their own VAPID keys too. Using prod's key while initialized against
+// staging's project is exactly what throws "messaging/token-subscribe-failed:
+// ...missing required authentication credential" - the key doesn't belong
+// to the project the app is actually talking to.
+// PLACEHOLDER - get the real staging key from the keep-up-staging Firebase
+// project: Project Settings > Cloud Messaging > Web Push certificates
+// (generate a key pair there if none exists yet), then paste it in below.
+var VAPID_KEY_STAGING="REPLACE_WITH_STAGING_PROJECT_VAPID_KEY";
+var VAPID_KEY_PROD="BJOij4wvBLe4ZgNbMuhHSVarzr9k65tSbnbF5oeSjsvOg_rTJN-ffZmCsLfz1iX_UGq5aPmTyWwRRb-fdAHJ7O4";
+var VAPID_KEY=IS_STAGING?VAPID_KEY_STAGING:VAPID_KEY_PROD;
 
 // Register service worker and request notification permission
 function initNotifications(){
@@ -593,12 +606,25 @@ function getThumbUrl(url){
 // the UI silently frozen with no explanation.
 function handleGroupListenerErr(err,gid){
   console.log("group listener error:",gid,err&&err.code,err);
+  if(!currentUser)return; // signed out (or mid-signout) - not a real membership change
   if(err&&err.code==="permission-denied"&&gid){
     var wasCurrent=ST.group===gid;
     var removedGroup=ST.groups.find(function(x){return x.id===gid;});
     ST.groups=ST.groups.filter(function(x){return x.id!==gid;});
     try{localStorage.setItem("ku_groups",JSON.stringify(ST.groups));}catch(e){}
     if(wasCurrent&&ST.groups.length){ST.group=ST.groups[0].id;}
+    // Scrub this group from the authoritative userGroups doc too - otherwise
+    // it's still listed there, so the very next sign-in reads it again,
+    // tries to sync it, hits the same permission-denied, and this whole
+    // thing repeats forever instead of actually healing.
+    var uidForCleanup=currentUser.uid;
+    db.collection("userGroups").doc(uidForCleanup).get().then(function(udoc){
+      var curGroups=(udoc.exists&&udoc.data().groups)||[];
+      var cleaned=curGroups.filter(function(x){return x&&x.id!==gid;});
+      if(cleaned.length!==curGroups.length){
+        return db.collection("userGroups").doc(uidForCleanup).set({groups:cleaned,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+      }
+    }).catch(function(e){logAppError("userGroups cleanup after permission-denied",e);});
     if(typeof showTopToast==="function"){
       showTopToast(removedGroup?("You no longer have access to "+removedGroup.label):"You no longer have access to a group.");
     }
@@ -611,6 +637,7 @@ function handleGroupListenerErr(err,gid){
 var _lastConnErrToastAt=0;
 function handleGenericListenerErr(err,label){
   console.log(label+" listener error:",err&&err.code,err);
+  if(!currentUser)return; // signed out (or mid-signout) - nothing to surface
   var now=Date.now();
   if(now-_lastConnErrToastAt<15000)return; // avoid multiple listeners all toasting at once
   _lastConnErrToastAt=now;
@@ -622,6 +649,22 @@ function handleGenericListenerErr(err,label){
 function syncOn(){
   if(!currentUser)return;
   unsubscribers.forEach(function(u){u();});unsubscribers=[];
+  // Watch for a phone-targeted invite addressed to this account. Registered
+  // here (not just once at sign-in) so it survives syncOn()'s own listener
+  // reset above, and runs even for an account with zero groups right now -
+  // deliberately, since the whole point is to rescue someone who's signed
+  // in but currently has no group (and therefore no admin of their own who
+  // could hand them a link). Security rules only let an account read the
+  // pendingInvites doc matching its OWN verified phone number, so this is
+  // safe without any server-side lookup.
+  if(currentUser.phoneNumber){
+    unsubscribers.push(db.collection("pendingInvites").doc(currentUser.phoneNumber).onSnapshot(function(snap){
+      ST.myPendingInvite=snap.exists?Object.assign({_id:snap.id},snap.data()):null;
+      redraw();
+    },function(err){
+      console.log("pendingInvites listener error:",err&&err.code,err);
+    }));
+  }
   var dot=document.getElementById("sync-dot");if(dot)dot.style.display="block";
   // Load notification mute preferences
   db.collection("fcmTokens").doc(currentUser.uid).get().then(function(doc){
@@ -939,8 +982,15 @@ function doSync(){
     unsubscribers.push(dmListUnsub);
   }
 
-  // Listen for notifications triggered by other users
+  // Listen for notifications triggered by other users. Scoped to our own
+  // groups (myGroupIds, already computed above) - this used to query the
+  // whole notifications collection with no groupId filter at all. The
+  // security rule is scoped per-document (isMember(resource.data.groupId)),
+  // and Firestore can't prove an unscoped query is safe for every possible
+  // matching document, so it denied the entire query outright with
+  // permission-denied rather than filtering anything out.
   var notifUnsub=db.collection("notifications")
+    .where("groupId","in",myGroupIds)
     .orderBy("sentAt","desc").limit(1)
     .onSnapshot(function(snap){
       snap.docChanges().forEach(function(change){
@@ -977,17 +1027,47 @@ function doSync(){
   watchGroupScoped("members",myGroupIds,function(snap){
     ST.fbMembers=ST.fbMembers||{};
     var uidsSeen={};
+    // This used to only ADD a member the first time it saw their uid and
+    // silently ignore every snapshot after that - meaning a change to an
+    // already-known member's doc (promoted/demoted admin, a name/avatar
+    // refresh) never reached ST.fbMembers for the rest of the session. Now
+    // it updates the entry in place, and also drops anyone no longer present
+    // (removed, or left) instead of leaving a stale ghost member around.
+    var presentKeys={};
     snap.forEach(function(doc){
       var m=doc.data();
       var gid=m.groupId||"imm";
       if(!ST.fbMembers[gid])ST.fbMembers[gid]=[];
-      if(!ST.fbMembers[gid].find(function(x){return x.uid===m.uid;})){
-        var safeAv=(m.av&&m.av.length<=8)?m.av:"\uD83D\uDC64";
-        var safeName=(m.name&&m.name.length<40&&!/^[A-Za-z0-9_-]{20,}$/.test(m.name))?m.name:"Family member";
-        ST.fbMembers[gid].push(Object.assign({},m,{av:safeAv,name:safeName,_docId:doc.id}));
-        if(m.uid)uidsSeen[m.uid]=true;
-      }
+      var safeAv=(m.av&&m.av.length<=8)?m.av:"\uD83D\uDC64";
+      var safeName=(m.name&&m.name.length<40&&!/^[A-Za-z0-9_-]{20,}$/.test(m.name))?m.name:"Family member";
+      var entry=Object.assign({},m,{av:safeAv,name:safeName,_docId:doc.id});
+      var idx=ST.fbMembers[gid].findIndex(function(x){return x.uid===m.uid;});
+      if(idx>=0)ST.fbMembers[gid][idx]=entry;else ST.fbMembers[gid].push(entry);
+      if(m.uid)uidsSeen[m.uid]=true;
+      presentKeys[m.uid+"_"+gid]=true;
     });
+    myGroupIds.forEach(function(gid){
+      if(!ST.fbMembers[gid])return;
+      ST.fbMembers[gid]=ST.fbMembers[gid].filter(function(x){return presentKeys[x.uid+"_"+gid];});
+    });
+    // Admin status used to be a one-time snapshot taken at sign-in and
+    // cached in localStorage, never re-checked again - a handoff or removal
+    // done by someone else wouldn't show up until the next full sign-in.
+    // Recompute it live right here instead, so it reflects reality within a
+    // second or two of the actual change, no refresh needed at all.
+    if(currentUser){
+      var myEntries=[];
+      Object.keys(ST.fbMembers).forEach(function(gid){
+        var me=ST.fbMembers[gid].find(function(x){return x.uid===currentUser.uid;});
+        if(me)myEntries.push(me);
+      });
+      var isAdminAnywhereNow=myEntries.some(function(x){return x.isAdmin===true;});
+      var wasAdmin=localStorage.getItem("ku_admin")==="1";
+      if(isAdminAnywhereNow!==wasAdmin){
+        try{localStorage.setItem("ku_admin",isAdminAnywhereNow?"1":"0");}catch(e){}
+        redraw();
+      }
+    }
     if(ST.tab==="profile")redraw();
     // Merge in real profile data (name/avatar/etc now live in profiles/{uid},
     // separate from group membership, so editing your profile once updates
@@ -1133,7 +1213,7 @@ var ST={
   feedRendered:{},allReactions:{},upPhotos:[],mutedGroups:[],muteComments:false,muteDailyReminder:false,
   boarded:false,obStep:0,obName:"",obAvatar:"\uD83D\uDC69",obPhoto:null,
   obGrpName:"",obGrpEmoji:"\u2764\uFE0F",obGrpPhoto:null,joinInvite:false,inviteError:null,fbMembers:{},
-  editingGroup:null,editingBirthdays:false,creatingGroup:false,showGroupSwitcher:false,navExpanded:false,showTutorial:false,tutorialStep:0,replyTo:null,profileWallpaper:null,sessionStart:Date.now(),memoryDay:null,memoryPosts:null,appReady:false,leaveGroupId:null,
+  editingGroup:null,editingBirthdays:false,creatingGroup:false,showGroupSwitcher:false,navExpanded:false,showTutorial:false,tutorialStep:0,replyTo:null,profileWallpaper:null,sessionStart:Date.now(),memoryDay:null,memoryPosts:null,appReady:false,leaveGroupId:null,myPendingInvite:null,invitePhoneBusy:false,
   tab:"feed",group:"imm",name:"Sean",avatar:"\uD83D\uDC68",feedLoading:false,
   openChat:null,
   chatMsgs:{imm:[]},
@@ -1208,7 +1288,18 @@ function setGroupIcon(container,g){
 // sane to show, regardless of what the source data actually contained.
 function normalizeGroups(arr){
   return (arr||[]).filter(function(g){return g&&g.id;}).map(function(g){
-    return {id:g.id,label:g.label||"Family",icon:g.icon||"❤️",photo:g.photo};
+    var out={id:g.id,label:g.label||"Family",icon:g.icon||"❤️"};
+    // Only include photo when there actually is one. `photo:g.photo` used to
+    // run unconditionally, which put an explicit `photo: undefined` key on
+    // every group with no custom photo (the normal case - most groups just
+    // use an emoji icon). That's harmless for local state, but Firestore's
+    // SDK rejects ANY undefined field value outright on a write - so the
+    // moment this normalized list got written back (joining a group via
+    // invite link, accepting a phone invite), the whole batch failed with
+    // "Unsupported field value: undefined", surfacing as a generic
+    // connection-error toast with no hint of the real cause.
+    if(g.photo)out.photo=g.photo;
+    return out;
   });
 }
 
@@ -1325,6 +1416,15 @@ function buildDeleteButton(css,itemId,opts){
 
 function isAdmin(){
   try{return localStorage.getItem("ku_admin")==="1";}catch(e){return false;}
+}
+
+function normalizePhoneInput(raw){
+  raw=(raw||"").trim().replace(/[\s\-().]/g,"");
+  if(raw&&!raw.startsWith("+")){
+    // No country code given - assume US/Canada if it's a plain 10-digit number
+    raw=(raw.length===10)?"+1"+raw:"+"+raw;
+  }
+  return raw;
 }
 
 function showFullScreen(url){
@@ -2012,7 +2112,17 @@ function buildOnboarding(){
         ST.pendingInviteToken=null;
       }
       var uid=currentUser.uid;
-      var finalGrpId=ST.joinInvite&&ST.joinGroupId?ST.joinGroupId:"grp-"+uid;
+      // A fresh random id per group, not "grp-"+uid. That old scheme was
+      // deterministic per ACCOUNT, not per group - so anyone who ever
+      // created a group, later left it, and then created a new one would
+      // collide with their own old (still-existing - leaving never deletes
+      // the groups doc) groups/{id} document. Firestore then evaluates the
+      // write as an update (not a create, since the doc already exists),
+      // which requires current admin rights on that OLD group - rights
+      // they no longer have since they left it - so the write was silently
+      // rejected and onboarding failed with a misleading "check your
+      // connection" message.
+      var finalGrpId=ST.joinInvite&&ST.joinGroupId?ST.joinGroupId:db.collection("groups").doc().id;
       var safeAv=ST.obAvatar||"\uD83D\uDC64"; // Always use emoji for onboarding
       // Set local state
       ST.name=ST.obName;
@@ -2104,6 +2214,12 @@ function buildOnboarding(){
 
 function buildNoGroupsScreen(){
   var wrap=d({id:"app",css:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center",padding:"32px 24px",height:"100vh",boxSizing:"border-box",background:"#FFF8F0"}});
+  if(ST.myPendingInvite){
+    wrap.appendChild(d({css:{fontSize:"13px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".5px",marginBottom:"12px"}},"You have a pending invite"));
+    var pic=buildPendingInviteCard();pic.style.maxWidth="320px";pic.style.width="100%";
+    wrap.appendChild(pic);
+    wrap.appendChild(d({css:{fontSize:"13px",color:"#9B7B62",margin:"22px 0 4px"}},"\u2014 or \u2014"));
+  }
   wrap.appendChild(d({css:{fontSize:"56px",marginBottom:"16px"}},"\uD83C\uDFE1"));
   wrap.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"22px",fontWeight:600,color:"#3D2314",marginBottom:"10px"}},"No family group found"));
   wrap.appendChild(d({css:{fontSize:"14px",color:"#9B7B62",lineHeight:1.6,marginBottom:"10px",maxWidth:"320px"}},"You're signed in, but you're not currently part of a family group. This can happen if a group was removed or your access changed."));
@@ -2113,13 +2229,27 @@ function buildNoGroupsScreen(){
     // through phone verification once, and clearing it would force a fresh
     // invite link (if they get one after this) down the slow full-onboarding
     // path instead of the fast rejoin path that already handles this case.
-    ST.boarded=false;ST.obStep=0;ST.joinInvite=false;ST.obGrpName=null;
+    // Also deliberately jumping straight to step 3 ("create a group"), not
+    // step 0 - step 0 is the very first "Get Started" screen that leads into
+    // phone verification, and this account is already signed in. Sending it
+    // through step 0 again walked a verified user back through the phone
+    // step for no reason. Carry over the name/avatar already on file so
+    // step 4 (which writes ST.obName/ST.obAvatar to Firestore) has real
+    // values instead of blanks.
+    ST.boarded=false;ST.obStep=3;ST.joinInvite=false;
+    ST.obGrpName="";ST.obGrpEmoji="❤️";ST.obGrpPhoto=null;
+    ST.obName=ST.name||"";ST.obAvatar=ST.avatar||"👤";
     redraw();
   }));
   var signOutBtn=document.createElement("button");
   signOutBtn.textContent="Sign out";
   signOutBtn.style.cssText="margin-top:14px;background:none;border:none;color:#9B7B62;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;text-decoration:underline;";
-  signOutBtn.addEventListener("click",function(){firebase.auth().signOut().then(function(){location.reload();});});
+  signOutBtn.addEventListener("click",function(){
+    unsubscribers.forEach(function(u){u();});unsubscribers=[];
+    if(window.recaptchaVerifier){try{window.recaptchaVerifier.clear();}catch(e){}window.recaptchaVerifier=null;}
+    try{localStorage.clear();}catch(e){}
+    firebase.auth().signOut().then(function(){location.reload();}).catch(function(){location.reload();});
+  });
   wrap.appendChild(signOutBtn);
   return wrap;
 }
@@ -3438,18 +3568,22 @@ function sendChatPhoto(gid,file,t){
   storage.ref("chat-photos/"+uid+"/"+Date.now()+"."+ext).put(file)
     .then(function(snap){return snap.ref.getDownloadURL();})
     .then(function(url){
-      var msg={av:ST.avatar&&ST.avatar.startsWith("data:")?"\uD83D\uDC64":(ST.avatar||"\uD83D\uDC64"),name:ST.name||"You",text:"",imgUrl:url,time:"Just now",you:true};
+      var msg={av:ST.avatar&&ST.avatar.startsWith("data:")?"\uD83D\uDC64":(ST.avatar||"\uD83D\uDC64"),name:ST.name||"You",text:"",imgUrl:url,time:"Just now",you:true,senderUid:currentUser.uid};
       // Remove temp
       if(dm){dm.msgs=dm.msgs.filter(function(x){return x.id!==tempId;});}
       else{ST.chatMsgs[gid]=ST.chatMsgs[gid].filter(function(x){return x.id!==tempId;});}
       if(dm){
-        postToDm(gid,Object.assign({},msg,{you:false})).catch(function(){
-          dm.msgs.push(Object.assign({},msg,{id:Date.now()}));dm.last="📷 Photo";dm.lt=Date.now();
+        postToDm(gid,Object.assign({},msg,{you:false})).catch(function(e){
+          logAppError("postToDm (chat photo)",e);
+          dm.msgs.push(Object.assign({},msg,{id:tempId}));dm.last="📷 Photo";dm.lt=Date.now();
+          redraw();
         });
       } else {
-        postToChat(gid,Object.assign({},msg,{you:false})).catch(function(){
+        postToChat(gid,Object.assign({},msg,{you:false})).catch(function(e){
+          logAppError("postToChat (chat photo)",e);
           if(!ST.chatMsgs[gid])ST.chatMsgs[gid]=[];
-          ST.chatMsgs[gid].push(Object.assign({},msg,{id:Date.now()}));
+          ST.chatMsgs[gid].push(Object.assign({},msg,{id:tempId}));
+          redraw();
         });
       }
       // Redraw to remove temp bubble, then scroll
@@ -3488,19 +3622,23 @@ function sendChatVideo(gid,file,t){
   });
   uploadTask.then(function(snap){return snap.ref.getDownloadURL();})
     .then(function(url){
-      var msg={av:ST.avatar&&ST.avatar.startsWith("data:")?"\uD83D\uDC64":(ST.avatar||"\uD83D\uDC64"),name:ST.name||"You",text:"",videoUrl:url,time:"Just now",you:true};
+      var msg={av:ST.avatar&&ST.avatar.startsWith("data:")?"\uD83D\uDC64":(ST.avatar||"\uD83D\uDC64"),name:ST.name||"You",text:"",videoUrl:url,time:"Just now",you:true,senderUid:currentUser.uid};
       if(dm){dm.msgs=dm.msgs.filter(function(x){return x.id!==tempId;});}
       else{ST.chatMsgs[gid]=ST.chatMsgs[gid].filter(function(x){return x.id!==tempId;});}
       if(dm){
         postToDm(gid,Object.assign({},msg,{you:false})).then(function(){
           db.collection("userDms").doc(gid).update({last:"\uD83C\uDFA5 Video",lt:"Just now",updatedAt:firebase.firestore.FieldValue.serverTimestamp()}).catch(function(e){logAppError("userDms.update (video message DM preview)",e);});
-        }).catch(function(){
-          dm.msgs.push(Object.assign({},msg,{id:Date.now()}));dm.last="\uD83C\uDFA5 Video";dm.lt="Just now";
+        }).catch(function(e){
+          logAppError("postToDm (chat video)",e);
+          dm.msgs.push(Object.assign({},msg,{id:tempId}));dm.last="\uD83C\uDFA5 Video";dm.lt="Just now";
+          redraw();
         });
       } else {
-        postToChat(gid,Object.assign({},msg,{you:false})).catch(function(){
+        postToChat(gid,Object.assign({},msg,{you:false})).catch(function(e){
+          logAppError("postToChat (chat video)",e);
           if(!ST.chatMsgs[gid])ST.chatMsgs[gid]=[];
-          ST.chatMsgs[gid].push(Object.assign({},msg,{id:Date.now()}));
+          ST.chatMsgs[gid].push(Object.assign({},msg,{id:tempId}));
+          redraw();
         });
       }
       var chatList2=document.getElementById("chat-msg-list");
@@ -4031,19 +4169,32 @@ function performLeaveGroup(gid,successorUid){
   var g=ST.groups.find(function(x){return x.id===gid;});
   var groupLabel=(g&&g.label)||"the group";
   var memberDocId=uid+"_"+gid;
-  var tasks=[db.collection("members").doc(memberDocId).delete()];
-  if(successorUid){
-    var sMems=(ST.fbMembers&&ST.fbMembers[gid])||[];
-    var sEntry=sMems.find(function(m){return m.uid===successorUid;});
-    var sDocId=(sEntry&&sEntry._docId)||(successorUid+"_"+gid);
-    tasks.push(db.collection("members").doc(sDocId).set({isAdmin:true},{merge:true}));
-  }
-  Promise.all(tasks).then(function(){
-    return db.collection("userGroups").doc(uid).get();
-  }).then(function(udoc){
+  // Everything below commits as ONE atomic batch instead of several
+  // independent sequential writes. Two reasons:
+  // 1. The isGroupAdmin() rule for promoting a successor needs OUR OWN
+  //    member doc to still exist with isAdmin:true. A batch's security
+  //    rules are evaluated against the database as it stood right before
+  //    the commit, for every write in that commit - so the promotion sees
+  //    us as still-admin even though this same commit deletes our doc.
+  // 2. All-or-nothing commit means there's no window where our member doc
+  //    is gone but userGroups still lists the group (or vice versa) because
+  //    one write succeeded and a later, separate write failed/got
+  //    interrupted. That split-brain is exactly what caused real accounts
+  //    to land on "No family group found" while still permission-denied
+  //    on every collection for a group userGroups said they belonged to.
+  db.collection("userGroups").doc(uid).get().then(function(udoc){
     var curGroups=(udoc.exists&&udoc.data().groups)||[];
     var newGroups=curGroups.filter(function(x){return x&&x.id!==gid;});
-    return db.collection("userGroups").doc(uid).set({groups:newGroups,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+    var batch=db.batch();
+    if(successorUid){
+      var sMems=(ST.fbMembers&&ST.fbMembers[gid])||[];
+      var sEntry=sMems.find(function(m){return m.uid===successorUid;});
+      var sDocId=(sEntry&&sEntry._docId)||(successorUid+"_"+gid);
+      batch.set(db.collection("members").doc(sDocId),{isAdmin:true},{merge:true});
+    }
+    batch.delete(db.collection("members").doc(memberDocId));
+    batch.set(db.collection("userGroups").doc(uid),{groups:newGroups,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+    return batch.commit();
   }).then(function(){
     ST.groups=ST.groups.filter(function(x){return x.id!==gid;});
     delete ST.feed[gid];delete ST.chatMsgs[gid];delete ST.mems[gid];
@@ -4156,6 +4307,52 @@ function buildInviteCard(){
       });
     })(g,copyBtn,gt);
     row.appendChild(copyBtn);invBody.appendChild(row);
+    // Invite an existing Keep Up user directly by phone number - shows up
+    // as a card in their own app (Profile tab, or the "no group" recovery
+    // screen) instead of a link someone has to copy and send some other
+    // way. Only works for numbers that already have an account, since
+    // that's the whole point - for anyone else, Copy Link above still
+    // covers it.
+    var phoneRow=d({css:{display:"flex",alignItems:"center",gap:"8px",marginBottom:"4px"}});
+    var phoneIn=el("input",{type:"tel",placeholder:"Invite by phone number",css:{flex:1,padding:"9px 12px",borderRadius:"50px",border:"1.5px solid #F5DDD1",background:"#FAF6F0",fontSize:"13px",color:"#3D2314",outline:"none",fontFamily:"inherit"}});
+    var phoneBtn=b({css:{padding:"7px 13px",borderRadius:"50px",background:"transparent",border:"1.5px solid "+gt.a,color:gt.a,fontSize:"12px",fontWeight:700,cursor:"pointer",fontFamily:"inherit",flexShrink:0}},"Send");
+    phoneRow.appendChild(phoneIn);phoneRow.appendChild(phoneBtn);
+    invBody.appendChild(phoneRow);
+    var phoneStatus=d({css:{fontSize:"11px",lineHeight:1.5,marginBottom:"12px",minHeight:"1px"}});
+    invBody.appendChild(phoneStatus);
+    (function(grpObj,btn,input,status){
+      btn.addEventListener("click",function(){
+        if(!currentUser){status.textContent="Please wait — still signing you in.";status.style.color="#C0392B";return;}
+        var phone=normalizePhoneInput(input.value);
+        if(!phone||phone.length<8){status.textContent="Enter a valid phone number.";status.style.color="#C0392B";return;}
+        btn.textContent="...";btn.disabled=true;status.textContent="";
+        functions.httpsCallable("checkPhoneHasAccount")({phone:phone}).then(function(result){
+          var exists=!!(result.data&&result.data.exists);
+          if(!exists){
+            btn.textContent="Send";btn.disabled=false;
+            status.textContent="This number doesn't have a Keep Up account yet — please use Copy Link above to invite them instead.";
+            status.style.color="#C4714A";
+            return;
+          }
+          return db.collection("pendingInvites").doc(phone).set({
+            groupId:grpObj.id,groupLabel:grpObj.label,groupIcon:grpObj.icon,
+            invitedBy:currentUser.uid,invitedByName:ST.name||"A family member",
+            createdAt:firebase.firestore.FieldValue.serverTimestamp()
+          }).then(function(){
+            btn.textContent="Send";btn.disabled=false;
+            input.value="";
+            status.textContent="Invite sent! It'll show up in their app.";
+            status.style.color="#4A7C59";
+          });
+        }).catch(function(e){
+          console.log("inviteExistingMemberByPhone failed:",e&&e.code,e&&e.message,e);
+          logAppError("inviteExistingMemberByPhone failed",e);
+          btn.textContent="Send";btn.disabled=false;
+          status.textContent="Something went wrong — check your connection and try again.";
+          status.style.color="#C0392B";
+        });
+      });
+    })(g,phoneBtn,phoneIn,phoneStatus);
   });
   inv.appendChild(invBody);
   return inv;
@@ -4347,7 +4544,8 @@ function buildNotificationsCard(){
 function buildSignOutButton(){
   var so=b({css:{width:"100%",padding:"13px",borderRadius:"50px",background:"transparent",border:"2px solid #F5DDD1",color:"#9B7B62",fontSize:"14px",fontWeight:700,cursor:"pointer",fontFamily:"inherit",marginTop:"4px"}},"Sign Out");
   so.addEventListener("click",function(){
-    try{localStorage.clear();}catch(e){}
+    unsubscribers.forEach(function(u){u();});unsubscribers=[];
+    if(window.recaptchaVerifier){try{window.recaptchaVerifier.clear();}catch(e){}window.recaptchaVerifier=null;}
     try{localStorage.clear();}catch(e){}
     auth.signOut().catch(function(){});
     ST.boarded=false;ST.obStep=0;
@@ -4413,6 +4611,8 @@ function buildDeleteAccountButton(){
       var authedPhone=currentUser&&currentUser.phoneNumber;
 
       function finishLocalReset(authFullyDeleted){
+        unsubscribers.forEach(function(u){u();});unsubscribers=[];
+        if(window.recaptchaVerifier){try{window.recaptchaVerifier.clear();}catch(e){}window.recaptchaVerifier=null;}
         try{localStorage.clear();}catch(e){}
         auth.signOut().catch(function(){});
         ST.boarded=false;ST.obStep=0;
@@ -4528,10 +4728,95 @@ function buildDeleteAccountButton(){
 // The Profile tab, dispatching to one builder per card instead of a single
 // ~470-line function building all 13 cards inline. Order matches exactly
 // what was there before.
+function acceptPendingGroupInvite(){
+  if(!currentUser||!ST.myPendingInvite)return;
+  var inv=ST.myPendingInvite;
+  var gid=inv.groupId;
+  if(!gid){showTopToast("Something's wrong with that invite.");redraw();return;}
+  db.collection("userGroups").doc(currentUser.uid).get().then(function(ugDoc){
+    var authoritative=normalizeGroups((ugDoc.exists&&ugDoc.data()&&ugDoc.data().groups)||[]);
+    if(authoritative.some(function(g){return g.id===gid;})){
+      // Already a member somehow - just clear the stale invite
+      db.collection("pendingInvites").doc(currentUser.phoneNumber).delete().catch(function(e){logAppError("pendingInvites.delete (already member)",e);});
+      ST.group=gid;ST.tab="feed";ST.myPendingInvite=null;redraw();
+      return;
+    }
+    var newGroup={id:gid,label:inv.groupLabel||"Family",icon:inv.groupIcon||"❤️"};
+    var updatedGroups=authoritative.concat([newGroup]);
+    // Same atomic-batch pattern as the invite-link join flow: commit
+    // membership + userGroups + clearing the invite as one unit, and don't
+    // touch local state or start listeners until it's actually confirmed.
+    var batch=db.batch();
+    batch.set(db.collection("userGroups").doc(currentUser.uid),{groups:updatedGroups,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+    batch.set(db.collection("members").doc(currentUser.uid+"_"+gid),{
+      uid:currentUser.uid,name:ST.name,av:ST.avatar&&ST.avatar.startsWith("data:")?"👤":(ST.avatar||"👤"),
+      groupId:gid,groupLabel:newGroup.label,groupIcon:newGroup.icon,isAdmin:false,
+      joinedAt:firebase.firestore.FieldValue.serverTimestamp()
+    });
+    batch.delete(db.collection("pendingInvites").doc(currentUser.phoneNumber));
+    batch.commit().then(function(){
+      ST.groups=updatedGroups;
+      ST.feed[gid]=[];ST.chatMsgs[gid]=[];
+      try{localStorage.setItem("ku_groups",JSON.stringify(ST.groups));}catch(e){}
+      db.collection("fcmTokens").doc(currentUser.uid).set({groupIds:updatedGroups.map(function(gr){return gr.id;})},{merge:true}).catch(function(e){logAppError("fcmTokens.set (accept pending invite)",e);});
+      ST.group=gid;ST.tab="feed";ST.appReady=true;ST.myPendingInvite=null;
+      fetchAllFeeds();syncOn();
+      showTopToast("Joined "+newGroup.label+"! 🎉");
+      redraw();
+    }).catch(function(e){
+      console.log("acceptPendingGroupInvite batch failed:",e&&e.code,e&&e.message,e);
+      logAppError("acceptPendingGroupInvite batch failed",e);
+      showTopToast("Couldn't join that group — check your connection and try again.");
+      redraw();
+    });
+  }).catch(function(e){
+    console.log("acceptPendingGroupInvite reconciliation failed:",e&&e.code,e&&e.message,e);
+    logAppError("acceptPendingGroupInvite reconciliation failed",e);
+    showTopToast("Couldn't check your groups — check your connection and try again.");
+    redraw();
+  });
+}
+
+function declinePendingGroupInvite(){
+  if(!currentUser||!ST.myPendingInvite)return;
+  db.collection("pendingInvites").doc(currentUser.phoneNumber).delete().then(function(){
+    ST.myPendingInvite=null;redraw();
+  }).catch(function(e){
+    console.log("declinePendingGroupInvite failed:",e&&e.code,e&&e.message,e);
+    logAppError("declinePendingGroupInvite failed",e);
+    showTopToast("Couldn't dismiss that invite — check your connection and try again.");
+  });
+}
+
+function buildPendingInviteCard(){
+  var inv=ST.myPendingInvite;
+  if(!inv)return null;
+  var card=d({css:{background:"#FFF4E8",border:"2px solid #E8956D",borderRadius:"18px",padding:"16px",marginBottom:"12px",textAlign:"center"}});
+  card.appendChild(d({css:{fontSize:"32px",marginBottom:"8px"}},inv.groupIcon||"❤️"));
+  card.appendChild(d({css:{fontSize:"13px",fontWeight:700,color:"#9B7B62",marginBottom:"2px"}},inv.invitedByName?(inv.invitedByName+" invited you to"):"You've been invited to"));
+  card.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"19px",fontWeight:600,color:"#3D2314",marginBottom:"14px"}},inv.groupLabel||"a family group"));
+  var btnRow=d({css:{display:"flex",gap:"10px"}});
+  var acceptBtn=b({css:{flex:1,padding:"11px",borderRadius:"50px",background:"#C4714A",border:"none",color:"white",fontSize:"13px",fontWeight:700,cursor:"pointer",fontFamily:"inherit"}},"Accept");
+  acceptBtn.addEventListener("click",function(){
+    acceptBtn.textContent="Joining...";acceptBtn.disabled=true;
+    acceptPendingGroupInvite();
+  });
+  var declineBtn=b({css:{flex:1,padding:"11px",borderRadius:"50px",background:"transparent",border:"1.5px solid #E8956D",color:"#9B7B62",fontSize:"13px",fontWeight:700,cursor:"pointer",fontFamily:"inherit"}},"Decline");
+  declineBtn.addEventListener("click",function(){
+    if(!confirm("Decline this invite to "+(inv.groupLabel||"this group")+"?"))return;
+    declineBtn.textContent="...";declineBtn.disabled=true;
+    declinePendingGroupInvite();
+  });
+  btnRow.appendChild(acceptBtn);btnRow.appendChild(declineBtn);
+  card.appendChild(btnRow);
+  return card;
+}
+
 function buildProfile(t){
   var wrap=d({cls:"scr",css:{padding:"0 0 80px"}});
   wrap.appendChild(buildProfileBanner(t));
   var body=d({css:{padding:"16px 16px 0",marginTop:"-22px"}});
+  if(ST.myPendingInvite)body.appendChild(buildPendingInviteCard());
   body.appendChild(buildGroupsCard());
   body.appendChild(buildStatsRow(t));
   body.appendChild(buildInviteCard());
@@ -5694,24 +5979,42 @@ function joinAdditionalGroupViaToken(token){
       return;
     }
     var newGroup={id:gid,label:data.groupLabel||"Family",icon:data.groupIcon||"\u2764\uFE0F"};
-    ST.groups=authoritative.concat([newGroup]);
-    ST.feed[gid]=[];ST.chatMsgs[gid]=[];
-    try{localStorage.setItem("ku_groups",JSON.stringify(ST.groups));}catch(e){}
-    db.collection("userGroups").doc(currentUser.uid).set({
-      groups:ST.groups,
+    var updatedGroups=authoritative.concat([newGroup]);
+    // userGroups and members commit as ONE atomic batch, and - critically -
+    // we wait for that commit to actually finish before touching local
+    // state, starting listeners, or marking anything "joined". The old code
+    // fired both writes in parallel and then immediately called syncOn(),
+    // which could start the group's listeners before the members doc had
+    // actually committed server-side. If that write landed a beat late, the
+    // listener's first read saw "not a member yet", failed with
+    // permission-denied, and the self-healing cleanup on that error handler
+    // (added for a different bug) would then strip the group right back out
+    // of userGroups - undoing the join that had, in fact, just succeeded.
+    var batch=db.batch();
+    batch.set(db.collection("userGroups").doc(currentUser.uid),{
+      groups:updatedGroups,
       updatedAt:firebase.firestore.FieldValue.serverTimestamp()
-    },{merge:true}).catch(function(e){logAppError("userGroups.set (join additional group)",e);});
-    db.collection("members").doc(currentUser.uid+"_"+gid).set({
+    },{merge:true});
+    batch.set(db.collection("members").doc(currentUser.uid+"_"+gid),{
       uid:currentUser.uid,name:ST.name,av:ST.avatar&&ST.avatar.startsWith("data:")?"\uD83D\uDC64":(ST.avatar||"\uD83D\uDC64"),
       groupId:gid,groupLabel:newGroup.label,groupIcon:newGroup.icon,isAdmin:false,
       joinedAt:firebase.firestore.FieldValue.serverTimestamp()
-    }).catch(function(e){logAppError("members.set (join additional group)",e);});
-    db.collection("inviteTokens").doc(token).update({used:true,usedAt:firebase.firestore.FieldValue.serverTimestamp()}).catch(function(e){logAppError("inviteTokens.update (mark used - join additional group)",e);});
-    db.collection("fcmTokens").doc(currentUser.uid).set({groupIds:ST.groups.map(function(gr){return gr.id;})},{merge:true}).catch(function(e){logAppError("fcmTokens.set (join additional group)",e);});
-    ST.group=gid;ST.tab="feed";ST.appReady=true;
-    fetchAllFeeds();syncOn();
-    showTopToast("Joined "+newGroup.label+"! \uD83C\uDF89");
-    redraw();
+    });
+    batch.commit().then(function(){
+      ST.groups=updatedGroups;
+      ST.feed[gid]=[];ST.chatMsgs[gid]=[];
+      try{localStorage.setItem("ku_groups",JSON.stringify(ST.groups));}catch(e){}
+      db.collection("inviteTokens").doc(token).update({used:true,usedAt:firebase.firestore.FieldValue.serverTimestamp()}).catch(function(e){logAppError("inviteTokens.update (mark used - join additional group)",e);});
+      db.collection("fcmTokens").doc(currentUser.uid).set({groupIds:updatedGroups.map(function(gr){return gr.id;})},{merge:true}).catch(function(e){logAppError("fcmTokens.set (join additional group)",e);});
+      ST.group=gid;ST.tab="feed";ST.appReady=true;
+      fetchAllFeeds();syncOn();
+      showTopToast("Joined "+newGroup.label+"! \uD83C\uDF89");
+      redraw();
+    }).catch(function(e){
+      logAppError("join additional group batch failed",e);
+      showTopToast("Couldn't join that group \u2014 check your connection and try the link again.");
+      ST.appReady=true;redraw();
+    });
     }); // end userGroups.get() reconciliation
   }).catch(function(e){
     logAppError("join additional group failed (invite token lookup)",e);
