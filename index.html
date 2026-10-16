@@ -782,6 +782,13 @@ function doSync(){
               redraw();
               setTimeout(function(){var _cl=document.getElementById("chat-msg-list");if(_cl)_cl.scrollTop=_cl.scrollHeight;},80);
             }
+          } else if(!(document.activeElement&&(document.activeElement.tagName==="INPUT"||document.activeElement.tagName==="TEXTAREA"))){
+            // hasUnread() for the nav badge is recomputed fresh from
+            // ST.chatMsgs on every redraw, but without one the badge never
+            // actually repaints while the user is on another tab when a
+            // group chat message arrives live - same issue as the DM
+            // listener below, fixed the same way.
+            debouncedRedraw();
           }
       },function(err){handleGroupListenerErr(err,gid);});
     unsubscribers.push(unsub);
@@ -869,6 +876,7 @@ function doSync(){
       .onSnapshot(function(snap){
         var dm=ST.dms.find(function(x){return x.id===dmId;});
         if(!dm)return;
+        var gotNewUnread=false;
         snap.docChanges().forEach(function(change){
           var data=Object.assign({},change.doc.data(),{id:change.doc.id});
           if(change.type==="added"){
@@ -896,6 +904,7 @@ function doSync(){
               if(!data.you&&msgTs>ST.sessionStart&&!dm.countedIds[data.id]){
                 dm.countedIds[data.id]=true;
                 dm.unread=(dm.unread||0)+1;
+                gotNewUnread=true;
                 var myUid4=currentUser?currentUser.uid:localStorage.getItem("ku_uid");
                 // Save to both Firestore and localStorage
                 localStorage.setItem("ku_unread_"+dmId,String(dm.unread));
@@ -906,12 +915,23 @@ function doSync(){
             }
           }
         });
+        // Don't steal focus/cursor from whatever input the user is actively
+        // typing in, on any tab - otherwise identical to the redraw below.
+        var typingSomewhere=document.activeElement&&(document.activeElement.tagName==="INPUT"||document.activeElement.tagName==="TEXTAREA");
         if(ST.tab==="chat"){
-          if(document.activeElement&&document.activeElement.tagName==="INPUT"){
+          if(typingSomewhere){
             setTimeout(function(){var _cl=document.getElementById("chat-msg-list");if(_cl)_cl.scrollTop=_cl.scrollHeight;},80);
           } else {
             debouncedRedraw();
           }
+        } else if(gotNewUnread&&!typingSomewhere){
+          // Not on the chat tab, so there's no message list to update here -
+          // but the unread badge on the nav (home button + Chat pill) is
+          // built as part of the top-level app render, so without this the
+          // badge state updates invisibly and never actually appears on
+          // screen until something else forces a redraw (e.g. a manual
+          // refresh), even though the message genuinely arrived live.
+          debouncedRedraw();
         }
       },function(err){handleGenericListenerErr(err,"dm messages");});
     unsubscribers.push(unsub);
@@ -937,15 +957,24 @@ function doSync(){
           if(change.type==="added"){
             // New DM appeared (either we created it or someone DMed us)
             if(!ST.dms.find(function(x){return x.id===dmId;})){
-              // Start unread at 0 - will increment via watchDm as new messages arrive
-            // Don't load from Firestore to avoid stale counts restoring
+              // Start from the max of local and server-known unread counts.
+              // unreadBy.<uid> is correctly incremented on every new message
+              // and cleared to 0 on every "mark as read" path in this file
+              // (chat-tab visit, list tap, chat opened), so it's a reliable
+              // source of truth now - skipping it (as this used to) meant a
+              // DM sent while you weren't already in the app with this DM's
+              // listener live would never show as unread, since localStorage
+              // alone has no way to know about it.
             var dmLt=data.lt;
             if(dmLt&&dmLt.toMillis)dmLt=dmLt.toMillis();
             // Use updatedAt if available as it's more reliable than lt
             var dmUpdated=data.updatedAt&&data.updatedAt.toMillis?data.updatedAt.toMillis():null;
             var finalLt=dmUpdated||dmLt||"";
+            var myUidInit=currentUser?currentUser.uid:localStorage.getItem("ku_uid");
+            var serverUnread=(data.unreadBy&&myUidInit&&typeof data.unreadBy[myUidInit]==="number")?data.unreadBy[myUidInit]:0;
             var savedUnread=parseInt(localStorage.getItem("ku_unread_"+dmId)||"0");
-            ST.dms.push({id:dmId,members:otherProfiles,last:data.last||"",lt:finalLt,msgs:[],unread:savedUnread});
+            var initUnread=Math.max(savedUnread,serverUnread);
+            ST.dms.push({id:dmId,members:otherProfiles,last:data.last||"",lt:finalLt,msgs:[],unread:initUnread});
             }
             watchDm(dmId);
           } else if(change.type==="modified"){
@@ -3198,7 +3227,7 @@ function buildChatView(t,grp){
   var list=d({id:"chat-msg-list",cls:"scr",css:{padding:"12px 13px 8px",display:"flex",flexDirection:"column",gap:"8px",background:t.bg,WebkitUserSelect:"none",userSelect:"none",WebkitTouchCallout:"none"}});
   if(!msgs.length){
     var em=d({css:{textAlign:"center",padding:"40px 20px",color:"#9B7B62"}});
-    var eic=d({css:{fontSize:"40px",marginBottom:"8px"}});eic.textContent=chatIcon;em.appendChild(eic);
+    var eic=d({css:{width:"64px",height:"64px",borderRadius:"50%",margin:"0 auto 8px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"40px",overflow:"hidden",background:t.ap}});renderAvatarGlyph(eic,chatIcon,10,"👤");em.appendChild(eic);
     em.appendChild(d({css:{fontSize:"14px",fontWeight:700,color:"#6B4C35",marginBottom:"4px"}},"Start the conversation!"));
     em.appendChild(d({css:{fontSize:"12px"}},"Say hello to "+chatName));list.appendChild(em);
   }
