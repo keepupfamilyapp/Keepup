@@ -738,27 +738,35 @@ function doSync(){
   // list here is simply "nothing to watch yet" instead of "watch the wrong
   // group and fail".
 
-  // Fetch feed for all groups
-  function fetchFeed(gid){
-    db.collection("feed").where("groupId","==",gid).get()
-      .then(function(snap){
-        ST.feed[gid]=[];
-        snap.forEach(function(doc){
-          ST.feed[gid].push(Object.assign({},doc.data(),{id:doc.id}));
-        });
-        ST.feed[gid].sort(function(a,b){return tsMillis(b.createdAt)-tsMillis(a.createdAt);});
-        if(ST.tab==="feed")redraw();
-      }).catch(function(e){logAppError("fetchFeed error:",e);console.log("fetchFeed error:",e);});
-  }
-  ST.groups.forEach(function(g){fetchFeed(g.id);});
-
-  // Also set up real-time listener for new posts
+  // Real-time listener for the feed - covers both the initial load AND
+  // ongoing updates, since Firestore's onSnapshot always fires once
+  // immediately with the complete current result set before switching to
+  // incremental diffs. This used to be backed by TWO separate fetches on
+  // top of this listener (a one-time fetchFeed() for every group here, plus
+  // fetchAllFeeds() for just the current group, called independently
+  // alongside syncOn() at virtually every sign-in path) - three competing
+  // writers to the same ST.feed[gid] racing each other on every reconnect,
+  // each triggering its own redraw. That's not just wasted Firestore reads
+  // (3x for the current group); the interleaving redraws were a real
+  // contributor to the sluggishness reported when several people are
+  // posting at once. fetchAllFeeds() still exists for its own purpose
+  // (pull-to-refresh, switching groups - a deliberate "get me the current
+  // group fresh right now"), but the redundant one-time fetchFeed() here is
+  // gone, and this listener now prunes deleted posts via docChanges()
+  // (type "removed") instead of only ever adding/updating - fetchFeed()'s
+  // wholesale reset used to be the only thing pruning a deleted post from a
+  // group you weren't currently viewing, so removing it without this would
+  // have left deleted posts as permanent ghosts in any other group.
   function watchFeed(gid){
     var unsub=db.collection("feed").where("groupId","==",gid)
       .onSnapshot(function(snap){
         ST.feed[gid]=ST.feed[gid]||[];
-        snap.forEach(function(doc){
-          var data=Object.assign({},doc.data(),{id:doc.id});
+        snap.docChanges().forEach(function(change){
+          var data=Object.assign({},change.doc.data(),{id:change.doc.id});
+          if(change.type==="removed"){
+            ST.feed[gid]=ST.feed[gid].filter(function(x){return x.id!==data.id;});
+            return;
+          }
           var existing=ST.feed[gid].findIndex(function(x){return x.id===data.id;});
           if(existing>=0)ST.feed[gid][existing]=data;
           else ST.feed[gid].push(data);
@@ -1282,7 +1290,7 @@ var TH={
 function th(id){return TH[id]||TH.imm;}
 
 var ST={
-  feedRendered:{},allReactions:{},upPhotos:[],mutedGroups:[],muteComments:false,muteDailyReminder:false,
+  feedRendered:{},feedRenderedThrough:{},allReactions:{},upPhotos:[],mutedGroups:[],muteComments:false,muteDailyReminder:false,
   boarded:false,obStep:0,obName:"",obAvatar:"\uD83D\uDC69",obPhoto:null,
   obGrpName:"",obGrpEmoji:"\u2764\uFE0F",obGrpPhoto:null,joinInvite:false,inviteError:null,fbMembers:{},
   editingGroup:null,editingBirthdays:false,creatingGroup:false,showGroupSwitcher:false,navExpanded:false,showTutorial:false,tutorialStep:0,replyTo:null,profileWallpaper:null,sessionStart:Date.now(),memoryDay:null,memoryPosts:null,appReady:false,leaveGroupId:null,myPendingInvite:null,invitePhoneBusy:false,
@@ -2633,7 +2641,16 @@ function buildFeed(t,grp){
   if(localStorage.getItem("ku_pending_token")||_pendingToken){
     console.log("[INVITE DEBUG] buildFeed: pending token present while boarded - leaving to joinAdditionalGroupViaToken"+JSON.stringify({boarded:ST.boarded,joinInvite:ST.joinInvite,inviteError:ST.inviteError}));
   }
-  if(!ST.appReady||(!currentUser&&!ST.joinInvite)||ST.feedLoading){
+  // feedLoading used to force this same full splash screen even when the
+  // feed already had content on screen (e.g. pull-to-refresh, or switching
+  // back to the feed tab) - wiping the whole visible feed and replacing it
+  // with the "keep up" logo screen every time, even though there's already
+  // a proper lightweight "Release to refresh"/"Refreshing" indicator (ptr,
+  // above) built for exactly this. That indicator never got a chance to
+  // show because this check intercepted first. Now the full splash is only
+  // for the genuine first-load case (nothing rendered yet); a refresh of an
+  // already-populated feed just leaves the existing list on screen.
+  if(!ST.appReady||(!currentUser&&!ST.joinInvite)||(ST.feedLoading&&!feedItems.length)){
     var loading=d({css:{position:"fixed",inset:"0",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:t.bg,zIndex:50}});
     var splashTitle=d({css:{fontFamily:"Lora,serif",fontSize:"42px",fontWeight:600,color:t.a,letterSpacing:"-1px",animation:"float 2s ease-in-out infinite"}});
     splashTitle.innerHTML="keep <em>up</em>";
@@ -2662,9 +2679,27 @@ function buildFeed(t,grp){
     var rendered=0;
     var rendering=false;
     var allItems=feedItems;
-    // Restore however many items were loaded before the last redraw,
-    // instead of always resetting back to just the first batch
-    var targetInitial=Math.min(Math.max(BATCH,ST.feedRendered[grp.id]||0),allItems.length);
+    // Restore roughly how much was loaded before the last redraw, instead
+    // of always resetting back to just the first batch. This used to be a
+    // raw item COUNT (ST.feedRendered), which breaks the moment a new post
+    // arrives: posts are sorted newest-first, so a new post shifts every
+    // existing post down one slot - the same count now points to a
+    // different, shorter set of posts, and whatever had been visible right
+    // at that boundary silently drops out of the render window and
+    // disappears from the screen (this is what showed up as the feed
+    // "hard refreshing" when someone posts in real time). Tracking the
+    // actual last-rendered post's id instead, and recomputing how many
+    // items that is in the current (re-sorted) array, means the same real
+    // posts stay rendered regardless of how many new ones got prepended
+    // above them.
+    var targetInitial;
+    var boundaryId=ST.feedRenderedThrough&&ST.feedRenderedThrough[grp.id];
+    var boundaryIdx=boundaryId?allItems.findIndex(function(x){return x.id===boundaryId;}):-1;
+    if(boundaryIdx>=0){
+      targetInitial=Math.min(Math.max(BATCH,boundaryIdx+1),allItems.length);
+    } else {
+      targetInitial=Math.min(Math.max(BATCH,ST.feedRendered[grp.id]||0),allItems.length);
+    }
 
     function renderBatch(isLoadMore){
       if(rendering||rendered>=allItems.length)return;
@@ -2677,6 +2712,8 @@ function buildFeed(t,grp){
       list.appendChild(frag);
       rendered=end;
       ST.feedRendered[grp.id]=rendered;
+      if(!ST.feedRenderedThrough)ST.feedRenderedThrough={};
+      if(rendered>0)ST.feedRenderedThrough[grp.id]=allItems[rendered-1].id;
       rendering=false;
       // Add load more sentinel if more items remain
       if(rendered<allItems.length){
