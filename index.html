@@ -144,6 +144,25 @@ window.addEventListener("unhandledrejection",function(e){
 // APP_VERSION by hand on every deploy (any changed string works - a
 // timestamp is easiest to keep unique).
 var APP_VERSION="2026-10-18T08:15:00Z-debug";
+function isStandaloneMode(){
+  return window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;
+}
+function showOpenInAppBanner(){
+  if(!document.body){document.addEventListener("DOMContentLoaded",showOpenInAppBanner);return;}
+  if(document.getElementById("open-app-banner"))return;
+  var bar=document.createElement("div");
+  bar.id="open-app-banner";
+  bar.style.cssText="position:fixed;top:0;left:0;right:0;z-index:9998;background:#3D2314;color:white;padding:11px 16px;font-family:Nunito,sans-serif;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:10px;text-align:center;";
+  var txt=document.createElement("span");
+  txt.textContent="Already have Keep Up on your Home Screen? Close this tab and tap the icon instead.";
+  var close=document.createElement("button");
+  close.textContent="✕";
+  close.setAttribute("aria-label","Dismiss");
+  close.style.cssText="background:none;border:none;color:white;opacity:.75;font-size:15px;cursor:pointer;padding:0 2px;flex-shrink:0;font-family:inherit;";
+  close.addEventListener("click",function(){bar.remove();});
+  bar.appendChild(txt);bar.appendChild(close);
+  document.body.appendChild(bar);
+}
 function checkForUpdate(){
   fetch(location.pathname+"?_v="+Date.now(),{cache:"no-store"})
     .then(function(r){return r.text();})
@@ -158,11 +177,31 @@ function showUpdateBanner(){
   bar.id="update-banner";
   bar.style.cssText="position:fixed;top:0;left:0;right:0;z-index:9998;background:#3D2314;color:white;padding:11px 16px;text-align:center;font-family:Nunito,sans-serif;font-size:13px;font-weight:700;cursor:pointer;";
   bar.textContent="A new version of Keep Up is ready — tap to refresh";
-  bar.addEventListener("click",function(){location.reload();});
+  // Plain location.reload() leaves it up to the browser whether to revalidate
+  // or just serve the exact same URL from its own cache - iOS standalone
+  // home-screen apps are known to cache more aggressively/unpredictably than
+  // a normal Safari tab, so a "refresh" could silently hand back the same
+  // stale JS that triggered this banner in the first place. Navigating to a
+  // URL with a new query string instead forces every cache layer (the
+  // browser's disk cache, iOS's webview cache, any CDN in front of GitHub
+  // Pages) to treat it as a brand-new resource, since none of them key
+  // purely off the path.
+  bar.addEventListener("click",function(){location.href=location.pathname+"?_v="+Date.now();});
   document.body.appendChild(bar);
 }
-setInterval(function(){if(document.visibilityState==="visible")checkForUpdate();},5*60*1000);
+// Tightened from 5 minutes - this is also now the thing that actually gets
+// someone unstuck (see showUpdateBanner's reload above), not just a
+// courtesy notice, so checking more often matters more than it used to.
+// Still far short of polling every page load - each check is a single
+// no-store fetch of the page, not a full asset re-download.
+setInterval(function(){if(document.visibilityState==="visible")checkForUpdate();},2*60*1000);
 document.addEventListener("visibilitychange",function(){if(document.visibilityState==="visible")checkForUpdate();});
+// iOS suspends a backgrounded home-screen app rather than killing it
+// outright, then restores it via "pageshow" (often with persisted:true,
+// meaning the JS context itself was frozen and revived, not reloaded) when
+// the person taps back into it - a path that doesn't reliably overlap with
+// visibilitychange on iOS specifically, so it's checked separately here too.
+window.addEventListener("pageshow",function(){checkForUpdate();});
 </script>
 <script>
 // Firebase init - automatically uses staging config when running on the
@@ -5954,6 +5993,18 @@ var _pendingToken=null;
     _pendingToken=token;
     localStorage.setItem("ku_pending_token",token);
     window.history.replaceState({},"",window.location.pathname);
+    // Invite links get tapped from Messages/Mail, which always opens a
+    // regular browser tab - even for someone who already has Keep Up on
+    // their Home Screen, since iOS doesn't hand a tapped link to an
+    // already-installed web app the way it does for native apps (there's no
+    // API for a web page to trigger that handoff itself). The token is
+    // already saved to localStorage above either way, so if they do switch
+    // over to the installed app themselves, it picks up right where this
+    // tab left off - this banner just tells people the shortcut exists,
+    // since the browser can't do that handoff for them automatically.
+    if(!isStandaloneMode()){
+      setTimeout(showOpenInAppBanner,400);
+    }
   }
   // NOTE: this used to also handle a legacy ?join=GroupName&icon=emoji link
   // format (setting ST.joinInvite straight from the URL, no Firestore
