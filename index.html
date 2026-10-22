@@ -143,7 +143,7 @@ window.addEventListener("unhandledrejection",function(e){
 // refresh instead of leaving people stuck in a stale session. Bump
 // APP_VERSION by hand on every deploy (any changed string works - a
 // timestamp is easiest to keep unique).
-var APP_VERSION="2026-10-21T22:45:32Z";
+var APP_VERSION="2026-10-18T08:15:00Z-debug";
 function checkForUpdate(){
   fetch(location.pathname+"?_v="+Date.now(),{cache:"no-store"})
     .then(function(r){return r.text();})
@@ -685,7 +685,19 @@ function doSync(){
   // defensively - no realistic family-app user should hit this, but it's
   // cheap insurance against a hard crash if someone somehow did.
   var myGroupIds=(ST.groups||[]).map(function(g){return g.id;}).slice(0,10);
-  if(myGroupIds.length===0)myGroupIds=["imm"];
+  // Used to fall back to the hardcoded "imm" (Jensens) group id whenever
+  // this list came back empty - which happens legitimately: a signed-in
+  // account between invite/account-creation steps, right after
+  // syncOn()/doSync() gets called to restore it but before it actually has
+  // a group yet. That fallback made every listener below query a specific
+  // group the account is essentially never a real member of, so Firestore's
+  // security rules denied all of them with permission-denied, surfacing as
+  // a "having trouble syncing" toast for someone who did nothing wrong.
+  // watchGroupScoped() below now just skips setting up a listener when
+  // there's nothing to scope it to, and the plain notifications listener a
+  // little further down is explicitly guarded the same way, so an empty
+  // list here is simply "nothing to watch yet" instead of "watch the wrong
+  // group and fail".
 
   // Fetch feed for all groups
   function fetchFeed(gid){
@@ -1018,39 +1030,45 @@ function doSync(){
   // and Firestore can't prove an unscoped query is safe for every possible
   // matching document, so it denied the entire query outright with
   // permission-denied rather than filtering anything out.
-  var notifUnsub=db.collection("notifications")
-    .where("groupId","in",myGroupIds)
-    .orderBy("sentAt","desc").limit(1)
-    .onSnapshot(function(snap){
-      snap.docChanges().forEach(function(change){
-        if(change.type==="added"){
-          var n=change.doc.data();
-          // Don't show if we sent it ourselves
-          var myUid=currentUser?currentUser.uid:(localStorage.getItem("ku_uid")||"anon");
-          if(n.senderUid&&n.senderUid===myUid)return;
-          var age=n.sentAt?Date.now()-n.sentAt.toMillis():9999;
-          if(age>3000&&age<30000){
-            // Show browser notification if permission granted
-            if(typeof Notification!=="undefined"&&Notification.permission==="granted"){
-              // Use service worker for iOS compatibility
-              if(navigator.serviceWorker&&navigator.serviceWorker.controller){
-                navigator.serviceWorker.ready.then(function(reg){
-                  reg.showNotification(n.title||"Keep Up",{
-                    body:n.body||"New activity in your family",
-                    icon:"icon.svg"
-                  });
-                }).catch(function(){});
-              } else {
-                try{new Notification(n.title||"Keep Up",{body:n.body||"New activity in your family",icon:"icon.svg"});}
-                catch(e){console.log("Notification not supported:",e);}
+  // Skip entirely when we have no groups yet (e.g. mid-invite-restore before
+  // joining) - same reason as the guard in watchGroupScoped(): Firestore's
+  // "in" operator throws synchronously on an empty array, and there's
+  // nothing to scope to anyway.
+  if(myGroupIds.length>0){
+    var notifUnsub=db.collection("notifications")
+      .where("groupId","in",myGroupIds)
+      .orderBy("sentAt","desc").limit(1)
+      .onSnapshot(function(snap){
+        snap.docChanges().forEach(function(change){
+          if(change.type==="added"){
+            var n=change.doc.data();
+            // Don't show if we sent it ourselves
+            var myUid=currentUser?currentUser.uid:(localStorage.getItem("ku_uid")||"anon");
+            if(n.senderUid&&n.senderUid===myUid)return;
+            var age=n.sentAt?Date.now()-n.sentAt.toMillis():9999;
+            if(age>3000&&age<30000){
+              // Show browser notification if permission granted
+              if(typeof Notification!=="undefined"&&Notification.permission==="granted"){
+                // Use service worker for iOS compatibility
+                if(navigator.serviceWorker&&navigator.serviceWorker.controller){
+                  navigator.serviceWorker.ready.then(function(reg){
+                    reg.showNotification(n.title||"Keep Up",{
+                      body:n.body||"New activity in your family",
+                      icon:"icon.svg"
+                    });
+                  }).catch(function(){});
+                } else {
+                  try{new Notification(n.title||"Keep Up",{body:n.body||"New activity in your family",icon:"icon.svg"});}
+                  catch(e){console.log("Notification not supported:",e);}
+                }
               }
+              showInAppNotif(n.title||"Keep Up",n.body||"New activity");
             }
-            showInAppNotif(n.title||"Keep Up",n.body||"New activity");
           }
-        }
-      });
-    },function(err){handleGenericListenerErr(err,"notifications");});
-  unsubscribers.push(notifUnsub);
+        });
+      },function(err){handleGenericListenerErr(err,"notifications");});
+    unsubscribers.push(notifUnsub);
+  }
 
   // Listen to members
   watchGroupScoped("members",myGroupIds,function(snap){
@@ -1616,6 +1634,7 @@ function fmtEvDate(ev){
 // only this shared wrapper (query + error handling + cleanup registration)
 // moved out.
 function watchGroupScoped(collectionName,groupIds,onData){
+  if(!groupIds||groupIds.length===0)return function(){}; // nothing to scope to - also Firestore's "in" operator throws synchronously on an empty array
   var unsub=db.collection(collectionName).where("groupId","in",groupIds)
     .onSnapshot(onData,function(err){handleGenericListenerErr(err,collectionName);});
   unsubscribers.push(unsub);
