@@ -143,7 +143,7 @@ window.addEventListener("unhandledrejection",function(e){
 // refresh instead of leaving people stuck in a stale session. Bump
 // APP_VERSION by hand on every deploy (any changed string works - a
 // timestamp is easiest to keep unique).
-var APP_VERSION="2026-10-18T22:31:49Z";
+var APP_VERSION="2026-10-21T22:45:32Z";
 function checkForUpdate(){
   fetch(location.pathname+"?_v="+Date.now(),{cache:"no-store"})
     .then(function(r){return r.text();})
@@ -276,7 +276,7 @@ function uploadToCloudflareStream(file,onProgress){
 // PLACEHOLDER - get the real staging key from the keep-up-staging Firebase
 // project: Project Settings > Cloud Messaging > Web Push certificates
 // (generate a key pair there if none exists yet), then paste it in below.
-var VAPID_KEY_STAGING="REPLACE_WITH_STAGING_PROJECT_VAPID_KEY";
+var VAPID_KEY_STAGING="BFb604l1JHAkBLdS1Pfu-KoRLR_Nmrn1Zu6K18P8_9ggdtbFsp7Ei4llTgAFmAB4ZOggaq8DEhGs5nSmJx384_I";
 var VAPID_KEY_PROD="BJOij4wvBLe4ZgNbMuhHSVarzr9k65tSbnbF5oeSjsvOg_rTJN-ffZmCsLfz1iX_UGq5aPmTyWwRRb-fdAHJ7O4";
 var VAPID_KEY=IS_STAGING?VAPID_KEY_STAGING:VAPID_KEY_PROD;
 
@@ -1799,6 +1799,7 @@ function buildOnboarding(){
   function backBtn(){var bb=document.createElement("button");bb.textContent="Back";bb.style.cssText="position:absolute;top:14px;left:14px;background:#F5DDD1;border:none;border-radius:50px;padding:7px 14px;font-size:13px;font-weight:700;color:#6B4226;cursor:pointer;font-family:inherit;z-index:10;";bb.onclick=function(){ST.obStep--;redraw();};return bb;}
 
   if(step===0){
+    console.log("[INVITE DEBUG] buildOnboarding step 0 render:"+JSON.stringify({joinInvite:ST.joinInvite,obGrpName:ST.obGrpName,inviteError:ST.inviteError,lsToken:localStorage.getItem("ku_pending_token"),_pendingToken:_pendingToken}));
     var scr=d({cls:"ob-screen"});
     var hero=d({cls:"ob-hero"});var icon=d({css:{fontSize:"72px",animation:"float 3s ease-in-out infinite"}});icon.textContent="\uD83C\uDFE1";hero.appendChild(icon);scr.appendChild(hero);
     var body=d({cls:"ob-body",css:{alignItems:"center",justifyContent:"center",textAlign:"center"}});
@@ -1809,7 +1810,12 @@ function buildOnboarding(){
       invBanner.appendChild(d({css:{fontSize:"13px",fontWeight:700,color:"#9B7B62",marginBottom:"4px"}},"You've been invited to"));
       invBanner.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"20px",fontWeight:600,color:"#3D2314"}},ST.obGrpName));
       body.appendChild(invBanner);
-      body.appendChild(makeBtn("Accept Invite",function(){ST.obStep=0.5;redraw();}));
+      body.appendChild(makeBtn("Accept Invite",function(){
+        // Skip phone verification if already signed in (e.g. bounced back
+        // to step 0 after a dead invite link, or any other path that lands
+        // here post-auth) - see the Get Started handler below for why.
+        if(currentUser){ST.obStep=1;redraw();} else {ST.obStep=0.5;redraw();}
+      }));
     } else {
       if(ST.inviteError){
         var invErrBanner=d({css:{background:"#FDECEA",border:"1.5px solid #F0B4AC",borderRadius:"16px",padding:"14px 16px",marginBottom:"20px",textAlign:"center"}});
@@ -1819,7 +1825,16 @@ function buildOnboarding(){
       }
       body.appendChild(d({css:{fontSize:"16px",color:"#6B4C35",lineHeight:1.65,marginBottom:"6px"}},"Stay close to the people who matter most."));
       body.appendChild(d({css:{fontSize:"13px",color:"#9B7B62",lineHeight:1.6,marginBottom:"32px"}},"No ads. No algorithms. Just your family."));
-      body.appendChild(makeBtn("Get Started",function(){ST.obStep=0.5;redraw();}));
+      body.appendChild(makeBtn("Get Started",function(){
+        // Already signed in (e.g. just bounced back here after an invite
+        // turned out to be invalid/used/expired, right after phone
+        // verification succeeded) - don't send them through phone
+        // verification again. Re-triggering it while already authenticated
+        // breaks (stale recaptcha/confirmationResult state) until a full
+        // page reload, and there's no reason to ask for the same number
+        // twice in one session anyway.
+        if(currentUser){ST.obStep=1;redraw();} else {ST.obStep=0.5;redraw();}
+      }));
     }
     scr.appendChild(body);wrap.appendChild(scr);return wrap;
   }
@@ -1921,26 +1936,21 @@ function buildOnboarding(){
           // someone who lost local storage/their bookmark and re-verifies
           // should be logged straight back in, not sent through onboarding again.
           db.collection("profiles").doc(result.user.uid).get().then(function(pdoc){
-            if(pdoc.exists&&ST.joinInvite&&ST.pendingInviteToken){
-              // Existing account tapped a fresh invite link (Firebase Phone
-              // Auth returns the same account for the same number) - add the
-              // invited group to their existing account instead of silently
-              // restoring their old state and ignoring the invite entirely.
-              var p0=pdoc.data();
-              if(p0.name){ST.name=p0.name;localStorage.setItem("ku_name",p0.name);}
-              if(p0.av){
-                var isValidAv0=p0.av.startsWith("http")||p0.av.startsWith("data:")||p0.av.length<=8;
-                ST.avatar=isValidAv0?p0.av:"\uD83D\uDC64";
-                localStorage.setItem("ku_av",ST.avatar);
-              }
-              ST.boarded=true;localStorage.setItem("ku_ob","1");
-              db.collection("userGroups").doc(result.user.uid).get().then(function(gdoc0){
-                if(gdoc0.exists&&gdoc0.data().groups&&gdoc0.data().groups.length>0){
-                  ST.groups=normalizeGroups(gdoc0.data().groups);
-                  try{localStorage.setItem("ku_groups",JSON.stringify(ST.groups));}catch(e){}
-                }
-                joinAdditionalGroupViaToken(ST.pendingInviteToken);
-              }).catch(function(){joinAdditionalGroupViaToken(ST.pendingInviteToken);});
+            if(localStorage.getItem("ku_pending_token")||_pendingToken||ST.pendingInviteToken||ST.joinInvite||ST.inviteError){
+              // An invite token is (or was) in play for this sign-in.
+              // processInviteToken() - triggered independently via
+              // onAuthStateChanged, from the exact same sign-in event as this
+              // .then() - is now the single source of truth for deciding
+              // new-vs-returning account AND the token's validity; it does
+              // its own profiles.get() to make that call. Deciding it here
+              // too used to race that read: whichever of the two Firestore
+              // calls came back first silently won, which could ignore a
+              // VALID invite entirely (never actually joining the group,
+              // no error shown) or swallow a DEAD one straight into the
+              // user's restored feed with zero error shown either way. One
+              // source of truth now - this handler steps aside whenever a
+              // token's involved and lets that function finish the job.
+              console.log("[INVITE DEBUG] phone-verify profile check: deferring to processInviteToken, invite in play");
               return;
             }
             if(pdoc.exists){
@@ -1991,13 +2001,34 @@ function buildOnboarding(){
                 fetchAllFeeds();syncOn();redraw();
               });
             } else {
-              // Genuinely new account for this phone number - continue onboarding
-              ST.obStep=1;redraw();
+              // Genuinely new account for this phone number - continue onboarding.
+              // EXCEPT: this profiles.get() is its own independent Firestore
+              // round-trip, racing processInviteToken()'s inviteTokens lookup -
+              // both get kicked off right after sign-in, from two separate
+              // places, with no coordination between them. Whichever resolves
+              // LAST wins the redraw. When an invite token is in play and this
+              // one wins, it blows obStep to 1 right over whatever
+              // processInviteToken just decided (obStep 0 + the invalid/used/
+              // expired-link error banner), hiding it completely - the user
+              // just lands on "What's your name?" with zero indication
+              // anything was wrong with their invite link. A VALID invite
+              // (ST.joinInvite true, no error) is unaffected by this guard -
+              // that case still advances normally, same as always.
+              if((localStorage.getItem("ku_pending_token")||_pendingToken||ST.inviteError)&&!ST.joinInvite){
+                console.log("[INVITE DEBUG] phone-verify new-account handler: deferring obStep=1, invite still pending or failed. state:"+JSON.stringify({lsToken:localStorage.getItem("ku_pending_token"),_pendingToken:_pendingToken,joinInvite:ST.joinInvite,inviteError:ST.inviteError}));
+              } else {
+                ST.obStep=1;redraw();
+              }
             }
           }).catch(function(e){
             logAppError("existing-account phone check failed (fell back to new onboarding)",e);
-            // Couldn't check - fall back to normal onboarding rather than blocking them
-            ST.obStep=1;redraw();
+            // Couldn't check - fall back to normal onboarding rather than blocking them.
+            // Same race guard as above.
+            if((localStorage.getItem("ku_pending_token")||_pendingToken||ST.inviteError)&&!ST.joinInvite){
+              console.log("[INVITE DEBUG] phone-verify fallback handler: deferring obStep=1, invite still pending or failed.");
+            } else {
+              ST.obStep=1;redraw();
+            }
           });
         })
         .catch(function(e){
@@ -2121,11 +2152,13 @@ function buildOnboarding(){
     body.appendChild(d({css:{fontSize:"14px",color:"#6B4C35",lineHeight:1.7,marginBottom:"28px"}},doneMsg));
     body.appendChild(makeBtn("Take me to Keep Up",function(){
       if(!currentUser){alert("Please wait a moment while we sign you in.");return;}
-      // Mark invite token as used now that onboarding is completing
-      if(ST.pendingInviteToken){
-        db.collection("inviteTokens").doc(ST.pendingInviteToken).update({used:true,usedAt:firebase.firestore.FieldValue.serverTimestamp()}).catch(function(e){logAppError("inviteTokens.update (mark used - existing account invite)",e);});
-        ST.pendingInviteToken=null;
-      }
+      // Capture the invite token now (if joining via one) so the members
+      // write below can prove it to the security rules, and so it only gets
+      // marked used AFTER that write actually succeeds - marking it used
+      // first (the old order) would make the members write fail its own
+      // invite-token check, since by then the token would already read
+      // used:true.
+      var inviteTokenForJoin=ST.joinInvite?ST.pendingInviteToken:null;
       var uid=currentUser.uid;
       // A fresh random id per group, not "grp-"+uid. That old scheme was
       // deterministic per ACCOUNT, not per group - so anyone who ever
@@ -2190,14 +2223,20 @@ function buildOnboarding(){
           db.collection("profiles").doc(uid).set({
             name:ST.obName,av:safeAv
           },{merge:true}),
-          db.collection("members").doc(uid+"_"+finalGrpId).set({
+          db.collection("members").doc(uid+"_"+finalGrpId).set(Object.assign({
             uid:uid,name:ST.obName,av:safeAv,
             groupId:finalGrpId,groupLabel:ST.obGrpName,groupIcon:ST.obGrpEmoji,
             isAdmin:!ST.joinInvite,
             joinedAt:firebase.firestore.FieldValue.serverTimestamp()
-          })
+          },inviteTokenForJoin?{viaInviteToken:inviteTokenForJoin}:{}))
         ]);
       }).then(function(){
+        // Now that the join actually succeeded, mark the invite token used.
+        if(inviteTokenForJoin){
+          db.collection("inviteTokens").doc(inviteTokenForJoin).update({used:true,usedAt:firebase.firestore.FieldValue.serverTimestamp()}).catch(function(e){logAppError("inviteTokens.update (mark used - existing account invite)",e);});
+        }
+        ST.pendingInviteToken=null;
+        localStorage.removeItem("ku_pending_token");
         // Start app
         syncOn();
         fetchAllFeeds();
@@ -2522,19 +2561,21 @@ function buildFeed(t,grp){
   });
 
   var feedItems=ST.feed[ST.group]||[];
-  // If pending invite token exists, skip splash entirely
-  var hasPendingInvite=localStorage.getItem("ku_pending_token")||_pendingToken;
-  if(hasPendingInvite&&!ST.boarded){ST.appReady=true;ST.joinInvite=true;}
-  if(ST.joinInvite&&!ST.boarded)ST.appReady=true;
-  var _hasPending=!!localStorage.getItem("ku_pending_token");
-  if(_hasPending){
-    ST.appReady=true;
-    ST.boarded=false;
-    ST.joinInvite=true;
-    ST.groups=[]; // Clear old groups so they dont show
-    ST.group="";
+  // NOTE: buildFeed() only ever runs once ST.boarded is already true -
+  // buildApp() returns buildOnboarding() before ever reaching this function
+  // otherwise. So a pending invite token showing up HERE means an already-
+  // boarded user clicked ANOTHER invite link; that's joinAdditionalGroupViaToken's
+  // job (silent join + toast), driven from the onAuthStateChanged/hashchange
+  // dispatch. This used to also force ST.boarded=false, ST.joinInvite=true and
+  // wipe ST.groups right here, which fought that flow, and - worse - ran on
+  // EVERY redraw as long as the stale token sat in localStorage, so it kept
+  // stomping ST.joinInvite back to true the instant processInviteToken had
+  // deliberately set it false to surface ST.inviteError (the invalid/used/
+  // expired-link banner). Logging only now; no state mutation here.
+  if(localStorage.getItem("ku_pending_token")||_pendingToken){
+    console.log("[INVITE DEBUG] buildFeed: pending token present while boarded - leaving to joinAdditionalGroupViaToken"+JSON.stringify({boarded:ST.boarded,joinInvite:ST.joinInvite,inviteError:ST.inviteError}));
   }
-  if(!ST.appReady||(!currentUser&&!ST.joinInvite&&!_hasPending)||ST.feedLoading){
+  if(!ST.appReady||(!currentUser&&!ST.joinInvite)||ST.feedLoading){
     var loading=d({css:{position:"fixed",inset:"0",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:t.bg,zIndex:50}});
     var splashTitle=d({css:{fontFamily:"Lora,serif",fontSize:"42px",fontWeight:600,color:t.a,letterSpacing:"-1px",animation:"float 2s ease-in-out infinite"}});
     splashTitle.innerHTML="keep <em>up</em>";
@@ -4121,7 +4162,7 @@ function buildGroupsCard(){
     var memCount=Math.max(mems.length,fbMems.length);
     info.appendChild(d({css:{fontSize:"11px",color:"#9B7B62",marginTop:"1px"}},memCount+" member"+(memCount!==1?"s":"")));
     row.appendChild(info);
-    if(isAdmin()){
+    if(getGroupAdminStatus(g.id)){
       var editGrpBtn=b({css:{background:gt.ap,color:gt.ad,fontSize:"11px",fontWeight:700,padding:"3px 10px",borderRadius:"50px",border:"none",cursor:"pointer",fontFamily:"inherit"}},"Edit");
       (function(grpObj){editGrpBtn.addEventListener("click",function(){ST.editingGroup=grpObj.id;redraw();});})(g);
       row.appendChild(editGrpBtn);
@@ -4140,7 +4181,7 @@ function buildGroupsCard(){
       renderAvatarGlyph(mavic,m.av,10,"👤");
       mrow.appendChild(mavic);
       mrow.appendChild(d({css:{flex:1,fontSize:"13px",fontWeight:700,color:"#3D2314"}},m.name+(isYou?" (you)":"")));
-      if(!isYou&&isAdmin()){
+      if(!isYou&&getGroupAdminStatus(g.id)){
         var removeBtn=b({css:{padding:"5px 11px",borderRadius:"50px",background:"transparent",border:"1.5px solid #F5DDD1",fontSize:"11px",fontWeight:700,color:"#9B7B62",cursor:"pointer",fontFamily:"inherit"}},"Remove");
         (function(member){
           removeBtn.addEventListener("click",function(){
@@ -4293,13 +4334,13 @@ function buildInviteCard(){
   inv.appendChild(d({css:{padding:"13px 15px 9px",fontSize:"12px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".5px",borderBottom:"1px solid #F5DDD1"}},"Invite Family"));
   var invBody=d({css:{padding:"12px 15px"}});
   ST.groups.forEach(function(g){
-    if(!isAdmin())return; // Only admins can invite
+    if(!getGroupAdminStatus(g.id))return; // Only admins can invite
     var gt=th(g.id);
     var row=d({css:{display:"flex",alignItems:"center",gap:"10px",marginBottom:"10px"}});
     var ic=d({css:{width:"34px",height:"34px",borderRadius:"50%",background:gt.ap,border:"1.5px solid "+gt.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"17px",flexShrink:0,overflow:"hidden"}});setGroupIcon(ic,g);row.appendChild(ic);
     var info=d({css:{flex:1,minWidth:0}});
     info.appendChild(d({css:{fontSize:"13px",fontWeight:700,color:"#3D2314"}},g.label));
-    info.appendChild(d({css:{fontSize:"11px",color:"#9B7B62",marginTop:"1px"}},isAdmin()?"Tap to copy invite link (expires in 2 days)":"Share this link to invite family"));
+    info.appendChild(d({css:{fontSize:"11px",color:"#9B7B62",marginTop:"1px"}},getGroupAdminStatus(g.id)?"Tap to copy invite link (expires in 2 days)":"Share this link to invite family"));
     row.appendChild(info);
     var copyBtn=b({css:{padding:"7px 13px",borderRadius:"50px",background:gt.a,border:"none",color:"white",fontSize:"12px",fontWeight:700,cursor:"pointer",fontFamily:"inherit",flexShrink:0}},"Copy Link");
     (function(grpObj,btn,gtc){
@@ -5346,34 +5387,56 @@ function buildCreateGroup(){
     if(!currentUser){alert("Please wait — still signing you in.");return;}
     var newGid="g"+Date.now();
     var newGroup={id:newGid,label:ni.value.trim(),icon:selEmoji[0]};
-    // Add to local groups
-    ST.groups.push(newGroup);
-    ST.feed[newGid]=[];
-    ST.chatMsgs[newGid]=[];
-    ST.mems[newGid]=[{av:ST.avatar&&ST.avatar.startsWith("data:")?"\uD83D\uDC64":(ST.avatar||"\uD83D\uDC64"),name:ST.name,role:"Admin",you:true,uid:currentUser.uid}];
-    // Save group to Firebase
+    ST.creatingGroup=false;
+    saveBtn.textContent="Creating...";saveBtn.disabled=true;
+    // Save group to Firebase first, and only touch local state / userGroups /
+    // fcmTokens once the group doc AND the admin member doc have actually
+    // committed. Previously the local push + userGroups arrayUnion fired
+    // unconditionally regardless of whether the Firestore writes below ever
+    // succeeded, so a failed/flaky groups.set() left a ghost group: present
+    // in userGroups and localStorage (and shown as "joined" in the UI) with
+    // no backing groups doc and no admin members doc ever created, and no
+    // error shown to the user.
     db.collection("groups").doc(newGid).set({
       id:newGid,label:newGroup.label,icon:newGroup.icon,
       adminUid:currentUser.uid,adminName:ST.name,
       createdAt:firebase.firestore.FieldValue.serverTimestamp()
     }).then(function(){
       // Add self as member of new group
-      db.collection("members").doc(currentUser.uid+"_"+newGid).set({
+      return db.collection("members").doc(currentUser.uid+"_"+newGid).set({
         uid:currentUser.uid,name:ST.name,av:ST.avatar&&ST.avatar.startsWith("data:")?"\uD83D\uDC64":(ST.avatar||"\uD83D\uDC64"),
         groupId:newGid,groupLabel:newGroup.label,isAdmin:true,
         joinedAt:firebase.firestore.FieldValue.serverTimestamp()
       });
-    }).catch(function(e){logAppError("group create failed",e);console.log("group create failed",e);});
-    ST.group=newGid;ST.creatingGroup=false;
-    // Save updated groups to localStorage
-    try{localStorage.setItem("ku_groups",JSON.stringify(ST.groups));}catch(e){}
-    if(currentUser){
+    }).then(function(){
+      // Only now that both docs are confirmed written: reflect the new group
+      // in local/in-memory state and sync userGroups + fcmTokens.
+      ST.groups.push(newGroup);
+      ST.feed[newGid]=[];
+      ST.chatMsgs[newGid]=[];
+      ST.mems[newGid]=[{av:ST.avatar&&ST.avatar.startsWith("data:")?"\uD83D\uDC64":(ST.avatar||"\uD83D\uDC64"),name:ST.name,role:"Admin",you:true,uid:currentUser.uid}];
+      ST.group=newGid;
+      try{localStorage.setItem("ku_groups",JSON.stringify(ST.groups));}catch(e){}
       db.collection("userGroups").doc(currentUser.uid).set({
         groups:firebase.firestore.FieldValue.arrayUnion(newGroup)
       },{merge:true}).catch(function(e){logAppError("userGroups.set arrayUnion (create group)",e);});
       db.collection("fcmTokens").doc(currentUser.uid).set({groupIds:ST.groups.map(function(gr){return gr.id;})},{merge:true}).catch(function(e){logAppError("fcmTokens.set (create group)",e);});
-    }
-    redraw();
+      // Restart the group-scoped listeners (members/comments/reactions/rsvps/
+      // events) so they pick up the new group id - syncOn()'s where("in",...)
+      // queries are built from a plain JS array snapshotted when they were
+      // started, so they never see a group added to ST.groups afterward on
+      // their own. Without this, the new group silently had no live admin
+      // status, no live member list, no live comments/reactions/rsvps/events
+      // until the next full page reload (joinAdditionalGroupViaToken and
+      // acceptPendingGroupInvite both already do this for the same reason).
+      fetchAllFeeds();syncOn();
+      redraw();
+    }).catch(function(e){
+      logAppError("group create failed",e);
+      console.log("group create failed",e);
+      saveBtn.textContent="Create Group";saveBtn.disabled=false;
+      showTopToast("Couldn't create that group — check your connection and try again.");
+    });
   });
   sh.appendChild(saveBtn);
   ov.appendChild(sh);return ov;
@@ -5867,25 +5930,34 @@ var _pendingToken=null;
     var hashParams=new URLSearchParams(window.location.hash.substring(1));
     token=hashParams.get("token");
   }
-  var joinGroup=params.get("join");
-  var joinIcon=params.get("icon");
+  console.log("[INVITE DEBUG] init IIFE: raw hash=",window.location.hash,"extracted token=",token);
   if(token){
     _pendingToken=token;
     localStorage.setItem("ku_pending_token",token);
     window.history.replaceState({},"",window.location.pathname);
-  } else if(joinGroup){
-    ST.obGrpName=joinGroup;
-    if(joinIcon)ST.obGrpEmoji=joinIcon;
-    ST.joinInvite=true;
-    window.history.replaceState({},"",window.location.pathname);
   }
+  // NOTE: this used to also handle a legacy ?join=GroupName&icon=emoji link
+  // format (setting ST.joinInvite straight from the URL, no Firestore
+  // validation at all) from before the inviteTokens system existed. Removed -
+  // nothing in the app generates that link shape any more (the real "Invite
+  // Family" flow only ever creates #token= links, see the inviteTokens
+  // write near the Invite Family screen), so it was dead weight. It also
+  // became an active trap after today's fix made the phone-verify success
+  // handler defer entirely whenever ST.joinInvite is already true: a
+  // hypothetical ?join= link would have set that pre-auth with no token and
+  // nothing left to ever resolve it, permanently stranding that user on the
+  // phone-code screen after verifying. Simplest correct fix was removing the
+  // dead path outright rather than special-casing around it.
 })();
 
 // Check for pending invite token after auth
 function checkPendingInvite(){
   var pending=localStorage.getItem("ku_pending_token");
+  // Same reasoning as the onAuthStateChanged invite handling above -
+  // processInviteToken clears ku_pending_token itself once the token
+  // actually resolves to a dead end, and onboarding-completion clears it
+  // once a join genuinely succeeds, so this doesn't clear it preemptively.
   if(pending&&!ST.joinInvite){
-    localStorage.removeItem("ku_pending_token");
     processInviteToken(pending);
   }
 }
@@ -5970,12 +6042,16 @@ function isInviteTokenExpired(data){
 function joinAdditionalGroupViaToken(token){
   db.collection("inviteTokens").doc(token).get().then(function(doc){
     if(!doc.exists||doc.data().used){
+      // Genuinely dead either way - no account could ever use this one, so
+      // there's nothing to preserve a retry for.
+      localStorage.removeItem("ku_pending_token");
       showTopToast(doc.exists?"That invite link has already been used.":"That invite link doesn't look right.");
       ST.appReady=true;redraw();
       return;
     }
     var data=doc.data();
     if(isInviteTokenExpired(data)){
+      localStorage.removeItem("ku_pending_token");
       showTopToast("That invite link has expired. Ask an admin in "+(data.groupLabel||"that group")+" for a fresh one.");
       ST.appReady=true;redraw();
       return;
@@ -5994,9 +6070,16 @@ function joinAdditionalGroupViaToken(token){
     var authoritative=normalizeGroups((ugDoc.exists&&ugDoc.data()&&ugDoc.data().groups)||[]);
     var alreadyMember=authoritative.some(function(g){return g.id===gid;});
     if(alreadyMember){
+      // Deliberately NOT clearing ku_pending_token here. This account being
+      // "already a member" doesn't necessarily mean the invite is spent -
+      // if this is actually a stale signed-in session sharing the browser
+      // (see the onAuthStateChanged comment above) rather than who the link
+      // was really meant for, the real recipient can still sign out, sign
+      // in as themselves, and have the invite waiting for them. The token's
+      // own 2-day expiry is the backstop that eventually ends this either way.
       ST.groups=authoritative;
       try{localStorage.setItem("ku_groups",JSON.stringify(ST.groups));}catch(e){}
-      showTopToast("You're already in "+(data.groupLabel||"that group")+"!");
+      showTopToast("You're already in "+(data.groupLabel||"that group")+"! (Signed in as the wrong account? Sign out and use the invite link again.)");
       ST.group=gid;ST.tab="feed";ST.appReady=true;redraw();
       return;
     }
@@ -6020,9 +6103,12 @@ function joinAdditionalGroupViaToken(token){
     batch.set(db.collection("members").doc(currentUser.uid+"_"+gid),{
       uid:currentUser.uid,name:ST.name,av:ST.avatar&&ST.avatar.startsWith("data:")?"\uD83D\uDC64":(ST.avatar||"\uD83D\uDC64"),
       groupId:gid,groupLabel:newGroup.label,groupIcon:newGroup.icon,isAdmin:false,
-      joinedAt:firebase.firestore.FieldValue.serverTimestamp()
+      joinedAt:firebase.firestore.FieldValue.serverTimestamp(),
+      viaInviteToken:token
     });
     batch.commit().then(function(){
+      // Genuinely consumed now - this account really did just join via it.
+      localStorage.removeItem("ku_pending_token");
       ST.groups=updatedGroups;
       ST.feed[gid]=[];ST.chatMsgs[gid]=[];
       try{localStorage.setItem("ku_groups",JSON.stringify(ST.groups));}catch(e){}
@@ -6046,18 +6132,113 @@ function joinAdditionalGroupViaToken(token){
   });
 }
 function processInviteToken(token){
+  console.log("[INVITE DEBUG] processInviteToken called with token:",token);
+  // First: is this actually a registered user who lost local storage and had
+  // to re-verify their phone, rather than someone going through onboarding
+  // for the first time? This used to be decided by a completely separate
+  // Firestore read inside the phone-verification success handler, racing
+  // this very function - whichever came back first silently won, which
+  // could leave a VALID invite never actually joined (ST.joinInvite set but
+  // nothing ever calls the code that joins the group) or a DEAD one
+  // swallowed straight into the user's restored feed with zero error shown.
+  // This function is now the single place deciding both "new vs returning
+  // account" and the token's validity, so there's only one outcome.
+  db.collection("profiles").doc(currentUser.uid).get().then(function(pdoc){
+    if(pdoc.exists){
+      _restoreAccountThenJoinInvite(pdoc.data(),token);
+      return;
+    }
+    _lookUpAndApplyInviteToken(token);
+  }).catch(function(e){
+    logAppError("processInviteToken profile check failed (fell back to treating as new account)",e);
+    _lookUpAndApplyInviteToken(token);
+  });
+}
+function _restoreAccountThenJoinInvite(p,token){
+  // Registered user, lost local storage - restore their basic account first
+  // (name/avatar/groups/admin status) so they land on their real feed
+  // instead of onboarding, then hand the actual invite-token validity check
+  // and joining off to joinAdditionalGroupViaToken() - the same,
+  // already-correct path used when an already-boarded user clicks a NEW
+  // invite link while the app is running (toast on dead/used/expired,
+  // atomic join + already-member handling on a valid one). No need to
+  // duplicate any of that logic here.
+  if(p.name){ST.name=p.name;localStorage.setItem("ku_name",p.name);}
+  if(p.av){
+    var isValidAv=p.av.startsWith("http")||p.av.startsWith("data:")||p.av.length<=8;
+    ST.avatar=isValidAv?p.av:"👤";
+    localStorage.setItem("ku_av",ST.avatar);
+  }
+  db.collection("userGroups").doc(currentUser.uid).get().then(function(gdoc){
+    var hasGroups=gdoc.exists&&gdoc.data().groups&&gdoc.data().groups.length>0;
+    if(hasGroups){
+      ST.groups=normalizeGroups(gdoc.data().groups);
+      ST.group=ST.groups[0].id;
+      try{localStorage.setItem("ku_groups",JSON.stringify(ST.groups));}catch(e){}
+      try{localStorage.setItem("ku_grp",JSON.stringify({label:ST.groups[0].label,icon:ST.groups[0].icon}));}catch(e){}
+    }
+    function finishRestoreAndJoin(){
+      ST.boarded=true;localStorage.setItem("ku_ob","1");
+      ST.appReady=true;
+      fetchAllFeeds();syncOn();
+      redraw();
+      joinAdditionalGroupViaToken(token);
+    }
+    if(hasGroups){
+      // Same reasoning as the normal returning-user restore flow: per-group
+      // doc gets instead of a list query, which security rules can deny
+      // outright even when the equivalent plain get() succeeds.
+      var _adminCheckGids=(ST.groups||[]).map(function(g){return g.id;});
+      Promise.all(_adminCheckGids.map(function(gid){
+        return db.collection("members").doc(currentUser.uid+"_"+gid).get().catch(function(){return null;});
+      })).then(function(mdocs){
+        var isAdminAnywhere=mdocs.some(function(md){return md&&md.exists&&md.data().isAdmin;});
+        localStorage.setItem("ku_admin",isAdminAnywhere?"1":"0");
+        finishRestoreAndJoin();
+      }).catch(finishRestoreAndJoin);
+    } else {
+      finishRestoreAndJoin();
+    }
+  }).catch(function(){
+    ST.boarded=true;localStorage.setItem("ku_ob","1");
+    ST.appReady=true;
+    fetchAllFeeds();syncOn();
+    redraw();
+    joinAdditionalGroupViaToken(token);
+  });
+}
+function _lookUpAndApplyInviteToken(token){
   db.collection("inviteTokens").doc(token).get().then(function(doc){
+    console.log("[INVITE DEBUG] inviteTokens doc fetched, exists:",doc.exists,"data:",doc.exists?doc.data():null);
     if(!doc.exists){
+      localStorage.removeItem("ku_pending_token");
+      _pendingToken=null;
       ST.inviteError="This invite link doesn't look right. It may have been mistyped or removed. You can still create your own group below, or ask whoever invited you for a fresh link.";
+      // Force back to obStep 0 - that's the ONLY screen that ever renders
+      // ST.inviteError (see buildOnboarding, step===0). By the time this
+      // async check resolves, sign-in (phone verification) has already
+      // advanced obStep well past 0, so without this the error silently
+      // sets and is never seen - the user just continues into normal
+      // onboarding with zero indication anything was wrong with their link.
+      ST.obStep=0;ST.joinInvite=false;
+      console.log("[INVITE DEBUG] processInviteToken: token not found, cleared. post-clear state:"+JSON.stringify({lsToken:localStorage.getItem("ku_pending_token"),_pendingToken:_pendingToken,joinInvite:ST.joinInvite,obStep:ST.obStep,inviteError:ST.inviteError}));
       redraw();return;
     }
     var data=doc.data();
     if(data.used){
+      localStorage.removeItem("ku_pending_token");
+      _pendingToken=null;
       ST.inviteError="This invite link has already been used. If you're trying to join "+(data.groupLabel||"a family group")+", ask an admin in that group to send you a fresh invite link. In the meantime, you can create your own group below.";
+      ST.obStep=0;ST.joinInvite=false;
+      console.log("[INVITE DEBUG] processInviteToken: token already used, cleared. post-clear state:"+JSON.stringify({lsToken:localStorage.getItem("ku_pending_token"),_pendingToken:_pendingToken,joinInvite:ST.joinInvite,obStep:ST.obStep,inviteError:ST.inviteError}));
       redraw();return;
     }
     if(isInviteTokenExpired(data)){
+      localStorage.removeItem("ku_pending_token");
+      _pendingToken=null;
       ST.inviteError="This invite link has expired. Ask an admin in "+(data.groupLabel||"that group")+" to send you a fresh invite link. In the meantime, you can create your own group below.";
+      ST.obStep=0;ST.joinInvite=false;
+      console.log("[INVITE DEBUG] processInviteToken: token expired, cleared. post-clear state:"+JSON.stringify({lsToken:localStorage.getItem("ku_pending_token"),_pendingToken:_pendingToken,joinInvite:ST.joinInvite,obStep:ST.obStep,inviteError:ST.inviteError}));
       redraw();return;
     }
     // Dont mark used until onboarding completes
@@ -6068,11 +6249,27 @@ function processInviteToken(token){
     ST.joinGroupId=data.groupId||null;
     ST.boarded=false;
     ST.appReady=true; // Show onboarding not splash
+    // Reaching here means auth already succeeded (processInviteToken only runs
+    // post-sign-in), so it's always safe to move past the phone-verify step.
+    // This also races the phone-confirm handler's own profiles.get() check
+    // (see its "genuinely new account" branch) - whichever of the two
+    // resolves last decides obStep. If THAT one resolved first, it saw no
+    // joinInvite yet and deferred without ever setting obStep; forcing it
+    // forward here too means a valid invite always converges on obStep 1
+    // instead of occasionally getting stuck on the phone-code screen.
+    if(ST.obStep<1)ST.obStep=1;
     redraw();
   }).catch(function(e){
     logAppError("processInviteToken failed (invite token lookup)",e);
     console.log("token error:",e);
+    // Deliberately NOT removing ku_pending_token here - a lookup failure is
+    // usually transient (offline/connection blip), not a dead token, so the
+    // retry on next load should still see it. _pendingToken (the in-memory
+    // copy) is cleared regardless, same as every other terminal branch above.
+    _pendingToken=null;
     ST.inviteError="We couldn't check that invite link right now — this is usually a connection issue. You can try again, or create your own group below.";
+    ST.obStep=0;ST.joinInvite=false;
+    console.log("[INVITE DEBUG] processInviteToken: lookup failed. post-clear state:"+JSON.stringify({lsToken:localStorage.getItem("ku_pending_token"),_pendingToken:_pendingToken,joinInvite:ST.joinInvite,obStep:ST.obStep,inviteError:ST.inviteError}));
     redraw();
   });
 }
@@ -6163,6 +6360,35 @@ redraw();
 var _lastUid=null;
 // Handle Android back button
 window.addEventListener("popstate",function(){
+  // An invite link tapped while this PWA is already open in a tab (very
+  // normal for an installed PWA - e.g. tapped from a messaging app while
+  // this app is already running in the background) arrives as a
+  // same-document fragment navigation, not a fresh page load - so the
+  // token-extraction IIFE above (which only ever runs once, at initial
+  // script parse) never sees it. That used to fall straight through to the
+  // back-button handling below, which treats any ST.tab!=="feed" as "go
+  // back to Feed" and immediately overwrites the URL via pushState -
+  // silently swallowing the token with zero feedback, whether it was
+  // valid, expired, or already used. Check for one here first, before any
+  // of the back-button logic gets a chance to eat the navigation.
+  var hashParams=new URLSearchParams((location.hash||"").substring(1));
+  var incomingToken=hashParams.get("token");
+  if(incomingToken){
+    history.replaceState({},"",location.pathname);
+    if(currentUser){
+      var alreadyOnboarded=localStorage.getItem("ku_ob")==="1";
+      if(alreadyOnboarded){
+        joinAdditionalGroupViaToken(incomingToken);
+      } else {
+        ST.appReady=true;ST.boarded=false;redraw();
+        processInviteToken(incomingToken);
+      }
+    } else {
+      _pendingToken=incomingToken;
+      localStorage.setItem("ku_pending_token",incomingToken);
+    }
+    return;
+  }
   if(ST.cmtOpen){ST.cmtOpen=null;ST.cmtIn="";redraw();history.pushState(null,"",location.href);return;}
   if(ST.upOpen){ST.upOpen=false;ST.upStep=1;ST.upCap="";ST.upCi="";redraw();history.pushState(null,"",location.href);return;}
   if(ST.compose){ST.compose=false;redraw();history.pushState(null,"",location.href);return;}
@@ -6173,16 +6399,28 @@ history.pushState(null,"",location.href);
 auth.onAuthStateChanged(function(user){
   currentUser=user;
   var uid=user?user.uid:null;
+  console.log("[INVITE DEBUG] onAuthStateChanged fired, uid:",uid,"_lastUid was:",_lastUid,"skipping:",(uid===_lastUid));
   if(uid===_lastUid)return; // No change, don't restart
   _lastUid=uid;
   if(user){
     localStorage.setItem("ku_uid",user.uid);
     // Process pending invite token now that we have auth
     var pendingLS=localStorage.getItem("ku_pending_token");
+    console.log("[INVITE DEBUG] auth dispatch:",{_pendingToken:_pendingToken,pendingLS:pendingLS,ku_ob:localStorage.getItem("ku_ob"),uid:user.uid});
     if(_pendingToken||pendingLS){
+      console.log("[INVITE DEBUG] token branch taken, t=",(_pendingToken||pendingLS));
       var t=_pendingToken||pendingLS;
       _pendingToken=null;
-      localStorage.removeItem("ku_pending_token");
+      // Don't clear ku_pending_token here yet - only once the invite is
+      // actually, successfully consumed by THIS signed-in account (see the
+      // terminal branches inside joinAdditionalGroupViaToken and
+      // processInviteToken below). All Incognito windows share one browser
+      // session until every one of them closes, so the account that's
+      // signed in the instant this fires isn't always who the invite link
+      // was actually meant for - clearing the token immediately meant that
+      // whoever's stale session happened to restore first silently used up
+      // the one-shot invite before the person it was actually sent to ever
+      // got a chance to.
       var alreadyOnboarded=localStorage.getItem("ku_ob")==="1";
       if(alreadyOnboarded){
         // Existing user accepting another invite (e.g. a second family group) -
