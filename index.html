@@ -758,7 +758,18 @@ function doSync(){
   // group you weren't currently viewing, so removing it without this would
   // have left deleted posts as permanent ghosts in any other group.
   function watchFeed(gid){
+    // Bounded to the 200 most recent posts, same cutoff fetchAllFeeds()
+    // already uses - without this the listener tracks a group's ENTIRE
+    // post history forever, growing without limit for the life of the
+    // group. Firestore keeps a limit()+orderBy() listener correctly
+    // up to date on its own (an older post past the cutoff just stops
+    // being tracked as newer ones arrive), so this doesn't need any extra
+    // handling beyond adding it. Trade-off worth knowing: scrolling back
+    // past the 200 most recent posts in a group won't surface anything
+    // older once this is live - a deliberate cap, not a bug, but flagging
+    // it since it's a real behavior change, not just a perf tweak.
     var unsub=db.collection("feed").where("groupId","==",gid)
+      .orderBy("createdAt","desc").limit(200)
       .onSnapshot(function(snap){
         ST.feed[gid]=ST.feed[gid]||[];
         snap.docChanges().forEach(function(change){
@@ -808,7 +819,9 @@ function doSync(){
   }
   function watchChat(gid){
     watchChatReactions(gid);
+    // Same unbounded-growth fix as watchFeed above, same 200-item cutoff.
     var unsub=db.collection("chat").where("groupId","==",gid)
+      .orderBy("createdAt","desc").limit(200)
       .onSnapshot(function(snap){
         if(!ST.chatMsgs[gid])ST.chatMsgs[gid]=[];
         snap.docChanges().forEach(function(change){
