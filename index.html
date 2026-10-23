@@ -783,7 +783,11 @@ function doSync(){
           else ST.feed[gid].push(data);
         });
         ST.feed[gid].sort(function(a,b){return tsMillis(b.createdAt)-tsMillis(a.createdAt);});
-        if(ST.tab==="feed")redraw();
+        // Debounced (see debouncedRedraw below) instead of an immediate
+        // redraw - during a burst of several people posting/reacting close
+        // together, this was firing one full top-to-bottom rebuild per
+        // event instead of coalescing them into one.
+        if(ST.tab==="feed")debouncedRedraw();
       },function(err){handleGroupListenerErr(err,gid);});
     unsubscribers.push(unsub);
   }
@@ -904,7 +908,13 @@ function doSync(){
     }).catch(function(e){logAppError("groups.get (refresh label/icon/photo)",e);});
   });
 
-  // Listen to DM messages
+  // Originally added for chat/DMs only, now also used by the feed,
+  // comments, reactions and RSVPs listeners above (JS hoists this function
+  // declaration to the top of doSync(), so it's already callable from
+  // there even though it's defined further down in the source) - coalesces
+  // a burst of several rapid-fire snapshot events (e.g. several people
+  // posting/reacting close together) into a single redraw 150ms after the
+  // last one, instead of one full rebuild per event.
   var _redrawTimer=null;
   function debouncedRedraw(){
     if(_redrawTimer)clearTimeout(_redrawTimer);
@@ -1210,7 +1220,7 @@ function doSync(){
       if(idx>=0)ST.comments[pid][idx]=data;else ST.comments[pid].push(data);
       ST.comments[pid].sort(function(a,b){return tsMillis(a.createdAt)-tsMillis(b.createdAt);});
     });
-    if(ST.cmtOpen!==null)redraw();
+    if(ST.cmtOpen!==null)debouncedRedraw();
   });
 
   // Listen to RSVPs
@@ -1236,7 +1246,7 @@ function doSync(){
       if(idx>=0)ST.allReactions[r.postId][idx]=r;else ST.allReactions[r.postId].push(r);
       if(currentUser&&r.uid===currentUser.uid)ST.reactions[r.postId]=r.em;
     });
-    if(ST.tab==="feed")redraw();
+    if(ST.tab==="feed")debouncedRedraw();
   });
 
   // Was collapsing every family member's RSVP for an event into one shared
@@ -1266,7 +1276,7 @@ function doSync(){
       if(idx>=0)ST.allRsvps[r.evId][idx]=r;else ST.allRsvps[r.evId].push(r);
       if(currentUser&&r.uid===currentUser.uid)ST.rsvp[r.evId]=r.going;
     });
-    if(ST.tab==="calendar"||ST.eventDetailId)redraw();
+    if(ST.tab==="calendar"||ST.eventDetailId)debouncedRedraw();
   });
 
   // Listen to events
