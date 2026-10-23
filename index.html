@@ -1216,6 +1216,11 @@ function doSync(){
         ST.comments[pid]=ST.comments[pid].filter(function(x){return x.id!==data.id;});
         return;
       }
+      if(change.type==="added"){
+        // Strip any matching optimistic tmp- placeholder now that the real
+        // comment has arrived (same reconciliation pattern as watchChat).
+        ST.comments[pid]=ST.comments[pid].filter(function(x){return !(x.id&&x.id.startsWith("tmp-")&&x.uid===data.uid&&x.text===data.text);});
+      }
       var idx=ST.comments[pid].findIndex(function(x){return x.id===data.id;});
       if(idx>=0)ST.comments[pid][idx]=data;else ST.comments[pid].push(data);
       ST.comments[pid].sort(function(a,b){return tsMillis(a.createdAt)-tsMillis(b.createdAt);});
@@ -5451,7 +5456,8 @@ function buildComments(t){
     cb2Hdr.appendChild(d({css:{fontSize:"11px",fontWeight:800,color:t.ad}},c.name));
     var isOwnComment=!!(currentUser&&c.uid&&c.uid===currentUser.uid);
     var isGroupAdminForComment=!!(currentUser&&c.groupId&&ST.fbMembers&&ST.fbMembers[c.groupId]&&ST.fbMembers[c.groupId].find(function(m){return m.uid===currentUser.uid&&m.isAdmin;}));
-    if(isOwnComment||isGroupAdminForComment){
+    var isPendingComment=!!(c.id&&c.id.indexOf("tmp-")===0);
+    if((isOwnComment||isGroupAdminForComment)&&!isPendingComment){
       var cDel=b({css:{background:"none",border:"none",color:"#B99A82",fontSize:"11px",fontWeight:700,cursor:"pointer",fontFamily:"inherit",padding:"0",flexShrink:0}},"Delete");
       cDel.addEventListener("click",function(){
         if(!confirm("Delete this comment?"))return;
@@ -6060,10 +6066,23 @@ function addComment(){
     return false;
   });
   var cmt={av:ST.avatar&&ST.avatar.startsWith("data:")?"\uD83D\uDC64":(ST.avatar||"\uD83D\uDC64"),name:ST.name||"You",text:ST.cmtIn.trim(),time:"Just now",postId:String(pid),uid:currentUser.uid,groupId:(postObj&&postObj.groupId)||ST.group||"imm"};
-  ST.cmtIn="";redraw();
+  ST.cmtIn="";
+  // Optimistic: show the comment immediately with a tmp- id, before the
+  // write round-trips, same pattern as sendChat(). Comments use
+  // auto-generated Firestore ids, so the listener strips the matching
+  // tmp- placeholder (by uid+text) once the real "added" doc arrives.
+  var tmpId="tmp-"+Date.now();
+  if(!ST.comments[pid])ST.comments[pid]=[];
+  ST.comments[pid].push(Object.assign({},cmt,{id:tmpId,createdAt:{toMillis:function(){return Date.now();}}}));
+  redraw();
   db.collection("comments").add(Object.assign({},cmt,{
     createdAt:firebase.firestore.FieldValue.serverTimestamp()
-  })).catch(function(e){logAppError("comment failed",e);console.log("comment failed",e);});
+  })).catch(function(e){
+    logAppError("comment failed",e);console.log("comment failed",e);
+    ST.comments[pid]=(ST.comments[pid]||[]).filter(function(x){return x.id!==tmpId;});
+    redraw();
+    showTopToast("Couldn't post your comment \u2014 check your connection and try again.");
+  });
 }
 
 // Check for invite link ?join=GroupName&icon=emoji
@@ -6140,14 +6159,29 @@ function showPostReactionPicker(postId,touchX,touchY){
       var newRx=curRx===em?null:em;
       picker.remove();
       var grpId=ST.group||"imm";
-      if(currentUser&&newRx){
-        db.collection("reactions").doc(postId+"_"+currentUser.uid).set({postId:postId,uid:currentUser.uid,em:newRx,name:ST.name||"Someone",groupId:grpId})
-          .then(function(){ST.reactions[postId]=newRx;redraw();})
-          .catch(function(err){console.log("reaction save failed",err);showTopToast("Couldn't save your reaction — check your connection.");});
-      } else if(currentUser){
-        db.collection("reactions").doc(postId+"_"+currentUser.uid).delete()
-          .then(function(){ST.reactions[postId]=newRx;redraw();})
-          .catch(function(err){console.log("reaction remove failed",err);showTopToast("Couldn't update your reaction — check your connection.");});
+      if(!currentUser)return;
+      // Optimistic: update local state and redraw immediately, before the
+      // write round-trips. Reactions use a deterministic doc id
+      // (postId_uid), so the optimistic entry can carry the exact real id -
+      // no temp-id/reconciliation needed; the listener's own "added"/
+      // "modified" event just harmlessly re-writes the same entry.
+      var myId=postId+"_"+currentUser.uid;
+      var prevAllReactions=(ST.allReactions[postId]||[]).slice();
+      ST.reactions[postId]=newRx;
+      ST.allReactions[postId]=(ST.allReactions[postId]||[]).filter(function(x){return x.id!==myId;});
+      if(newRx)ST.allReactions[postId].push({postId:postId,uid:currentUser.uid,em:newRx,name:ST.name||"Someone",groupId:grpId,id:myId});
+      redraw();
+      function revert(){
+        ST.reactions[postId]=curRx;
+        ST.allReactions[postId]=prevAllReactions;
+        redraw();
+      }
+      if(newRx){
+        db.collection("reactions").doc(myId).set({postId:postId,uid:currentUser.uid,em:newRx,name:ST.name||"Someone",groupId:grpId})
+          .catch(function(err){console.log("reaction save failed",err);revert();showTopToast("Couldn't save your reaction — check your connection.");});
+      } else {
+        db.collection("reactions").doc(myId).delete()
+          .catch(function(err){console.log("reaction remove failed",err);revert();showTopToast("Couldn't update your reaction — check your connection.");});
       }
     });
     picker.appendChild(eb);
