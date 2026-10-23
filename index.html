@@ -758,18 +758,7 @@ function doSync(){
   // group you weren't currently viewing, so removing it without this would
   // have left deleted posts as permanent ghosts in any other group.
   function watchFeed(gid){
-    // Bounded to the 200 most recent posts, same cutoff fetchAllFeeds()
-    // already uses - without this the listener tracks a group's ENTIRE
-    // post history forever, growing without limit for the life of the
-    // group. Firestore keeps a limit()+orderBy() listener correctly
-    // up to date on its own (an older post past the cutoff just stops
-    // being tracked as newer ones arrive), so this doesn't need any extra
-    // handling beyond adding it. Trade-off worth knowing: scrolling back
-    // past the 200 most recent posts in a group won't surface anything
-    // older once this is live - a deliberate cap, not a bug, but flagging
-    // it since it's a real behavior change, not just a perf tweak.
     var unsub=db.collection("feed").where("groupId","==",gid)
-      .orderBy("createdAt","desc").limit(200)
       .onSnapshot(function(snap){
         ST.feed[gid]=ST.feed[gid]||[];
         snap.docChanges().forEach(function(change){
@@ -783,11 +772,7 @@ function doSync(){
           else ST.feed[gid].push(data);
         });
         ST.feed[gid].sort(function(a,b){return tsMillis(b.createdAt)-tsMillis(a.createdAt);});
-        // Debounced (see debouncedRedraw below) instead of an immediate
-        // redraw - during a burst of several people posting/reacting close
-        // together, this was firing one full top-to-bottom rebuild per
-        // event instead of coalescing them into one.
-        if(ST.tab==="feed")debouncedRedraw();
+        if(ST.tab==="feed")redraw();
       },function(err){handleGroupListenerErr(err,gid);});
     unsubscribers.push(unsub);
   }
@@ -823,9 +808,7 @@ function doSync(){
   }
   function watchChat(gid){
     watchChatReactions(gid);
-    // Same unbounded-growth fix as watchFeed above, same 200-item cutoff.
     var unsub=db.collection("chat").where("groupId","==",gid)
-      .orderBy("createdAt","desc").limit(200)
       .onSnapshot(function(snap){
         if(!ST.chatMsgs[gid])ST.chatMsgs[gid]=[];
         snap.docChanges().forEach(function(change){
@@ -908,13 +891,7 @@ function doSync(){
     }).catch(function(e){logAppError("groups.get (refresh label/icon/photo)",e);});
   });
 
-  // Originally added for chat/DMs only, now also used by the feed,
-  // comments, reactions and RSVPs listeners above (JS hoists this function
-  // declaration to the top of doSync(), so it's already callable from
-  // there even though it's defined further down in the source) - coalesces
-  // a burst of several rapid-fire snapshot events (e.g. several people
-  // posting/reacting close together) into a single redraw 150ms after the
-  // last one, instead of one full rebuild per event.
+  // Listen to DM messages
   var _redrawTimer=null;
   function debouncedRedraw(){
     if(_redrawTimer)clearTimeout(_redrawTimer);
@@ -1199,59 +1176,34 @@ function doSync(){
   });
 
   // Listen to comments
-  // Rebuilding every post's entire comment list from scratch on every
-  // single snapshot - even a comment on a post from months ago - meant the
-  // cost of this listener scaled with the group's TOTAL comment history,
-  // forever, not with whatever actually just changed. Fine for a brand-new
-  // group, a real drag once a family's been posting for a while. Switched
-  // to docChanges() so each change only touches the one post it actually
-  // belongs to, same incremental pattern as watchFeed/watchChat above.
   watchGroupScoped("comments",myGroupIds,function(snap){
-    ST.comments=ST.comments||{};
-    snap.docChanges().forEach(function(change){
-      var data=Object.assign({},change.doc.data(),{id:change.doc.id});
+    // Rebuild all comments from scratch on each snapshot to avoid dupes
+    ST.comments={};
+    snap.forEach(function(doc){
+      var data=Object.assign({},doc.data(),{id:doc.id});
       var pid=data.postId;if(!pid)return;
       if(!ST.comments[pid])ST.comments[pid]=[];
-      if(change.type==="removed"){
-        ST.comments[pid]=ST.comments[pid].filter(function(x){return x.id!==data.id;});
-        return;
-      }
-      if(change.type==="added"){
-        // Strip any matching optimistic tmp- placeholder now that the real
-        // comment has arrived (same reconciliation pattern as watchChat).
-        ST.comments[pid]=ST.comments[pid].filter(function(x){return !(x.id&&x.id.startsWith("tmp-")&&x.uid===data.uid&&x.text===data.text);});
-      }
-      var idx=ST.comments[pid].findIndex(function(x){return x.id===data.id;});
-      if(idx>=0)ST.comments[pid][idx]=data;else ST.comments[pid].push(data);
+      ST.comments[pid].push(data);
+    });
+    // Sort each post's comments by createdAt
+    Object.keys(ST.comments).forEach(function(pid){
       ST.comments[pid].sort(function(a,b){return tsMillis(a.createdAt)-tsMillis(b.createdAt);});
     });
-    if(ST.cmtOpen!==null)debouncedRedraw();
+    if(ST.cmtOpen!==null)redraw();
   });
 
   // Listen to RSVPs
-  // Listen to all reactions (aggregated per post, for stacked reaction
-  // display). Same full-rebuild-from-scratch cost problem as comments above
-  // - switched to the same incremental docChanges() pattern. Reaction docs
-  // didn't carry their own Firestore doc id into ST.allReactions before
-  // (nothing downstream needed it when the whole structure got rebuilt
-  // every time), so it's added here - it's what lets a removed/changed
-  // reaction be found and updated in place instead of requiring a full wipe.
+  // Listen to all reactions (aggregated per post, for stacked reaction display)
   watchGroupScoped("reactions",myGroupIds,function(snap){
-    ST.allReactions=ST.allReactions||{};
-    snap.docChanges().forEach(function(change){
-      var r=Object.assign({},change.doc.data(),{id:change.doc.id});
+    ST.allReactions={};
+    snap.forEach(function(doc){
+      var r=doc.data();
       if(!r.postId)return;
       if(!ST.allReactions[r.postId])ST.allReactions[r.postId]=[];
-      if(change.type==="removed"){
-        ST.allReactions[r.postId]=ST.allReactions[r.postId].filter(function(x){return x.id!==r.id;});
-        if(currentUser&&r.uid===currentUser.uid&&ST.reactions[r.postId]===r.em)delete ST.reactions[r.postId];
-        return;
-      }
-      var idx=ST.allReactions[r.postId].findIndex(function(x){return x.id===r.id;});
-      if(idx>=0)ST.allReactions[r.postId][idx]=r;else ST.allReactions[r.postId].push(r);
+      ST.allReactions[r.postId].push(r);
       if(currentUser&&r.uid===currentUser.uid)ST.reactions[r.postId]=r.em;
     });
-    if(ST.tab==="feed")debouncedRedraw();
+    if(ST.tab==="feed")redraw();
   });
 
   // Was collapsing every family member's RSVP for an event into one shared
@@ -1263,25 +1215,16 @@ function doSync(){
   // ST.allRsvps for a "who's going" display, and only mirror the CURRENT
   // user's own doc into ST.rsvp so the toggle buttons reflect their own
   // status.
-  // Same full-rebuild-from-scratch cost problem as comments/reactions above
-  // - switched to the same incremental docChanges() pattern, again adding
-  // the doc id so a changed/removed RSVP can be found and updated in place.
   watchGroupScoped("rsvps",myGroupIds,function(snap){
-    ST.allRsvps=ST.allRsvps||{};
-    snap.docChanges().forEach(function(change){
-      var r=Object.assign({},change.doc.data(),{id:change.doc.id});
+    ST.allRsvps={};
+    snap.forEach(function(doc){
+      var r=doc.data();
       if(!r.evId)return;
       if(!ST.allRsvps[r.evId])ST.allRsvps[r.evId]=[];
-      if(change.type==="removed"){
-        ST.allRsvps[r.evId]=ST.allRsvps[r.evId].filter(function(x){return x.id!==r.id;});
-        if(currentUser&&r.uid===currentUser.uid&&r.evId in ST.rsvp)delete ST.rsvp[r.evId];
-        return;
-      }
-      var idx=ST.allRsvps[r.evId].findIndex(function(x){return x.id===r.id;});
-      if(idx>=0)ST.allRsvps[r.evId][idx]=r;else ST.allRsvps[r.evId].push(r);
+      ST.allRsvps[r.evId].push(r);
       if(currentUser&&r.uid===currentUser.uid)ST.rsvp[r.evId]=r.going;
     });
-    if(ST.tab==="calendar"||ST.eventDetailId)debouncedRedraw();
+    if(ST.tab==="calendar"||ST.eventDetailId)redraw();
   });
 
   // Listen to events
@@ -5456,8 +5399,7 @@ function buildComments(t){
     cb2Hdr.appendChild(d({css:{fontSize:"11px",fontWeight:800,color:t.ad}},c.name));
     var isOwnComment=!!(currentUser&&c.uid&&c.uid===currentUser.uid);
     var isGroupAdminForComment=!!(currentUser&&c.groupId&&ST.fbMembers&&ST.fbMembers[c.groupId]&&ST.fbMembers[c.groupId].find(function(m){return m.uid===currentUser.uid&&m.isAdmin;}));
-    var isPendingComment=!!(c.id&&c.id.indexOf("tmp-")===0);
-    if((isOwnComment||isGroupAdminForComment)&&!isPendingComment){
+    if(isOwnComment||isGroupAdminForComment){
       var cDel=b({css:{background:"none",border:"none",color:"#B99A82",fontSize:"11px",fontWeight:700,cursor:"pointer",fontFamily:"inherit",padding:"0",flexShrink:0}},"Delete");
       cDel.addEventListener("click",function(){
         if(!confirm("Delete this comment?"))return;
@@ -6066,23 +6008,10 @@ function addComment(){
     return false;
   });
   var cmt={av:ST.avatar&&ST.avatar.startsWith("data:")?"\uD83D\uDC64":(ST.avatar||"\uD83D\uDC64"),name:ST.name||"You",text:ST.cmtIn.trim(),time:"Just now",postId:String(pid),uid:currentUser.uid,groupId:(postObj&&postObj.groupId)||ST.group||"imm"};
-  ST.cmtIn="";
-  // Optimistic: show the comment immediately with a tmp- id, before the
-  // write round-trips, same pattern as sendChat(). Comments use
-  // auto-generated Firestore ids, so the listener strips the matching
-  // tmp- placeholder (by uid+text) once the real "added" doc arrives.
-  var tmpId="tmp-"+Date.now();
-  if(!ST.comments[pid])ST.comments[pid]=[];
-  ST.comments[pid].push(Object.assign({},cmt,{id:tmpId,createdAt:{toMillis:function(){return Date.now();}}}));
-  redraw();
+  ST.cmtIn="";redraw();
   db.collection("comments").add(Object.assign({},cmt,{
     createdAt:firebase.firestore.FieldValue.serverTimestamp()
-  })).catch(function(e){
-    logAppError("comment failed",e);console.log("comment failed",e);
-    ST.comments[pid]=(ST.comments[pid]||[]).filter(function(x){return x.id!==tmpId;});
-    redraw();
-    showTopToast("Couldn't post your comment \u2014 check your connection and try again.");
-  });
+  })).catch(function(e){logAppError("comment failed",e);console.log("comment failed",e);});
 }
 
 // Check for invite link ?join=GroupName&icon=emoji
@@ -6159,29 +6088,14 @@ function showPostReactionPicker(postId,touchX,touchY){
       var newRx=curRx===em?null:em;
       picker.remove();
       var grpId=ST.group||"imm";
-      if(!currentUser)return;
-      // Optimistic: update local state and redraw immediately, before the
-      // write round-trips. Reactions use a deterministic doc id
-      // (postId_uid), so the optimistic entry can carry the exact real id -
-      // no temp-id/reconciliation needed; the listener's own "added"/
-      // "modified" event just harmlessly re-writes the same entry.
-      var myId=postId+"_"+currentUser.uid;
-      var prevAllReactions=(ST.allReactions[postId]||[]).slice();
-      ST.reactions[postId]=newRx;
-      ST.allReactions[postId]=(ST.allReactions[postId]||[]).filter(function(x){return x.id!==myId;});
-      if(newRx)ST.allReactions[postId].push({postId:postId,uid:currentUser.uid,em:newRx,name:ST.name||"Someone",groupId:grpId,id:myId});
-      redraw();
-      function revert(){
-        ST.reactions[postId]=curRx;
-        ST.allReactions[postId]=prevAllReactions;
-        redraw();
-      }
-      if(newRx){
-        db.collection("reactions").doc(myId).set({postId:postId,uid:currentUser.uid,em:newRx,name:ST.name||"Someone",groupId:grpId})
-          .catch(function(err){console.log("reaction save failed",err);revert();showTopToast("Couldn't save your reaction — check your connection.");});
-      } else {
-        db.collection("reactions").doc(myId).delete()
-          .catch(function(err){console.log("reaction remove failed",err);revert();showTopToast("Couldn't update your reaction — check your connection.");});
+      if(currentUser&&newRx){
+        db.collection("reactions").doc(postId+"_"+currentUser.uid).set({postId:postId,uid:currentUser.uid,em:newRx,name:ST.name||"Someone",groupId:grpId})
+          .then(function(){ST.reactions[postId]=newRx;redraw();})
+          .catch(function(err){console.log("reaction save failed",err);showTopToast("Couldn't save your reaction — check your connection.");});
+      } else if(currentUser){
+        db.collection("reactions").doc(postId+"_"+currentUser.uid).delete()
+          .then(function(){ST.reactions[postId]=newRx;redraw();})
+          .catch(function(err){console.log("reaction remove failed",err);showTopToast("Couldn't update your reaction — check your connection.");});
       }
     });
     picker.appendChild(eb);
