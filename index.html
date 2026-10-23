@@ -143,7 +143,7 @@ window.addEventListener("unhandledrejection",function(e){
 // refresh instead of leaving people stuck in a stale session. Bump
 // APP_VERSION by hand on every deploy (any changed string works - a
 // timestamp is easiest to keep unique).
-var APP_VERSION="2026-10-18T08:15:00Z-debug";
+var APP_VERSION="2026-10-23T18:30:00Z-photocrop";
 function isStandaloneMode(){
   return window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;
 }
@@ -4284,6 +4284,153 @@ function buildEventDetail(t){
   return ov;
 }
 
+// Full-screen photo crop/reposition editor. Appended directly to
+// document.body as a sibling of #app rather than as part of the vdom tree
+// buildApp()/redraw() produce - morphNode() only ever diffs #app's own
+// subtree, so the drag/zoom updates here (which mutate styles directly,
+// every pointermove, for smoothness) never fight with or get wiped by a
+// redraw happening elsewhere in the app while this is open.
+// Lets the user pan+zoom a photo inside a landscape frame, then exports
+// two JPEGs from that single selection: the landscape crop itself (the
+// new nameplate/banner photo) and an auto-derived center-square crop of
+// that same selection (everywhere the old separate circular avatar was).
+// Drag-to-pan + a zoom slider, not pinch gestures - reliable without
+// being able to live-test touch gestures.
+function openPhotoCropModal(srcDataUrl,onConfirm,onCancel){
+  var FRAME_W=300,FRAME_H=125; // 2.4:1, matches the landscape nameplate ratio
+  var EXPORT_W=960,EXPORT_H=400;
+  var PREVIEW=40;
+  var img=new Image();
+  img.onerror=function(){if(onCancel)onCancel();};
+  img.onload=function(){
+    var overlay=document.createElement("div");
+    overlay.style.cssText="position:fixed;inset:0;background:rgba(20,10,5,.85);z-index:9999;display:flex;align-items:center;justify-content:center;font-family:'Nunito',sans-serif;padding:16px;box-sizing:border-box;";
+
+    var card=document.createElement("div");
+    card.style.cssText="background:#FFF9F2;border-radius:18px;padding:20px;display:flex;flex-direction:column;align-items:center;gap:14px;max-width:92vw;";
+    var title=document.createElement("div");
+    title.textContent="Position your photo";
+    title.style.cssText="font-family:Lora,serif;font-weight:600;font-size:17px;color:#3D2314;";
+    card.appendChild(title);
+
+    var frame=document.createElement("div");
+    frame.style.cssText="position:relative;width:"+FRAME_W+"px;height:"+FRAME_H+"px;overflow:hidden;border-radius:10px;border:2px solid #E8CDBB;touch-action:none;cursor:grab;background:#000;";
+    var imgEl=document.createElement("img");
+    imgEl.src=srcDataUrl;imgEl.draggable=false;
+    imgEl.style.position="absolute";imgEl.style.left="0";imgEl.style.top="0";
+    frame.appendChild(imgEl);
+    card.appendChild(frame);
+
+    // Live preview of the auto-derived avatar crop (center square of the
+    // same selection), so the tradeoff of a single crop step is visible.
+    var previewRow=document.createElement("div");
+    previewRow.style.cssText="display:flex;align-items:center;gap:8px;";
+    var previewLabel=document.createElement("div");
+    previewLabel.textContent="Avatar preview:";
+    previewLabel.style.cssText="font-size:12px;color:#9B7B62;font-weight:700;";
+    var previewCircle=document.createElement("div");
+    previewCircle.style.cssText="width:"+PREVIEW+"px;height:"+PREVIEW+"px;border-radius:50%;overflow:hidden;position:relative;border:2px solid #E8CDBB;background:#000;flex-shrink:0;";
+    var previewImg=document.createElement("img");
+    previewImg.src=srcDataUrl;previewImg.draggable=false;
+    previewImg.style.position="absolute";previewImg.style.left="0";previewImg.style.top="0";
+    previewCircle.appendChild(previewImg);
+    previewRow.appendChild(previewLabel);previewRow.appendChild(previewCircle);
+    card.appendChild(previewRow);
+
+    var zoomRow=document.createElement("div");
+    zoomRow.style.cssText="display:flex;align-items:center;gap:8px;width:"+FRAME_W+"px;";
+    var zoomIcon=document.createElement("span");zoomIcon.textContent="🔍";zoomIcon.style.fontSize="13px";
+    var slider=document.createElement("input");
+    slider.type="range";slider.min="0";slider.max="100";slider.value="0";
+    slider.style.cssText="flex:1;";
+    zoomRow.appendChild(zoomIcon);zoomRow.appendChild(slider);
+    card.appendChild(zoomRow);
+
+    var btnRow=document.createElement("div");
+    btnRow.style.cssText="display:flex;gap:10px;width:100%;margin-top:4px;";
+    var cancelBtn=document.createElement("button");
+    cancelBtn.textContent="Cancel";
+    cancelBtn.style.cssText="flex:1;padding:11px;border-radius:50px;background:#FAF6F0;border:1.5px solid #F0DDD0;color:#8A6A55;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;";
+    var confirmBtn=document.createElement("button");
+    confirmBtn.textContent="Use Photo";
+    confirmBtn.style.cssText="flex:1;padding:11px;border-radius:50px;background:#C4714A;border:none;color:white;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;";
+    btnRow.appendChild(cancelBtn);btnRow.appendChild(confirmBtn);
+    card.appendChild(btnRow);
+
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+
+    var naturalW=img.naturalWidth,naturalH=img.naturalHeight;
+    var coverScale=Math.max(FRAME_W/naturalW,FRAME_H/naturalH);
+    var minScale=coverScale,maxScale=coverScale*3;
+    var scale=minScale,tx=0,ty=0;
+    var sqX=(FRAME_W-FRAME_H)/2,sqY=0; // top-left of the center-square region, in frame-local px
+
+    function clamp(){
+      var w=naturalW*scale,h=naturalH*scale;
+      var minTx=Math.min(0,FRAME_W-w),minTy=Math.min(0,FRAME_H-h);
+      tx=Math.max(minTx,Math.min(0,tx));
+      ty=Math.max(minTy,Math.min(0,ty));
+    }
+    function applyTransform(){
+      var w=naturalW*scale,h=naturalH*scale;
+      imgEl.style.width=w+"px";imgEl.style.height=h+"px";
+      imgEl.style.left=tx+"px";imgEl.style.top=ty+"px";
+      var k=PREVIEW/FRAME_H;
+      previewImg.style.width=(w*k)+"px";previewImg.style.height=(h*k)+"px";
+      previewImg.style.left=((tx-sqX)*k)+"px";previewImg.style.top=((ty-sqY)*k)+"px";
+    }
+    tx=(FRAME_W-naturalW*scale)/2;ty=(FRAME_H-naturalH*scale)/2;
+    clamp();applyTransform();
+
+    slider.addEventListener("input",function(){
+      var pct=Number(slider.value)/100;
+      var newScale=minScale+(maxScale-minScale)*pct;
+      var cxImg=(FRAME_W/2-tx)/scale,cyImg=(FRAME_H/2-ty)/scale;
+      scale=newScale;
+      tx=FRAME_W/2-cxImg*scale;ty=FRAME_H/2-cyImg*scale;
+      clamp();applyTransform();
+    });
+
+    var dragging=false,startX=0,startY=0,startTx=0,startTy=0;
+    frame.addEventListener("pointerdown",function(e){
+      dragging=true;startX=e.clientX;startY=e.clientY;startTx=tx;startTy=ty;
+      frame.style.cursor="grabbing";
+      try{frame.setPointerCapture(e.pointerId);}catch(e2){}
+    });
+    frame.addEventListener("pointermove",function(e){
+      if(!dragging)return;
+      tx=startTx+(e.clientX-startX);ty=startTy+(e.clientY-startY);
+      clamp();applyTransform();
+    });
+    function endDrag(){dragging=false;frame.style.cursor="grab";}
+    frame.addEventListener("pointerup",endDrag);
+    frame.addEventListener("pointercancel",endDrag);
+
+    function closeModal(){if(overlay.parentNode)overlay.parentNode.removeChild(overlay);}
+    cancelBtn.addEventListener("click",function(){closeModal();if(onCancel)onCancel();});
+    confirmBtn.addEventListener("click",function(){
+      var landscapeCanvas=document.createElement("canvas");
+      landscapeCanvas.width=EXPORT_W;landscapeCanvas.height=EXPORT_H;
+      var lctx=landscapeCanvas.getContext("2d");
+      var sx=-tx/scale,sy=-ty/scale,sw=FRAME_W/scale,sh=FRAME_H/scale;
+      lctx.drawImage(img,sx,sy,sw,sh,0,0,EXPORT_W,EXPORT_H);
+      var landscapeUrl=landscapeCanvas.toDataURL("image/jpeg",0.85);
+
+      var sqSize=EXPORT_H;
+      var sqCanvas=document.createElement("canvas");
+      sqCanvas.width=sqSize;sqCanvas.height=sqSize;
+      var sctx=sqCanvas.getContext("2d");
+      sctx.drawImage(landscapeCanvas,(EXPORT_W-sqSize)/2,0,sqSize,sqSize,0,0,sqSize,sqSize);
+      var squareUrl=sqCanvas.toDataURL("image/jpeg",0.85);
+
+      closeModal();
+      onConfirm(landscapeUrl,squareUrl);
+    });
+  };
+  img.src=srcDataUrl;
+}
+
 function buildProfileBanner(t){
   var bannerCss={padding:"36px 18px 52px",display:"flex",flexDirection:"column",alignItems:"center",position:"relative"};
   if(ST.profileWallpaper){
@@ -4303,37 +4450,50 @@ function buildProfileBanner(t){
   var avWrap=d({css:{position:"relative",marginBottom:"10px",zIndex:1}});
   var av=d({css:{width:"80px",height:"80px",borderRadius:"50%",background:"rgba(255,255,255,.2)",border:"3px solid rgba(255,255,255,.6)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"38px",overflow:"hidden",cursor:"pointer"}});
   renderAvatarGlyph(av,ST.avatar,10,"👤");
-  // Tap avatar to change it
-  var avFi=document.createElement("input");avFi.type="file";avFi.accept="image/*";avFi.style.display="none";
-  avFi.addEventListener("change",function(){
-    var f=this.files&&this.files[0];avFi.value="";
+  // Tap avatar (or the camera badge) to change the one photo that drives
+  // both the avatar and the banner/nameplate photo. A single crop step
+  // (openPhotoCropModal) replaces the old separate avatar+wallpaper
+  // uploads - the landscape crop IS the banner/nameplate photo, and the
+  // avatar is an auto-derived center-square crop of that same selection.
+  var photoFi=document.createElement("input");photoFi.type="file";photoFi.accept="image/*";photoFi.style.display="none";
+  photoFi.addEventListener("change",function(){
+    var f=this.files&&this.files[0];photoFi.value="";
     if(!f)return;
     var reader=new FileReader();
     reader.onload=function(e){
-      // Store base64 temporarily for display only - never save to Firestore
-      var tempBase64=e.target.result;
-      ST.avatar=tempBase64;
-      redraw();
-      // Upload to Storage first, then save URL to Firestore
-      if(currentUser){
-        storage.ref("avatars/"+currentUser.uid+".jpg").putString(tempBase64,"data_url")
+      openPhotoCropModal(e.target.result,function(landscapeUrl,squareUrl){
+        // Show the crop immediately; persist to Storage/Firestore in the background.
+        ST.avatar=squareUrl;
+        ST.profileWallpaper=landscapeUrl;
+        redraw();
+        if(!currentUser)return;
+        var uid=currentUser.uid;
+        storage.ref("avatars/"+uid+".jpg").putString(squareUrl,"data_url")
           .then(function(snap){return snap.ref.getDownloadURL();})
           .then(function(url){
             ST.avatar=url;
-            localStorage.setItem("ku_av",url);
-            db.collection("profiles").doc(currentUser.uid).set({av:url},{merge:true}).catch(function(e){logAppError("profiles.set (avatar upload - profile banner)",e);});
+            try{localStorage.setItem("ku_av",url);}catch(e2){}
+            db.collection("profiles").doc(uid).set({av:url},{merge:true}).catch(function(err){logAppError("profiles.set (avatar - profile photo crop)",err);});
             redraw();
           })
-          .catch(function(e){logAppError("Avatar upload failed",e);console.log("Avatar upload failed",e);});
-      }
+          .catch(function(err){logAppError("Avatar upload failed",err);});
+        storage.ref("wallpapers/"+uid+".jpg").putString(landscapeUrl,"data_url")
+          .then(function(snap){return snap.ref.getDownloadURL();})
+          .then(function(url){
+            ST.profileWallpaper=url;
+            db.collection("profiles").doc(uid).set({wallpaper:url},{merge:true}).catch(function(err){logAppError("profiles.set (wallpaper - profile photo crop)",err);});
+            redraw();
+          })
+          .catch(function(err){logAppError("Wallpaper upload failed",err);});
+      },function(){/* cancelled - leave the existing photo as-is */});
     };
     reader.readAsDataURL(f);
   });
-  av.addEventListener("click",function(){avFi.click();});
-  avWrap.appendChild(avFi);avWrap.appendChild(av);
+  av.addEventListener("click",function(){photoFi.click();});
+  avWrap.appendChild(photoFi);avWrap.appendChild(av);
   // Small camera badge on avatar
   var avBadge=d({css:{position:"absolute",bottom:"0",right:"0",width:"22px",height:"22px",borderRadius:"50%",background:"white",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"12px",boxShadow:"0 1px 4px rgba(0,0,0,.2)",cursor:"pointer"}});
-  avBadge.textContent="📷";avBadge.addEventListener("click",function(){avFi.click();});
+  avBadge.textContent="📷";avBadge.addEventListener("click",function(){photoFi.click();});
   avWrap.appendChild(avBadge);
   banner.appendChild(avWrap);
   // Editable name
@@ -4351,27 +4511,6 @@ function buildProfileBanner(t){
   nameRow.appendChild(nameEl);nameRow.appendChild(nameEditBtn);
   banner.appendChild(nameRow);
   banner.appendChild(d({css:{fontSize:"13px",color:"rgba(255,255,255,.75)",zIndex:1,position:"relative"}},"Keep Up member"));
-  // Wallpaper button
-  var wallFi=document.createElement("input");wallFi.type="file";wallFi.accept="image/*";wallFi.style.display="none";
-  wallFi.addEventListener("change",function(){
-    var f=this.files&&this.files[0];wallFi.value="";
-    if(!f)return;
-    var reader=new FileReader();
-    reader.onload=function(e){
-      ST.profileWallpaper=e.target.result;
-      if(currentUser){
-        storage.ref("wallpapers/"+currentUser.uid+".jpg").putString(e.target.result,"data_url")
-          .then(function(snap){return snap.ref.getDownloadURL();})
-          .then(function(url){ST.profileWallpaper=url;db.collection("profiles").doc(currentUser.uid).set({wallpaper:url},{merge:true}).catch(function(e){logAppError("profiles.set (wallpaper upload)",e);});redraw();})
-          .catch(function(){redraw();});
-      }
-      redraw();
-    };
-    reader.readAsDataURL(f);
-  });
-  var wallBtn=b({css:{position:"absolute",bottom:"10px",right:"12px",background:"rgba(255,255,255,.2)",border:"1px solid rgba(255,255,255,.4)",color:"white",fontSize:"11px",fontWeight:700,padding:"4px 10px",borderRadius:"50px",cursor:"pointer",fontFamily:"inherit",zIndex:1,backdropFilter:"blur(4px)"}},"🖼️ Wallpaper");
-  wallBtn.addEventListener("click",function(){wallFi.click();});
-  banner.appendChild(wallFi);banner.appendChild(wallBtn);
   return banner;
 }
 
