@@ -145,7 +145,7 @@ window.addEventListener("unhandledrejection",function(e){
 // refresh instead of leaving people stuck in a stale session. Bump
 // APP_VERSION by hand on every deploy (any changed string works - a
 // timestamp is easiest to keep unique).
-var APP_VERSION="2026-10-24T05:00:00Z-feedredesign";
+var APP_VERSION="2026-10-24T05:20:00Z-feedredesign2";
 function isStandaloneMode(){
   return window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;
 }
@@ -3206,10 +3206,10 @@ function buildMediaBody(item,t){
     ri.textContent=rx+" You reacted";
     (function(iid){ri.addEventListener("click",function(e){e.stopPropagation();showPostReactionPicker(iid,e.clientX,e.clientY);});})(item.id);
     acts.appendChild(ri);
-  } else {
-    var rHint=d({css:{fontSize:"11px",color:"#9B7B62",fontStyle:"italic"}},"Hold photo to react");
-    acts.appendChild(rHint);
   }
+  // The old "Hold photo to react" text hint is gone - the add-reaction
+  // button on the photo itself (buildReactionOverlay) is the discoverable
+  // affordance now, so there's nothing to hint at when there's no reaction yet.
   var cmb=b({css:{padding:"5px 12px",borderRadius:"50px",background:t.bg,border:"2px solid "+t.ap,fontSize:"12px",fontWeight:700,color:"#6B4C35",cursor:"pointer",marginLeft:"auto",fontFamily:"inherit"}},"Comment"+(pc.length?" ("+pc.length+")":""));
   cmb.addEventListener("click",function(){ST.cmtOpen=item.id;ST.cmtIn="";redraw();});acts.appendChild(cmb);
   // Send to Chat - compact icon button, photos only (not videos - too large for chat)
