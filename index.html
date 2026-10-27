@@ -145,7 +145,7 @@ window.addEventListener("unhandledrejection",function(e){
 // refresh instead of leaving people stuck in a stale session. Bump
 // APP_VERSION by hand on every deploy (any changed string works - a
 // timestamp is easiest to keep unique).
-var APP_VERSION="2026-10-27T06:00:00Z-videostatuscheck";
+var APP_VERSION="2026-10-27T07:00:00Z-videostatuscheck2";
 function isStandaloneMode(){
   return window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;
 }
@@ -3159,7 +3159,12 @@ function buildUploadingMediaWrap(item){
 
 function buildVideoWrap(item){
   // Video - shows first frame thumbnail, native controls, loads smoothly
-  var vidWrap=d({css:{position:"relative",background:"#000",cursor:"pointer"}});
+  // minHeight lives on vidWrap itself (not just on the thumbnail inside it)
+  // so the card doesn't collapse and reflow when the thumbnail is swapped
+  // out for the status pill/iframe on tap - see the isCFStream click handler
+  // below, which used to leave this wrapper with nothing holding its height
+  // for a moment, causing a visible jump.
+  var vidWrap=d({css:{position:"relative",background:"#000",cursor:"pointer",minHeight:"60vh"}});
   // Use Cloudflare Stream iframe for HLS videos, fallback to native video
   var isCFStream=item.imgUrl&&item.imgUrl.includes("cloudflarestream.com");
   // Show thumbnail as poster for all videos
@@ -3167,7 +3172,6 @@ function buildVideoWrap(item){
     vidWrap.style.backgroundImage="url("+item.thumbUrl+")";
     vidWrap.style.backgroundSize="cover";
     vidWrap.style.backgroundPosition="center";
-    vidWrap.style.minHeight="60vh";
   }
   if(isCFStream){
     // Extract video UID from URL
