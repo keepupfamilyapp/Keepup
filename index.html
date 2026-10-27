@@ -147,7 +147,7 @@ window.addEventListener("unhandledrejection",function(e){
 // refresh instead of leaving people stuck in a stale session. Bump
 // APP_VERSION by hand on every deploy (any changed string works - a
 // timestamp is easiest to keep unique).
-var APP_VERSION="2026-10-27T11:00:00Z-resumableupload";
+var APP_VERSION="2026-10-27T12:00:00Z-resumableupload2";
 function isStandaloneMode(){
   return window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;
 }
@@ -6663,7 +6663,17 @@ ST.upImg=null;ST.upPhotos=[];
     // Show uploading indicator in feed - use actual local file as instant preview
     var tempId="temp-"+Date.now();
     var localPreviewUrl=isVid&&vidFile?URL.createObjectURL(vidFile):(photosArr.length?photosArr[0].dataUrl:imgData);
-    var tempPost={id:tempId,type:isVid?"video":"photo",isVideo:isVid,av:postAv,name:postName,time:"Just now",cap:postCap,groupId:postGroup,emoji:isVid?"\uD83C\uDFA5":"\uD83D\uDCF7",uploading:true,localPreviewUrl:localPreviewUrl,extraCount:photosArr.length>1?photosArr.length-1:0};
+    // createdAt here matters more than it looks: watchFeed's listener
+    // re-sorts ST.feed[gid] by createdAt on every single snapshot it gets
+    // (including the resubscribe that happens on reconnect, or just another
+    // device posting while this upload is still running) - without a
+    // timestamp this temp post reads as tsMillis()=0 and gets sorted below
+    // every real post, i.e. it visually disappears from the top of the feed
+    // while the upload is still quietly running in the background. Giving
+    // it a live "now" timestamp (same {toMillis} shape a real Firestore
+    // Timestamp has, same trick addComment() already uses for its own
+    // optimistic entry) keeps it pinned at the top for as long as it exists.
+    var tempPost={id:tempId,type:isVid?"video":"photo",isVideo:isVid,av:postAv,name:postName,time:"Just now",cap:postCap,groupId:postGroup,emoji:isVid?"\uD83C\uDFA5":"\uD83D\uDCF7",uploading:true,localPreviewUrl:localPreviewUrl,extraCount:photosArr.length>1?photosArr.length-1:0,createdAt:{toMillis:function(){return Date.now();}}};
     if(!ST.feed[postGroup])ST.feed[postGroup]=[];
     ST.feed[postGroup].unshift(tempPost);
     // Make sure tab is on feed and group is correct
