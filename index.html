@@ -145,7 +145,7 @@ window.addEventListener("unhandledrejection",function(e){
 // refresh instead of leaving people stuck in a stale session. Bump
 // APP_VERSION by hand on every deploy (any changed string works - a
 // timestamp is easiest to keep unique).
-var APP_VERSION="2026-10-24T06:10:00Z-chatvideofix";
+var APP_VERSION="2026-10-27T04:00:00Z-chatvideofix2";
 function isStandaloneMode(){
   return window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;
 }
@@ -447,7 +447,7 @@ function fetchAllFeeds(){
     });
 }
 
-function showFullScreenVideo(url){
+function showFullScreenVideo(url,createdAt){
   var ov=document.createElement("div");
   ov.style.cssText="position:fixed;inset:0;background:#000;z-index:300;display:flex;align-items:center;justify-content:center;flex-direction:column;";
   // Close button - works for both branches below without caring which one
@@ -458,6 +458,7 @@ function showFullScreenVideo(url){
   closeBtn.style.cssText="position:absolute;top:16px;right:16px;background:rgba(255,255,255,.15);border:none;color:white;font-size:18px;width:36px;height:36px;border-radius:50%;cursor:pointer;z-index:10;display:flex;align-items:center;justify-content:center;";
   closeBtn.textContent="\u2715";
   closeBtn.addEventListener("click",function(){
+    if(ov._cfAutoRetryTimer)clearTimeout(ov._cfAutoRetryTimer);
     var v=ov.querySelector("video");if(v){v.pause();v.src="";}
     ov.remove();
   });
@@ -478,12 +479,36 @@ function showFullScreenVideo(url){
     var cfUid=url.split("cloudflarestream.com/")[1];
     if(cfUid)cfUid=cfUid.split("/")[0];
     if(cfUid){
-      var iframe=document.createElement("iframe");
-      iframe.src="https://"+CF_CUSTOMER_SUBDOMAIN+".cloudflarestream.com/"+cfUid+"/iframe?autoplay=true&muted=false";
-      iframe.style.cssText="width:100%;height:100%;border:none;display:block;background:#000;";
-      iframe.setAttribute("allow","accelerometer;gyroscope;autoplay;encrypted-media;picture-in-picture;");
-      iframe.setAttribute("allowfullscreen","true");
-      ov.appendChild(iframe);
+      // A freshly-uploaded video may still be encoding on Cloudflare's side
+      // for a few minutes - loading the iframe right away against a UID
+      // that isn't ready yet is exactly what produced "Video not found"
+      // immediately after posting. Same fix as the feed's buildVideoWrap:
+      // keep retrying in the background for up to 5 minutes after posting,
+      // with a status pill visible the whole time, instead of a single
+      // attempt that fails and never recovers.
+      var ageMs=createdAt&&createdAt.toMillis?(Date.now()-createdAt.toMillis()):99999999;
+      function loadVideoIframe(){
+        if(ov._cfAutoRetryTimer){clearTimeout(ov._cfAutoRetryTimer);ov._cfAutoRetryTimer=null;}
+        var oldFrame=ov.querySelector("iframe");if(oldFrame)oldFrame.remove();
+        var oldRetry=document.getElementById("fsv-retry-pill");if(oldRetry)oldRetry.remove();
+        var iframe=document.createElement("iframe");
+        iframe.src="https://"+CF_CUSTOMER_SUBDOMAIN+".cloudflarestream.com/"+cfUid+"/iframe?autoplay=true&muted=false&_r="+Date.now();
+        iframe.style.cssText="width:100%;height:100%;border:none;display:block;background:#000;";
+        iframe.setAttribute("allow","accelerometer;gyroscope;autoplay;encrypted-media;picture-in-picture;");
+        iframe.setAttribute("allowfullscreen","true");
+        ov.appendChild(iframe);
+        if(ageMs<300000){
+          var retryPill=document.createElement("div");
+          retryPill.id="fsv-retry-pill";
+          retryPill.style.cssText="position:absolute;bottom:24px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.6);color:white;border-radius:50px;padding:8px 16px;font-size:12px;font-weight:700;font-family:Nunito,sans-serif;backdrop-filter:blur(4px);z-index:3;";
+          retryPill.textContent="Video still processing - this will play automatically once it's ready";
+          ov.appendChild(retryPill);
+          ov._cfAutoRetryTimer=setTimeout(function(){
+            if(ov.isConnected)loadVideoIframe();
+          },8000);
+        }
+      }
+      loadVideoIframe();
     } else {
       var badUrlTxt=document.createElement("div");
       badUrlTxt.style.cssText="color:rgba(255,255,255,.6);font-size:13px;";
@@ -3760,7 +3785,7 @@ function buildChatView(t,grp){
       vidBubble.appendChild(vidThumb);
       if(msg.text){var vcap=d({css:{padding:"7px 10px",fontSize:"13px",color:"rgba(255,255,255,.8)",lineHeight:"1.4"}},msg.text);vidBubble.appendChild(vcap);}
       // Tap opens fullscreen video player
-      vidBubble.addEventListener("click",function(){showFullScreenVideo(msg.videoUrl);});
+      vidBubble.addEventListener("click",function(){showFullScreenVideo(msg.videoUrl,msg.createdAt);});
       mb.appendChild(vidBubble);bubbleEl=vidBubble;
     } else if(msg.uploadingVideo){
       var upVidBubble=d({css:{padding:"12px 14px",borderRadius:iy?"16px 16px 3px 16px":"16px 16px 16px 3px",background:iy?t.a+"bb":"rgba(0,0,0,.06)",display:"flex",alignItems:"center",gap:"8px",minWidth:"140px"}});
