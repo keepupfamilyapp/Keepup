@@ -145,7 +145,7 @@ window.addEventListener("unhandledrejection",function(e){
 // refresh instead of leaving people stuck in a stale session. Bump
 // APP_VERSION by hand on every deploy (any changed string works - a
 // timestamp is easiest to keep unique).
-var APP_VERSION="2026-10-24T05:20:00Z-feedredesign2";
+var APP_VERSION="2026-10-24T06:10:00Z-chatvideofix";
 function isStandaloneMode(){
   return window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;
 }
@@ -450,43 +450,82 @@ function fetchAllFeeds(){
 function showFullScreenVideo(url){
   var ov=document.createElement("div");
   ov.style.cssText="position:fixed;inset:0;background:#000;z-index:300;display:flex;align-items:center;justify-content:center;flex-direction:column;";
-  // Loading state
-  var spinner=document.createElement("div");
-  spinner.style.cssText="color:rgba(255,255,255,.6);font-size:48px;margin-bottom:12px;";
-  spinner.textContent="\uD83C\uDFA5";
-  var loadTxt=document.createElement("div");
-  loadTxt.style.cssText="color:rgba(255,255,255,.5);font-size:13px;";
-  loadTxt.textContent="Loading video...";
-  ov.appendChild(spinner);ov.appendChild(loadTxt);
-  // Close button
+  // Close button - works for both branches below without caring which one
+  // actually rendered, since closing just means removing the overlay (an
+  // iframe stops its own playback automatically once it's removed from the
+  // DOM; a <video> element is paused/cleared explicitly first).
   var closeBtn=document.createElement("button");
   closeBtn.style.cssText="position:absolute;top:16px;right:16px;background:rgba(255,255,255,.15);border:none;color:white;font-size:18px;width:36px;height:36px;border-radius:50%;cursor:pointer;z-index:10;display:flex;align-items:center;justify-content:center;";
   closeBtn.textContent="\u2715";
-  closeBtn.addEventListener("click",function(){vid.pause();vid.src="";ov.remove();});
+  closeBtn.addEventListener("click",function(){
+    var v=ov.querySelector("video");if(v){v.pause();v.src="";}
+    ov.remove();
+  });
   ov.appendChild(closeBtn);
   document.body.appendChild(ov);
-  // Create video element only after overlay is shown
-  setTimeout(function(){
-    var vid=document.createElement("video");
-    vid.controls=true;
-    vid.preload="metadata";
-    vid.setAttribute("playsinline","");
-    vid.setAttribute("webkit-playsinline","");
-    vid.style.cssText="width:100%;max-height:100vh;max-width:100vw;object-fit:contain;display:none;";
-    vid.addEventListener("loadedmetadata",function(){
-      spinner.remove();loadTxt.remove();
-      vid.style.display="block";
-    });
-    vid.addEventListener("error",function(){
-      loadTxt.textContent="Could not load video";
-      spinner.textContent="\u26A0\uFE0F";
-    });
-    vid.src=url;
-    ov.appendChild(vid);
-  },100);
-  // Tap outside video to close
+
+  // Cloudflare Stream videos (every video this app uploads) are served as
+  // an HLS (.m3u8) manifest - a plain <video src> tag only plays that
+  // natively on Safari. Everywhere else (Chrome, Firefox, Edge, most
+  // Android browsers) it just fails with "Could not load video", which is
+  // exactly what was happening here: this was the one remaining spot still
+  // using a raw <video> tag for a Stream URL. The feed already plays these
+  // correctly through Cloudflare's own hosted iframe player (it ships its
+  // own HLS playback, so this app doesn't have to) - bringing chat's
+  // fullscreen viewer in line with that instead.
+  var isCFStream=url&&url.indexOf("cloudflarestream.com")!==-1;
+  if(isCFStream){
+    var cfUid=url.split("cloudflarestream.com/")[1];
+    if(cfUid)cfUid=cfUid.split("/")[0];
+    if(cfUid){
+      var iframe=document.createElement("iframe");
+      iframe.src="https://"+CF_CUSTOMER_SUBDOMAIN+".cloudflarestream.com/"+cfUid+"/iframe?autoplay=true&muted=false";
+      iframe.style.cssText="width:100%;height:100%;border:none;display:block;background:#000;";
+      iframe.setAttribute("allow","accelerometer;gyroscope;autoplay;encrypted-media;picture-in-picture;");
+      iframe.setAttribute("allowfullscreen","true");
+      ov.appendChild(iframe);
+    } else {
+      var badUrlTxt=document.createElement("div");
+      badUrlTxt.style.cssText="color:rgba(255,255,255,.6);font-size:13px;";
+      badUrlTxt.textContent="\u26A0\uFE0F Could not load video";
+      ov.appendChild(badUrlTxt);
+    }
+  } else {
+    // Non-Stream URL fallback - shouldn't normally happen (every video this
+    // app uploads goes through Cloudflare Stream), kept for safety.
+    var spinner=document.createElement("div");
+    spinner.style.cssText="color:rgba(255,255,255,.6);font-size:48px;margin-bottom:12px;";
+    spinner.textContent="\uD83C\uDFA5";
+    var loadTxt=document.createElement("div");
+    loadTxt.style.cssText="color:rgba(255,255,255,.5);font-size:13px;";
+    loadTxt.textContent="Loading video...";
+    ov.appendChild(spinner);ov.appendChild(loadTxt);
+    setTimeout(function(){
+      var vid=document.createElement("video");
+      vid.controls=true;
+      vid.preload="metadata";
+      vid.setAttribute("playsinline","");
+      vid.setAttribute("webkit-playsinline","");
+      vid.style.cssText="width:100%;max-height:100vh;max-width:100vw;object-fit:contain;display:none;";
+      vid.addEventListener("loadedmetadata",function(){
+        spinner.remove();loadTxt.remove();
+        vid.style.display="block";
+      });
+      vid.addEventListener("error",function(){
+        loadTxt.textContent="Could not load video";
+        spinner.textContent="\u26A0\uFE0F";
+      });
+      vid.src=url;
+      ov.appendChild(vid);
+    },100);
+  }
+
+  // Tap outside the video to close
   ov.addEventListener("click",function(e){
-    if(e.target===ov){var v=ov.querySelector("video");if(v){v.pause();v.src="";}ov.remove();}
+    if(e.target===ov){
+      var v=ov.querySelector("video");if(v){v.pause();v.src="";}
+      ov.remove();
+    }
   });
 }
 
