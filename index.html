@@ -147,7 +147,7 @@ window.addEventListener("unhandledrejection",function(e){
 // refresh instead of leaving people stuck in a stale session. Bump
 // APP_VERSION by hand on every deploy (any changed string works - a
 // timestamp is easiest to keep unique).
-var APP_VERSION="2026-10-27T09:30:00Z-makeamemory";
+var APP_VERSION="2026-10-27T11:00:00Z-resumableupload";
 function isStandaloneMode(){
   return window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;
 }
@@ -264,6 +264,15 @@ var CF_CUSTOMER_SUBDOMAIN="customer-32e18pqrf6myogys"; // Stream playback domain
 // function URL once Cloud Functions are deployed to the staging project.
 var CF_FUNC_URL=IS_STAGING?"https://us-central1-keep-up-staging.cloudfunctions.net/uploadVideo":"https://us-central1-keep-up-f9d1c.cloudfunctions.net/uploadVideo";
 var CF_STATUS_FUNC_URL=IS_STAGING?"https://us-central1-keep-up-staging.cloudfunctions.net/checkVideoStatus":"https://us-central1-keep-up-f9d1c.cloudfunctions.net/checkVideoStatus";
+var CF_RESUMABLE_FUNC_URL=IS_STAGING?"https://us-central1-keep-up-staging.cloudfunctions.net/startResumableVideoUpload":"https://us-central1-keep-up-f9d1c.cloudfunctions.net/startResumableVideoUpload";
+var CF_CHUNK_BYTES=5*1024*1024; // 5MB chunks - small enough that a dropped chunk on a bad connection costs seconds to redo, not the whole upload
+// Gallery-pick guardrail: catch an oversized/too-long video right after it's
+// picked, before spending a progress bar on an upload Cloudflare's direct-
+// upload endpoint is just going to reject anyway (~200MB cap on our plan -
+// 190MB leaves a safety margin). Make a Memory can't hit either limit since
+// it's capped at 15 seconds of camera input by construction.
+var MAX_VIDEO_BYTES=190*1024*1024;
+var MAX_VIDEO_DURATION_SEC=300;
 
 // Asks Cloudflare (via our own Cloud Function, so the real API key never
 // reaches the browser) how encoding is actually going for a video, instead
@@ -374,6 +383,98 @@ function uploadToCloudflareStream(file,onProgress){
         xhr.send(formData);
       });
     });
+}
+
+// Resumable (TUS) video upload. The old uploadToCloudflareStream() above
+// sends the whole file in one shot - fine on wifi, but a dropped connection
+// partway through a big upload on mobile data meant starting completely
+// over, which is exactly what "no resumable upload" flagged as a scale
+// problem. This uploads in small chunks instead and automatically retries
+// just the one chunk that failed (a few seconds of redo) rather than the
+// whole file, using Cloudflare Stream's TUS endpoint. If creating the
+// resumable session itself fails for any reason (e.g. the new Cloud
+// Function isn't deployed yet on this round), uploadVideoResilient() below
+// falls back to the plain uploadToCloudflareStream() path automatically -
+// posting a video should never just break because this is unavailable.
+function startResumableSession(fileSize){
+  if(!currentUser)return Promise.reject(new Error("Not signed in"));
+  return currentUser.getIdToken().then(function(idToken){
+    return fetch(CF_RESUMABLE_FUNC_URL+"?size="+encodeURIComponent(fileSize),{method:"POST",headers:{"Authorization":"Bearer "+idToken}});
+  }).then(function(r){return r.json();}).then(function(data){
+    if(!data||!data.uploadURL||!data.uid){
+      throw new Error("No resumable session returned"+(data&&data.error?(": "+data.error):""));
+    }
+    return {uploadURL:data.uploadURL,uid:data.uid,offset:0};
+  });
+}
+function uploadChunkWithRetry(session,file,chunkStart,attempt){
+  attempt=attempt||1;
+  var chunkEnd=Math.min(chunkStart+CF_CHUNK_BYTES,file.size);
+  var chunk=file.slice(chunkStart,chunkEnd);
+  return new Promise(function(resolve,reject){
+    var xhr=new XMLHttpRequest();
+    xhr.open("PATCH",session.uploadURL,true);
+    xhr.setRequestHeader("Tus-Resumable","1.0.0");
+    xhr.setRequestHeader("Upload-Offset",String(chunkStart));
+    xhr.setRequestHeader("Content-Type","application/offset+octet-stream");
+    function retryOrFail(reason){
+      if(attempt<4){
+        setTimeout(function(){
+          uploadChunkWithRetry(session,file,chunkStart,attempt+1).then(resolve).catch(reject);
+        },attempt*1200);
+      } else {
+        reject(new Error(reason));
+      }
+    }
+    xhr.onload=function(){
+      if(xhr.status>=200&&xhr.status<300){
+        session.offset=chunkEnd;
+        resolve();
+      } else {
+        retryOrFail("Upload stalled (HTTP "+xhr.status+") after several tries");
+      }
+    };
+    xhr.onerror=function(){retryOrFail("Network error uploading video - check your connection.");};
+    xhr.send(chunk);
+  });
+}
+function runResumableUpload(session,file,onProgress){
+  function uploadNext(){
+    if(session.offset>=file.size)return Promise.resolve();
+    return uploadChunkWithRetry(session,file,session.offset).then(function(){
+      if(onProgress)onProgress(session.offset/file.size*100);
+      return uploadNext();
+    });
+  }
+  return uploadNext();
+}
+// Single entry point submitPost() calls for video: tries the resumable
+// path, and falls back to the old one-shot upload if NO bytes ever actually
+// landed on the resumable session - whether because the session couldn't be
+// created at all, or because even the first chunk failed every retry (which
+// would also catch a protocol/CORS mismatch on Cloudflare's resumable
+// endpoint I can't fully verify without a live test). Once real progress has
+// been made (offset>0), the per-chunk retry above is what handles a flaky
+// connection, and a failure past that point is surfaced as-is rather than
+// discarding that progress to restart from zero with a different method.
+function uploadVideoResilient(file,onProgress){
+  var session=null;
+  return startResumableSession(file.size).then(function(s){
+    session=s;
+    return runResumableUpload(session,file,onProgress).then(function(){
+      return {
+        uid:session.uid,
+        videoUrl:"https://"+CF_CUSTOMER_SUBDOMAIN+".cloudflarestream.com/"+session.uid+"/manifest/video.m3u8",
+        thumbUrl:"https://"+CF_CUSTOMER_SUBDOMAIN+".cloudflarestream.com/"+session.uid+"/thumbnails/thumbnail.jpg"
+      };
+    });
+  }).catch(function(e){
+    if(session&&session.offset>0){
+      throw e;
+    }
+    console.log("Resumable upload unavailable, falling back to direct upload:",e&&e.message);
+    return uploadToCloudflareStream(file,onProgress);
+  });
 }
 
 // A VAPID key is tied to ONE specific Firebase project's Cloud Messaging
@@ -3193,6 +3294,14 @@ function buildFeed(t,grp){
   }
   function handleVideo(f){
     hideAll();
+    // Catch an oversized pick immediately, before touching the upload
+    // pipeline at all - this is the "too large" error Sean hit with a 28s
+    // 4K clip, now caught with a clear message instead of failing partway
+    // through a progress bar.
+    if(f.size>MAX_VIDEO_BYTES){
+      showTopToast("That video is "+(f.size/1024/1024).toFixed(0)+"MB — a bit too large to upload (limit ~"+Math.round(MAX_VIDEO_BYTES/1024/1024)+"MB). Try trimming it, recording at a lower quality, or use ✨ Make a Memory for a quick clip instead.");
+      return;
+    }
     ST.upType="photo";ST.upIsVideo=true;ST.upVideoFile=f;ST.upStep=2;ST.upCap="";ST.upPhotos=[];
     // Don't read video into memory - go straight to upload step
     // Capture first frame as thumbnail
@@ -3203,6 +3312,17 @@ function buildFeed(t,grp){
     var thumbUrl=URL.createObjectURL(f);
     thumbVid.src=thumbUrl;
     thumbVid.addEventListener("loadeddata",function(){
+      // Size is checked up front (above), but duration only becomes known
+      // once metadata loads - a long clip can still be well under the size
+      // cap (low bitrate) yet not something we want people waiting through
+      // Cloudflare's encoder for, so it gets caught here instead.
+      if(thumbVid.duration&&thumbVid.duration>MAX_VIDEO_DURATION_SEC){
+        URL.revokeObjectURL(thumbUrl);
+        ST.upVideoFile=null;ST.upIsVideo=false;ST.upStep=1;
+        showTopToast("That video is "+Math.round(thumbVid.duration/60)+" min long — videos over "+Math.round(MAX_VIDEO_DURATION_SEC/60)+" minutes aren't supported yet. Try trimming it first.");
+        redraw();
+        return;
+      }
       thumbVid.currentTime=0.5;
     });
     thumbVid.addEventListener("seeked",function(){
@@ -6474,6 +6594,12 @@ ST.upImg=null;ST.upPhotos=[];
       return;
     }
     var uid=currentUser.uid;
+    // Wrapped in its own function so a failed upload can be retried from the
+    // error banner below without forcing the user back to the gallery to
+    // re-pick the file - vidFile/photosArr/imgData/p/postGroup etc. are all
+    // still held in the closure from submitPost() above, untouched by a
+    // retry attempt.
+    function attemptMediaUpload(){
     // Convert base64 to blob for reliable mobile upload
     function dataUrlToBlob(dataUrl){
       var arr=dataUrl.split(",");var mime=arr[0].match(/:(.*?);/)[1];
@@ -6500,7 +6626,7 @@ ST.upImg=null;ST.upPhotos=[];
         var thumbRef=storage.ref("thumbs/"+uid+"/"+Date.now()+".jpg");
         thumbUploadPromise=thumbRef.put(dataUrlToBlob(imgData)).then(function(s){return s.ref.getDownloadURL();}).catch(function(){return null;});
       }
-      uploadRef=uploadToCloudflareStream(vidFile,updateProgress).then(function(result){
+      uploadRef=uploadVideoResilient(vidFile,updateProgress).then(function(result){
         cfResultThumb=result.thumbUrl;
         return result.videoUrl;
       });
@@ -6586,13 +6712,32 @@ ST.upImg=null;ST.upPhotos=[];
       // feed to appear to jump back to older posts).
       ST.feed[postGroup]=ST.feed[postGroup].filter(function(x){return x.id!==tempId;});
       redraw();
-      // Show error
+      // Show error, with a Retry button that re-runs the exact same upload
+      // from the file already held in memory - no trip back to the gallery
+      // to re-pick it. Stays up until dismissed/retried rather than the old
+      // 5-second auto-remove, since a failure is exactly when the person is
+      // most likely to want to act on it.
       var errBanner=document.createElement("div");
-      errBanner.style.cssText="position:fixed;top:60px;left:12px;right:12px;background:#C0392B;color:white;padding:12px 16px;border-radius:14px;z-index:999;font-family:Nunito,sans-serif;font-size:13px;font-weight:700;";
-      errBanner.textContent=(isVid?"Video":"Photo")+" upload failed: "+((e&&e.message)||"Check your connection and try again.");
+      errBanner.style.cssText="position:fixed;top:60px;left:12px;right:12px;background:#C0392B;color:white;padding:12px 16px;border-radius:14px;z-index:999;font-family:Nunito,sans-serif;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:space-between;gap:10px;";
+      var errTxt=document.createElement("div");
+      errTxt.textContent=(isVid?"Video":"Photo")+" upload failed: "+((e&&e.message)||"Check your connection and try again.");
+      errBanner.appendChild(errTxt);
+      var errBtnRow=document.createElement("div");
+      errBtnRow.style.cssText="display:flex;gap:6px;flex-shrink:0;";
+      var retryBtn=document.createElement("button");
+      retryBtn.textContent="Retry";
+      retryBtn.style.cssText="background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.5);color:white;padding:6px 12px;border-radius:50px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;";
+      retryBtn.addEventListener("click",function(){errBanner.remove();attemptMediaUpload();});
+      var dismissBtn=document.createElement("button");
+      dismissBtn.textContent="✕";
+      dismissBtn.style.cssText="background:transparent;border:none;color:rgba(255,255,255,.8);padding:6px 4px;font-size:14px;cursor:pointer;font-family:inherit;";
+      dismissBtn.addEventListener("click",function(){errBanner.remove();});
+      errBtnRow.appendChild(retryBtn);errBtnRow.appendChild(dismissBtn);
+      errBanner.appendChild(errBtnRow);
       document.body.appendChild(errBanner);
-      setTimeout(function(){errBanner.remove();},5000);
     });
+    }
+    attemptMediaUpload();
   }
 }
 
