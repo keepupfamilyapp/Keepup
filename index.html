@@ -147,7 +147,7 @@ window.addEventListener("unhandledrejection",function(e){
 // refresh instead of leaving people stuck in a stale session. Bump
 // APP_VERSION by hand on every deploy (any changed string works - a
 // timestamp is easiest to keep unique).
-var APP_VERSION="2026-10-27T12:00:00Z-resumableupload2";
+var APP_VERSION="2026-10-27T18:00:00Z-profilephotos-reactions";
 function isStandaloneMode(){
   return window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;
 }
@@ -1866,6 +1866,19 @@ function renderAvatarGlyph(container,rawVal,threshold,fallback){
   }
 }
 
+// Makes an avatar circle tap-to-enlarge (reusing showFullScreen's existing
+// pinch-zoom/close/tap-out viewer) wherever it's showing someone ELSE's
+// real photo and the element doesn't already have a more important primary
+// action of its own (selecting/toggling a member, say) - call sites decide
+// that by whether they call this at all, not this helper. A no-op when
+// avVal isn't an actual photo (an emoji glyph has nothing to blow up).
+function makeAvatarTappable(elm,avVal){
+  if(avVal&&(avVal.startsWith("http")||avVal.startsWith("data:"))){
+    elm.style.cursor="pointer";
+    elm.addEventListener("click",function(e){e.stopPropagation();showFullScreen(avVal);});
+  }
+}
+
 // Same idea as renderAvatarGlyph but for the two spots that show the avatar
 // as a CSS background-image instead of an <img> child (profile avatar-picker
 // preview, birthday list rows).
@@ -1896,6 +1909,12 @@ function buildNameplate(name,wallpaperUrl,w,h,fontSize){
     plate.appendChild(pImg);
     plate.appendChild(d({css:{position:"absolute",inset:"0",background:"linear-gradient(0deg,rgba(40,20,10,.55),rgba(40,20,10,.02) 65%)"}}));
     plate.appendChild(d({css:{position:"absolute",left:"6px",bottom:"2px",right:"4px",fontFamily:"Lora,serif",fontWeight:700,fontSize:fontSize+"px",color:"#FFF9F2",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},name));
+    // Tap a post author's or commenter's photo to see it full-size - every
+    // nameplate here belongs to someone else's post/comment as the viewer
+    // sees it, never the self-editing profile banner (that's built
+    // separately and keeps its own tap-to-edit behavior).
+    plate.style.cursor="pointer";
+    plate.addEventListener("click",function(e){e.stopPropagation();showFullScreen(wallpaperUrl);});
   } else {
     plate.appendChild(d({css:{position:"absolute",inset:"0",display:"flex",alignItems:"center",justifyContent:"center",padding:"0 6px",fontWeight:800,fontSize:fontSize+"px",color:"#A85A38",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",textAlign:"center"}},name));
   }
@@ -1944,10 +1963,49 @@ function buildReactionOverlay(item){
       var moreBub=d({css:{width:"26px",height:"26px",borderRadius:"50%",background:"#6B4226",border:"2.5px solid #FFF9F2",marginLeft:"-9px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"10px",fontWeight:800,color:"white"}},"+"+(list.length-shown.length));
       stackWrap.appendChild(moreBub);
     }
-    (function(iid){stackWrap.addEventListener("click",function(e){e.stopPropagation();showPostReactionPicker(iid,e.clientX,e.clientY);});})(item.id);
+    // Tapping the avatar stack shows who reacted and with what (below) -
+    // adding a reaction is the dedicated + button's job, on the other
+    // corner, so the two don't compete for the same tap.
+    stackWrap.addEventListener("click",function(e){e.stopPropagation();showReactionDetails(item);});
     ov.appendChild(stackWrap);
   }
   return ov;
+}
+
+// The small popup behind tapping the avatar-stack badge: who reacted to
+// this post and with which emoji, newest first (same order the stack
+// itself shows). A separate screen from showPostReactionPicker, which is
+// for adding your OWN reaction, not viewing everyone else's.
+function showReactionDetails(item){
+  var list=(ST.allReactions&&ST.allReactions[item.id])||[];
+  var ov=d({css:{position:"fixed",inset:"0",background:"rgba(0,0,0,.55)",zIndex:300,display:"flex",alignItems:"flex-end"}});
+  var sh=d({css:{background:"white",borderRadius:"20px 20px 0 0",padding:"18px 18px 28px",width:"100%",boxSizing:"border-box",maxHeight:"70vh",overflowY:"auto"}});
+  sh.appendChild(d({css:{fontSize:"16px",fontWeight:800,color:"#3D2314",marginBottom:"14px"}},list.length+" Reaction"+(list.length!==1?"s":"")));
+  if(!list.length){
+    sh.appendChild(d({css:{fontSize:"13px",color:"#9B7B62"}},"No reactions yet."));
+  } else {
+    list.slice().reverse().forEach(function(r){
+      var row=d({css:{display:"flex",alignItems:"center",gap:"10px",padding:"8px 0"}});
+      var rav=d({css:{width:"34px",height:"34px",borderRadius:"50%",background:"#F5DDD1",border:"1.5px solid #E8CDBB",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"16px",flexShrink:0,overflow:"hidden",fontWeight:800,color:"#A85A38"}});
+      if(r.av&&(r.av.startsWith("http")||r.av.startsWith("data:"))){
+        var rImg=el("img",{css:{width:"100%",height:"100%",objectFit:"cover",display:"block"}});
+        rImg.src=r.av;rav.appendChild(rImg);
+        makeAvatarTappable(rav,r.av);
+      } else {
+        rav.textContent=(r.name||"?").charAt(0).toUpperCase();
+      }
+      row.appendChild(rav);
+      row.appendChild(d({css:{flex:1,fontSize:"14px",fontWeight:700,color:"#3D2314"}},r.name||"Someone"));
+      row.appendChild(d({css:{fontSize:"22px"}},r.em));
+      sh.appendChild(row);
+    });
+  }
+  var cBtn=b({css:{width:"100%",padding:"12px",borderRadius:"50px",background:"#F5DDD1",border:"none",color:"#6B4226",fontSize:"14px",fontWeight:700,cursor:"pointer",fontFamily:"inherit",marginTop:"14px"}},"Close");
+  cBtn.addEventListener("click",function(){ov.remove();});
+  sh.appendChild(cBtn);
+  ov.appendChild(sh);
+  ov.addEventListener("click",function(e){if(e.target===ov)ov.remove();});
+  document.body.appendChild(ov);
 }
 
 // The "..." delete-post button, previously written out four times (video,
@@ -3659,6 +3717,7 @@ function buildCheckinCard(item,t){
   var card=d({css:{background:t.ap,border:"none",borderBottom:"1px solid "+t.al,padding:"12px 16px",display:"flex",gap:"10px"}});
   var av=d({css:{width:"40px",height:"40px",borderRadius:"50%",background:t.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"20px",flexShrink:0,overflow:"hidden"}});
   renderAvatarGlyph(av,item.av,10,"👤");
+  makeAvatarTappable(av,item.av);
   card.appendChild(av);
   var bd=d({css:{flex:1}});bd.appendChild(d({css:{fontSize:"12px",fontWeight:700,color:t.ad}},item.name+" checked in"));bd.appendChild(d({css:{fontSize:"13px",color:"#3D2314",marginTop:"4px",lineHeight:"1.5"}},item.status));bd.appendChild(d({css:{fontSize:"11px",color:"#9B7B62",marginTop:"4px"}},item.createdAt?timeAgo(item.createdAt):item.time));card.appendChild(bd);
   if(isOwnPost(item)){
@@ -4034,6 +4093,7 @@ function buildChatView(t,grp){
         var maImg=document.createElement("img");maImg.src=msgAv;
         maImg.style.cssText="width:100%;height:100%;object-fit:cover;";
         ma.appendChild(maImg);
+        makeAvatarTappable(ma,msgAv);
       } else if(msgAv.length>10||/^[A-Za-z0-9_-]{10,}$/.test(msgAv)){
         // Looks like a uid - use default
         ma.textContent="\uD83D\uDC64";
@@ -4684,6 +4744,7 @@ function buildEventDetail(t){
       var prow=d({css:{display:"flex",alignItems:"center",gap:"10px",padding:"7px 0"}});
       var pav=d({css:{width:"30px",height:"30px",borderRadius:"50%",background:gt.ap,border:"1.5px solid "+gt.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"15px",flexShrink:0,overflow:"hidden"}});
       renderAvatarGlyph(pav,r.av,8,"👤");
+      makeAvatarTappable(pav,r.av);
       prow.appendChild(pav);
       prow.appendChild(d({css:{fontSize:"13px",fontWeight:700,color:"#3D2314"}},r.name||"Someone"));
       sh.appendChild(prow);
@@ -4726,10 +4787,14 @@ function buildEventDetail(t){
 // that same selection (everywhere the old separate circular avatar was).
 // Drag-to-pan + a zoom slider, not pinch gestures - reliable without
 // being able to live-test touch gestures.
+// Landscape-only crop, used for the rectangle nameplate/banner photo. Used
+// to also auto-derive a square avatar crop from the same selection (one
+// photo driving both), but users asked for two independent photos - the
+// circle avatar now gets its own separate crop step via
+// openSquareCropModal below, so this one only ever touches the wallpaper.
 function openPhotoCropModal(srcDataUrl,onConfirm,onCancel){
   var FRAME_W=300,FRAME_H=125; // 2.4:1, matches the landscape nameplate ratio
   var EXPORT_W=960,EXPORT_H=400;
-  var PREVIEW=40;
   var img=new Image();
   img.onerror=function(){if(onCancel)onCancel();};
   img.onload=function(){
@@ -4750,22 +4815,6 @@ function openPhotoCropModal(srcDataUrl,onConfirm,onCancel){
     imgEl.style.position="absolute";imgEl.style.left="0";imgEl.style.top="0";
     frame.appendChild(imgEl);
     card.appendChild(frame);
-
-    // Live preview of the auto-derived avatar crop (center square of the
-    // same selection), so the tradeoff of a single crop step is visible.
-    var previewRow=document.createElement("div");
-    previewRow.style.cssText="display:flex;align-items:center;gap:8px;";
-    var previewLabel=document.createElement("div");
-    previewLabel.textContent="Avatar preview:";
-    previewLabel.style.cssText="font-size:12px;color:#9B7B62;font-weight:700;";
-    var previewCircle=document.createElement("div");
-    previewCircle.style.cssText="width:"+PREVIEW+"px;height:"+PREVIEW+"px;border-radius:50%;overflow:hidden;position:relative;border:2px solid #E8CDBB;background:#000;flex-shrink:0;";
-    var previewImg=document.createElement("img");
-    previewImg.src=srcDataUrl;previewImg.draggable=false;
-    previewImg.style.position="absolute";previewImg.style.left="0";previewImg.style.top="0";
-    previewCircle.appendChild(previewImg);
-    previewRow.appendChild(previewLabel);previewRow.appendChild(previewCircle);
-    card.appendChild(previewRow);
 
     var zoomRow=document.createElement("div");
     zoomRow.style.cssText="display:flex;align-items:center;gap:8px;width:"+FRAME_W+"px;";
@@ -4794,7 +4843,6 @@ function openPhotoCropModal(srcDataUrl,onConfirm,onCancel){
     var coverScale=Math.max(FRAME_W/naturalW,FRAME_H/naturalH);
     var minScale=coverScale,maxScale=coverScale*3;
     var scale=minScale,tx=0,ty=0;
-    var sqX=(FRAME_W-FRAME_H)/2,sqY=0; // top-left of the center-square region, in frame-local px
 
     function clamp(){
       var w=naturalW*scale,h=naturalH*scale;
@@ -4806,9 +4854,6 @@ function openPhotoCropModal(srcDataUrl,onConfirm,onCancel){
       var w=naturalW*scale,h=naturalH*scale;
       imgEl.style.width=w+"px";imgEl.style.height=h+"px";
       imgEl.style.left=tx+"px";imgEl.style.top=ty+"px";
-      var k=PREVIEW/FRAME_H;
-      previewImg.style.width=(w*k)+"px";previewImg.style.height=(h*k)+"px";
-      previewImg.style.left=((tx-sqX)*k)+"px";previewImg.style.top=((ty-sqY)*k)+"px";
     }
     tx=(FRAME_W-naturalW*scale)/2;ty=(FRAME_H-naturalH*scale)/2;
     clamp();applyTransform();
@@ -4846,16 +4891,118 @@ function openPhotoCropModal(srcDataUrl,onConfirm,onCancel){
       var sx=-tx/scale,sy=-ty/scale,sw=FRAME_W/scale,sh=FRAME_H/scale;
       lctx.drawImage(img,sx,sy,sw,sh,0,0,EXPORT_W,EXPORT_H);
       var landscapeUrl=landscapeCanvas.toDataURL("image/jpeg",0.85);
-
-      var sqSize=EXPORT_H;
-      var sqCanvas=document.createElement("canvas");
-      sqCanvas.width=sqSize;sqCanvas.height=sqSize;
-      var sctx=sqCanvas.getContext("2d");
-      sctx.drawImage(landscapeCanvas,(EXPORT_W-sqSize)/2,0,sqSize,sqSize,0,0,sqSize,sqSize);
-      var squareUrl=sqCanvas.toDataURL("image/jpeg",0.85);
-
       closeModal();
-      onConfirm(landscapeUrl,squareUrl);
+      onConfirm(landscapeUrl);
+    });
+  };
+  img.src=srcDataUrl;
+}
+
+// Square-only crop for the circle avatar - same drag/zoom mechanics as
+// openPhotoCropModal above, just a square frame (shown as a circle, since
+// that's literally what it becomes) instead of the landscape nameplate
+// ratio, and a single square export with no second derived crop.
+function openSquareCropModal(srcDataUrl,onConfirm,onCancel){
+  var FRAME=220;
+  var EXPORT=480;
+  var img=new Image();
+  img.onerror=function(){if(onCancel)onCancel();};
+  img.onload=function(){
+    var overlay=document.createElement("div");
+    overlay.style.cssText="position:fixed;inset:0;background:rgba(20,10,5,.85);z-index:9999;display:flex;align-items:center;justify-content:center;font-family:'Nunito',sans-serif;padding:16px;box-sizing:border-box;";
+
+    var card=document.createElement("div");
+    card.style.cssText="background:#FFF9F2;border-radius:18px;padding:20px;display:flex;flex-direction:column;align-items:center;gap:14px;max-width:92vw;";
+    var title=document.createElement("div");
+    title.textContent="Position your profile photo";
+    title.style.cssText="font-family:Lora,serif;font-weight:600;font-size:17px;color:#3D2314;";
+    card.appendChild(title);
+
+    var frame=document.createElement("div");
+    frame.style.cssText="position:relative;width:"+FRAME+"px;height:"+FRAME+"px;overflow:hidden;border-radius:50%;border:2px solid #E8CDBB;touch-action:none;cursor:grab;background:#000;";
+    var imgEl=document.createElement("img");
+    imgEl.src=srcDataUrl;imgEl.draggable=false;
+    imgEl.style.position="absolute";imgEl.style.left="0";imgEl.style.top="0";
+    frame.appendChild(imgEl);
+    card.appendChild(frame);
+
+    var zoomRow=document.createElement("div");
+    zoomRow.style.cssText="display:flex;align-items:center;gap:8px;width:"+FRAME+"px;";
+    var zoomIcon=document.createElement("span");zoomIcon.textContent="🔍";zoomIcon.style.fontSize="13px";
+    var slider=document.createElement("input");
+    slider.type="range";slider.min="0";slider.max="100";slider.value="0";
+    slider.style.cssText="flex:1;";
+    zoomRow.appendChild(zoomIcon);zoomRow.appendChild(slider);
+    card.appendChild(zoomRow);
+
+    var btnRow=document.createElement("div");
+    btnRow.style.cssText="display:flex;gap:10px;width:100%;margin-top:4px;";
+    var cancelBtn=document.createElement("button");
+    cancelBtn.textContent="Cancel";
+    cancelBtn.style.cssText="flex:1;padding:11px;border-radius:50px;background:#FAF6F0;border:1.5px solid #F0DDD0;color:#8A6A55;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;";
+    var confirmBtn=document.createElement("button");
+    confirmBtn.textContent="Use Photo";
+    confirmBtn.style.cssText="flex:1;padding:11px;border-radius:50px;background:#C4714A;border:none;color:white;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;";
+    btnRow.appendChild(cancelBtn);btnRow.appendChild(confirmBtn);
+    card.appendChild(btnRow);
+
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+
+    var naturalW=img.naturalWidth,naturalH=img.naturalHeight;
+    var coverScale=Math.max(FRAME/naturalW,FRAME/naturalH);
+    var minScale=coverScale,maxScale=coverScale*3;
+    var scale=minScale,tx=0,ty=0;
+
+    function clamp(){
+      var w=naturalW*scale,h=naturalH*scale;
+      var minTx=Math.min(0,FRAME-w),minTy=Math.min(0,FRAME-h);
+      tx=Math.max(minTx,Math.min(0,tx));
+      ty=Math.max(minTy,Math.min(0,ty));
+    }
+    function applyTransform(){
+      var w=naturalW*scale,h=naturalH*scale;
+      imgEl.style.width=w+"px";imgEl.style.height=h+"px";
+      imgEl.style.left=tx+"px";imgEl.style.top=ty+"px";
+    }
+    tx=(FRAME-naturalW*scale)/2;ty=(FRAME-naturalH*scale)/2;
+    clamp();applyTransform();
+
+    slider.addEventListener("input",function(){
+      var pct=Number(slider.value)/100;
+      var newScale=minScale+(maxScale-minScale)*pct;
+      var cxImg=(FRAME/2-tx)/scale,cyImg=(FRAME/2-ty)/scale;
+      scale=newScale;
+      tx=FRAME/2-cxImg*scale;ty=FRAME/2-cyImg*scale;
+      clamp();applyTransform();
+    });
+
+    var dragging=false,startX=0,startY=0,startTx=0,startTy=0;
+    frame.addEventListener("pointerdown",function(e){
+      dragging=true;startX=e.clientX;startY=e.clientY;startTx=tx;startTy=ty;
+      frame.style.cursor="grabbing";
+      try{frame.setPointerCapture(e.pointerId);}catch(e2){}
+    });
+    frame.addEventListener("pointermove",function(e){
+      if(!dragging)return;
+      tx=startTx+(e.clientX-startX);ty=startTy+(e.clientY-startY);
+      clamp();applyTransform();
+    });
+    function endDrag(){dragging=false;frame.style.cursor="grab";}
+    frame.addEventListener("pointerup",endDrag);
+    frame.addEventListener("pointercancel",endDrag);
+
+    function closeModal(){if(overlay.parentNode)overlay.parentNode.removeChild(overlay);}
+    cancelBtn.addEventListener("click",function(){closeModal();if(onCancel)onCancel();});
+    confirmBtn.addEventListener("click",function(){
+      var canvas=document.createElement("canvas");
+      canvas.width=EXPORT;canvas.height=EXPORT;
+      var ctx=canvas.getContext("2d");
+      var sx=-tx/scale,sy=-ty/scale,sw=FRAME/scale,sh=FRAME/scale;
+      ctx.drawImage(img,sx,sy,sw,sh,0,0,EXPORT,EXPORT);
+      var squareUrl=canvas.toDataURL("image/jpeg",0.85);
+      closeModal();
+      onConfirm(squareUrl);
     });
   };
   img.src=srcDataUrl;
@@ -4876,25 +5023,55 @@ function buildProfileBanner(t){
     var overlay=d({css:{position:"absolute",inset:"0",background:"rgba(0,0,0,.35)"}});
     banner.appendChild(overlay);
   }
+  // Rectangle banner/nameplate photo and the circle avatar are now two
+  // independent photos (users asked for this - they used to share one
+  // crop, with the avatar auto-derived as a center-square of whatever
+  // photo was picked for the banner). This badge, in the banner's own
+  // top-right corner, is the new independent control for the banner photo;
+  // the avatar keeps its own badge below, now driving only the avatar.
+  var wpFi=document.createElement("input");wpFi.type="file";wpFi.accept="image/*";wpFi.style.display="none";
+  wpFi.addEventListener("change",function(){
+    var f=this.files&&this.files[0];wpFi.value="";
+    if(!f)return;
+    var reader=new FileReader();
+    reader.onload=function(e){
+      openPhotoCropModal(e.target.result,function(landscapeUrl){
+        ST.profileWallpaper=landscapeUrl;
+        redraw();
+        if(!currentUser)return;
+        var uid=currentUser.uid;
+        storage.ref("wallpapers/"+uid+".jpg").putString(landscapeUrl,"data_url")
+          .then(function(snap){return snap.ref.getDownloadURL();})
+          .then(function(url){
+            ST.profileWallpaper=url;
+            db.collection("profiles").doc(uid).set({wallpaper:url},{merge:true}).catch(function(err){logAppError("profiles.set (wallpaper - profile banner)",err);});
+            redraw();
+          })
+          .catch(function(err){logAppError("Wallpaper upload failed",err);});
+      },function(){/* cancelled - leave the existing photo as-is */});
+    };
+    reader.readAsDataURL(f);
+  });
+  banner.appendChild(wpFi);
+  var wpBadge=d({css:{position:"absolute",top:"10px",right:"10px",width:"30px",height:"30px",borderRadius:"50%",background:"rgba(0,0,0,.4)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"14px",cursor:"pointer",zIndex:1,backdropFilter:"blur(4px)"}});
+  wpBadge.textContent="📷";
+  wpBadge.addEventListener("click",function(){wpFi.click();});
+  banner.appendChild(wpBadge);
   // Avatar
   var avWrap=d({css:{position:"relative",marginBottom:"10px",zIndex:1}});
   var av=d({css:{width:"80px",height:"80px",borderRadius:"50%",background:"rgba(255,255,255,.2)",border:"3px solid rgba(255,255,255,.6)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"38px",overflow:"hidden",cursor:"pointer"}});
   renderAvatarGlyph(av,ST.avatar,10,"👤");
-  // Tap avatar (or the camera badge) to change the one photo that drives
-  // both the avatar and the banner/nameplate photo. A single crop step
-  // (openPhotoCropModal) replaces the old separate avatar+wallpaper
-  // uploads - the landscape crop IS the banner/nameplate photo, and the
-  // avatar is an auto-derived center-square crop of that same selection.
+  // Tap avatar (or its camera badge) to change the circle photo only -
+  // independent of the banner/nameplate photo above.
   var photoFi=document.createElement("input");photoFi.type="file";photoFi.accept="image/*";photoFi.style.display="none";
   photoFi.addEventListener("change",function(){
     var f=this.files&&this.files[0];photoFi.value="";
     if(!f)return;
     var reader=new FileReader();
     reader.onload=function(e){
-      openPhotoCropModal(e.target.result,function(landscapeUrl,squareUrl){
+      openSquareCropModal(e.target.result,function(squareUrl){
         // Show the crop immediately; persist to Storage/Firestore in the background.
         ST.avatar=squareUrl;
-        ST.profileWallpaper=landscapeUrl;
         redraw();
         if(!currentUser)return;
         var uid=currentUser.uid;
@@ -4907,14 +5084,6 @@ function buildProfileBanner(t){
             redraw();
           })
           .catch(function(err){logAppError("Avatar upload failed",err);});
-        storage.ref("wallpapers/"+uid+".jpg").putString(landscapeUrl,"data_url")
-          .then(function(snap){return snap.ref.getDownloadURL();})
-          .then(function(url){
-            ST.profileWallpaper=url;
-            db.collection("profiles").doc(uid).set({wallpaper:url},{merge:true}).catch(function(err){logAppError("profiles.set (wallpaper - profile photo crop)",err);});
-            redraw();
-          })
-          .catch(function(err){logAppError("Wallpaper upload failed",err);});
       },function(){/* cancelled - leave the existing photo as-is */});
     };
     reader.readAsDataURL(f);
@@ -4973,6 +5142,7 @@ function buildGroupsCard(){
       var mrow=d({css:{display:"flex",alignItems:"center",gap:"10px",padding:"9px 15px",borderBottom:"1px solid #F5DDD1"}});
       var mavic=d({css:{width:"30px",height:"30px",borderRadius:"50%",background:gt.ap,border:"1.5px solid "+gt.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"15px",overflow:"hidden",flexShrink:0}});
       renderAvatarGlyph(mavic,m.av,10,"👤");
+      makeAvatarTappable(mavic,m.av);
       mrow.appendChild(mavic);
       mrow.appendChild(d({css:{flex:1,fontSize:"13px",fontWeight:700,color:"#3D2314"}},m.name+(isYou?" (you)":"")));
       if(!isYou&&getGroupAdminStatus(g.id)){
