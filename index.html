@@ -145,7 +145,7 @@ window.addEventListener("unhandledrejection",function(e){
 // refresh instead of leaving people stuck in a stale session. Bump
 // APP_VERSION by hand on every deploy (any changed string works - a
 // timestamp is easiest to keep unique).
-var APP_VERSION="2026-10-27T04:00:00Z-chatvideofix2";
+var APP_VERSION="2026-10-27T06:00:00Z-videostatuscheck";
 function isStandaloneMode(){
   return window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;
 }
@@ -261,6 +261,74 @@ var CF_CUSTOMER_SUBDOMAIN="customer-32e18pqrf6myogys"; // Stream playback domain
 // PLACEHOLDER for staging - replace with the real staging uploadVideo
 // function URL once Cloud Functions are deployed to the staging project.
 var CF_FUNC_URL=IS_STAGING?"https://us-central1-keep-up-staging.cloudfunctions.net/uploadVideo":"https://us-central1-keep-up-f9d1c.cloudfunctions.net/uploadVideo";
+var CF_STATUS_FUNC_URL=IS_STAGING?"https://us-central1-keep-up-staging.cloudfunctions.net/checkVideoStatus":"https://us-central1-keep-up-f9d1c.cloudfunctions.net/checkVideoStatus";
+
+// Asks Cloudflare (via our own Cloud Function, so the real API key never
+// reaches the browser) how encoding is actually going for a video, instead
+// of the old approach of blindly reloading the player on a timer and
+// hoping. Returns {ready, state, pct, error}.
+function checkCfVideoStatus(uid){
+  if(!currentUser)return Promise.reject(new Error("Not signed in"));
+  return currentUser.getIdToken().then(function(idToken){
+    return fetch(CF_STATUS_FUNC_URL+"?uid="+encodeURIComponent(uid),{headers:{"Authorization":"Bearer "+idToken}});
+  }).then(function(r){return r.json();});
+}
+
+// Mounts a Cloudflare Stream video into `container` (which must already be
+// position:relative - buildVideoWrap's vidWrap and the fullscreen overlay
+// both already are). Polls checkCfVideoStatus for real encoding progress
+// and only loads the actual player once Cloudflare confirms the video is
+// ready, showing real progress (or a real error) in the meantime instead
+// of silently reloading an iframe that isn't ready yet and might show
+// Cloudflare's own "Video not found" error.
+function mountCfVideoPlayer(container,cfUid,iframeCss){
+  var pollTimer=null;
+  var startedAt=Date.now();
+  var MAX_WAIT_MS=300000; // 5 min - same ceiling the old blind-retry used
+  function showPill(text){
+    var old=container.querySelector(".cfv-pill");if(old)old.remove();
+    var pill=document.createElement("div");
+    pill.className="cfv-pill";
+    pill.style.cssText="position:absolute;bottom:24px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.6);color:white;border-radius:50px;padding:8px 16px;font-size:12px;font-weight:700;font-family:Nunito,sans-serif;backdrop-filter:blur(4px);z-index:3;text-align:center;max-width:85%;"+(container.offsetWidth<300?"white-space:normal;":"white-space:nowrap;");
+    pill.textContent=text;
+    container.appendChild(pill);
+  }
+  function loadIframe(){
+    var old=container.querySelector(".cfv-pill");if(old)old.remove();
+    var oldFrame=container.querySelector("iframe");if(oldFrame)oldFrame.remove();
+    var iframe=document.createElement("iframe");
+    iframe.src="https://"+CF_CUSTOMER_SUBDOMAIN+".cloudflarestream.com/"+cfUid+"/iframe?autoplay=true&muted=false";
+    iframe.style.cssText="width:100%;border:none;display:block;background:#000;"+(iframeCss||"height:100%;");
+    iframe.setAttribute("allow","accelerometer;gyroscope;autoplay;encrypted-media;picture-in-picture;");
+    iframe.setAttribute("allowfullscreen","true");
+    container.appendChild(iframe);
+  }
+  function poll(){
+    if(!container.isConnected)return; // viewer closed/unmounted mid-poll
+    checkCfVideoStatus(cfUid).then(function(status){
+      if(!container.isConnected)return;
+      if(status.ready){loadIframe();return;}
+      if(status.state==="error"){
+        showPill("This video couldn't be processed"+(status.error?(": "+status.error):"")+".");
+        return; // not going to recover on its own - stop polling
+      }
+      var pctTxt=(status.pct!=null&&status.pct>0)?(" ("+Math.round(status.pct)+"%)"):"";
+      showPill("Processing video"+pctTxt+"…");
+      if(Date.now()-startedAt<MAX_WAIT_MS){
+        pollTimer=setTimeout(poll,5000);
+      } else {
+        showPill("Taking longer than usual — it'll appear once it's ready.");
+      }
+    }).catch(function(){
+      // Status check itself failed (offline, function cold-start error,
+      // etc.) - fall back to just trying the player directly rather than
+      // getting stuck with nothing on screen.
+      loadIframe();
+    });
+  }
+  poll();
+  return function cleanup(){if(pollTimer)clearTimeout(pollTimer);};
+}
 
 function uploadToCloudflareStream(file,onProgress){
   // Step 1: ask our Cloud Function for a one-time, single-use Cloudflare
@@ -447,9 +515,10 @@ function fetchAllFeeds(){
     });
 }
 
-function showFullScreenVideo(url,createdAt){
+function showFullScreenVideo(url){
   var ov=document.createElement("div");
   ov.style.cssText="position:fixed;inset:0;background:#000;z-index:300;display:flex;align-items:center;justify-content:center;flex-direction:column;";
+  var cfCleanup=null;
   // Close button - works for both branches below without caring which one
   // actually rendered, since closing just means removing the overlay (an
   // iframe stops its own playback automatically once it's removed from the
@@ -458,7 +527,7 @@ function showFullScreenVideo(url,createdAt){
   closeBtn.style.cssText="position:absolute;top:16px;right:16px;background:rgba(255,255,255,.15);border:none;color:white;font-size:18px;width:36px;height:36px;border-radius:50%;cursor:pointer;z-index:10;display:flex;align-items:center;justify-content:center;";
   closeBtn.textContent="\u2715";
   closeBtn.addEventListener("click",function(){
-    if(ov._cfAutoRetryTimer)clearTimeout(ov._cfAutoRetryTimer);
+    if(cfCleanup)cfCleanup();
     var v=ov.querySelector("video");if(v){v.pause();v.src="";}
     ov.remove();
   });
@@ -479,36 +548,11 @@ function showFullScreenVideo(url,createdAt){
     var cfUid=url.split("cloudflarestream.com/")[1];
     if(cfUid)cfUid=cfUid.split("/")[0];
     if(cfUid){
-      // A freshly-uploaded video may still be encoding on Cloudflare's side
-      // for a few minutes - loading the iframe right away against a UID
-      // that isn't ready yet is exactly what produced "Video not found"
-      // immediately after posting. Same fix as the feed's buildVideoWrap:
-      // keep retrying in the background for up to 5 minutes after posting,
-      // with a status pill visible the whole time, instead of a single
-      // attempt that fails and never recovers.
-      var ageMs=createdAt&&createdAt.toMillis?(Date.now()-createdAt.toMillis()):99999999;
-      function loadVideoIframe(){
-        if(ov._cfAutoRetryTimer){clearTimeout(ov._cfAutoRetryTimer);ov._cfAutoRetryTimer=null;}
-        var oldFrame=ov.querySelector("iframe");if(oldFrame)oldFrame.remove();
-        var oldRetry=document.getElementById("fsv-retry-pill");if(oldRetry)oldRetry.remove();
-        var iframe=document.createElement("iframe");
-        iframe.src="https://"+CF_CUSTOMER_SUBDOMAIN+".cloudflarestream.com/"+cfUid+"/iframe?autoplay=true&muted=false&_r="+Date.now();
-        iframe.style.cssText="width:100%;height:100%;border:none;display:block;background:#000;";
-        iframe.setAttribute("allow","accelerometer;gyroscope;autoplay;encrypted-media;picture-in-picture;");
-        iframe.setAttribute("allowfullscreen","true");
-        ov.appendChild(iframe);
-        if(ageMs<300000){
-          var retryPill=document.createElement("div");
-          retryPill.id="fsv-retry-pill";
-          retryPill.style.cssText="position:absolute;bottom:24px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.6);color:white;border-radius:50px;padding:8px 16px;font-size:12px;font-weight:700;font-family:Nunito,sans-serif;backdrop-filter:blur(4px);z-index:3;";
-          retryPill.textContent="Video still processing - this will play automatically once it's ready";
-          ov.appendChild(retryPill);
-          ov._cfAutoRetryTimer=setTimeout(function(){
-            if(ov.isConnected)loadVideoIframe();
-          },8000);
-        }
-      }
-      loadVideoIframe();
+      // Real encoding-status polling (see mountCfVideoPlayer) instead of
+      // blindly reloading the iframe every few seconds and hoping - that
+      // old approach is what let this show Cloudflare's own "Video not
+      // found" error right after posting.
+      cfCleanup=mountCfVideoPlayer(ov,cfUid);
     } else {
       var badUrlTxt=document.createElement("div");
       badUrlTxt.style.cssText="color:rgba(255,255,255,.6);font-size:13px;";
@@ -3141,42 +3185,13 @@ function buildVideoWrap(item){
     cfPlay.appendChild(cfPlayTri);
     cfThumb.appendChild(cfPlay);
     vidWrap.appendChild(cfThumb);
-    function loadCfIframe(){
-      // Clear any pending auto-retry from a previous call so taps and
-      // timer-driven retries never stack up multiple reloads at once.
-      if(vidWrap._cfAutoRetryTimer){clearTimeout(vidWrap._cfAutoRetryTimer);vidWrap._cfAutoRetryTimer=null;}
-      var oldFrame=vidWrap.querySelector("iframe");
-      if(oldFrame)oldFrame.remove();
-      var oldRetry=document.getElementById("cf-retry-"+item.id);
-      if(oldRetry)oldRetry.remove();
-      var iframe=document.createElement("iframe");
-      // Cache-bust so a retry actually re-requests instead of reusing a
-      // failed load
-      iframe.src="https://"+CF_CUSTOMER_SUBDOMAIN+".cloudflarestream.com/"+cfUid+"/iframe?autoplay=true&muted=false&_r="+Date.now();
-      iframe.style.cssText="width:100%;height:60vh;border:none;display:block;background:#000;";
-      iframe.setAttribute("allow","accelerometer;gyroscope;autoplay;encrypted-media;picture-in-picture;");
-      iframe.setAttribute("allowfullscreen","true");
-      vidWrap.appendChild(iframe);
-      // A brand new video may still be encoding on Cloudflare's side for a
-      // few minutes after upload (longer for bigger/longer clips) - we can't
-      // see inside the cross-origin iframe to detect that directly, so
-      // instead of a single short-lived manual retry chance, keep retrying
-      // automatically in the background for up to 5 minutes after posting,
-      // with a status pill visible the whole time (also tappable for an
-      // immediate retry) instead of one that silently disappears.
-      var ageMs=item.createdAt&&item.createdAt.toMillis?(Date.now()-item.createdAt.toMillis()):99999999;
-      if(ageMs<300000){
-        var retryPill=b({id:"cf-retry-"+item.id,css:{position:"absolute",bottom:"12px",left:"50%",transform:"translateX(-50%)",background:"rgba(0,0,0,.6)",color:"white",border:"none",borderRadius:"50px",padding:"8px 16px",fontSize:"12px",fontWeight:700,cursor:"pointer",fontFamily:"inherit",backdropFilter:"blur(4px)",zIndex:3}},"Video still processing - tap to retry now");
-        retryPill.addEventListener("click",function(e){e.stopPropagation();loadCfIframe();});
-        vidWrap.appendChild(retryPill);
-        vidWrap._cfAutoRetryTimer=setTimeout(function(){
-          if(vidWrap.isConnected)loadCfIframe();
-        },8000);
-      }
-    }
     cfThumb.addEventListener("click",function(){
       cfThumb.remove();
-      loadCfIframe();
+      // Real encoding-status polling (see mountCfVideoPlayer) instead of
+      // blindly reloading the iframe every few seconds and hoping - that
+      // old approach is what let a freshly-posted video briefly show
+      // Cloudflare's own "Video not found" error.
+      mountCfVideoPlayer(vidWrap,cfUid,"height:60vh;");
     });
   } else {
     var vidEl=document.createElement("video");
@@ -3785,7 +3800,7 @@ function buildChatView(t,grp){
       vidBubble.appendChild(vidThumb);
       if(msg.text){var vcap=d({css:{padding:"7px 10px",fontSize:"13px",color:"rgba(255,255,255,.8)",lineHeight:"1.4"}},msg.text);vidBubble.appendChild(vcap);}
       // Tap opens fullscreen video player
-      vidBubble.addEventListener("click",function(){showFullScreenVideo(msg.videoUrl,msg.createdAt);});
+      vidBubble.addEventListener("click",function(){showFullScreenVideo(msg.videoUrl);});
       mb.appendChild(vidBubble);bubbleEl=vidBubble;
     } else if(msg.uploadingVideo){
       var upVidBubble=d({css:{padding:"12px 14px",borderRadius:iy?"16px 16px 3px 16px":"16px 16px 16px 3px",background:iy?t.a+"bb":"rgba(0,0,0,.06)",display:"flex",alignItems:"center",gap:"8px",minWidth:"140px"}});
@@ -6292,7 +6307,16 @@ ST.upImg=null;ST.upPhotos=[];
     var uploadRef;
     var cfResultThumb=null;
     var multiUrls=null; // set if uploading more than one photo
+    // Our own instant thumbnail: the frame grabbed client-side in handleVideo()
+    // (ST.upThumb/imgData) uploads to Storage in parallel with the Cloudflare
+    // Stream upload, so a thumbnail is ready right away instead of waiting on
+    // Cloudflare's own thumbnail, which isn't generated until encoding finishes.
+    var thumbUploadPromise=Promise.resolve(null);
     if(isVid&&vidFile){
+      if(imgData&&imgData.indexOf("data:")===0){
+        var thumbRef=storage.ref("thumbs/"+uid+"/"+Date.now()+".jpg");
+        thumbUploadPromise=thumbRef.put(dataUrlToBlob(imgData)).then(function(s){return s.ref.getDownloadURL();}).catch(function(){return null;});
+      }
       uploadRef=uploadToCloudflareStream(vidFile,updateProgress).then(function(result){
         cfResultThumb=result.thumbUrl;
         return result.videoUrl;
@@ -6338,13 +6362,19 @@ ST.upImg=null;ST.upPhotos=[];
     ST.group=postGroup;
     redraw();
 
-    uploadRef.then(function(url){
+    Promise.all([uploadRef,thumbUploadPromise]).then(function(results){
+      var url=results[0];
+      var localThumbUrl=results[1];
       // Remove temp post
       ST.feed[postGroup]=ST.feed[postGroup].filter(function(x){return x.id!==tempId;});
       if(isVid&&vidFile){try{URL.revokeObjectURL(localPreviewUrl);}catch(e){}}
       p.imgUrl=url;
       if(multiUrls&&multiUrls.length>1)p.imgUrls=multiUrls;
-      if(isVid&&cfResultThumb)p.thumbUrl=cfResultThumb; // Cloudflare-hosted thumbnail URL (short), not base64
+      // Prefer our own instant local-frame thumbnail - it's already uploaded
+      // by the time the video finishes, unlike Cloudflare's which lags behind
+      // encoding - and fall back to Cloudflare's own thumbnail if ours failed.
+      if(isVid&&localThumbUrl)p.thumbUrl=localThumbUrl;
+      else if(isVid&&cfResultThumb)p.thumbUrl=cfResultThumb; // Cloudflare-hosted thumbnail URL (short), not base64
       return postToFeed(p);
     }).then(function(){
       broadcastNotif(postName+" posted","Shared a "+(isVid?"video":(multiUrls&&multiUrls.length>1?multiUrls.length+" photos":"photo")),postGroup);
