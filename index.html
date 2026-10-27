@@ -147,7 +147,7 @@ window.addEventListener("unhandledrejection",function(e){
 // refresh instead of leaving people stuck in a stale session. Bump
 // APP_VERSION by hand on every deploy (any changed string works - a
 // timestamp is easiest to keep unique).
-var APP_VERSION="2026-10-27T18:00:00Z-profilephotos-reactions";
+var APP_VERSION="2026-10-27T22:00:00Z-notifcenter";
 function isStandaloneMode(){
   return window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;
 }
@@ -2168,6 +2168,97 @@ function timeAgo(ts){
 // change (or bug fix) only has to happen once.
 function tsMillis(ts){return ts&&ts.toMillis?ts.toMillis():0;}
 
+// Notification center (item #2): a small popup off the top-left "keep up"
+// wordmark showing who commented or reacted on YOUR posts - who commented
+// what, and on which photo, as requested. Deliberately built with no new
+// backend: comments and reactions are already loaded for every group the
+// user is in (watchGroupScoped listeners above), so this just filters that
+// existing data down to "activity on items I posted" instead of adding a
+// dedicated notifications collection + Cloud Function triggers for a
+// family-scale app. Unread tracking follows the same localStorage-timestamp
+// pattern as feedUnreadCount/markFeedSeen elsewhere in this file, rather
+// than a per-notification read flag in Firestore.
+function findPostById(postId){
+  var gids=Object.keys(ST.feed||{});
+  for(var i=0;i<gids.length;i++){
+    var arr=ST.feed[gids[i]]||[];
+    for(var j=0;j<arr.length;j++){if(arr[j].id===postId)return{item:arr[j],groupId:gids[i]};}
+  }
+  return null;
+}
+function buildNotifEvents(){
+  if(!currentUser)return[];
+  var myUid=currentUser.uid;
+  var events=[];
+  Object.keys(ST.feed||{}).forEach(function(gid){
+    (ST.feed[gid]||[]).forEach(function(post){
+      if(!post.senderUid||post.senderUid!==myUid)return; // only activity on MY posts
+      var pid=post.id;
+      (ST.comments[pid]||[]).forEach(function(c){
+        if(!c.uid||c.uid===myUid)return;
+        if(c.id&&String(c.id).indexOf("tmp-")===0)return; // skip optimistic placeholders
+        events.push({type:"comment",postId:pid,name:c.name,av:c.av,text:c.text,ts:tsMillis(c.createdAt)});
+      });
+      (ST.allReactions[pid]||[]).forEach(function(r){
+        if(!r.uid||r.uid===myUid)return;
+        events.push({type:"reaction",postId:pid,name:r.name,av:r.av,em:r.em,ts:tsMillis(r.createdAt)});
+      });
+    });
+  });
+  events.sort(function(a,b){return b.ts-a.ts;});
+  return events;
+}
+function notifUnreadCount(){
+  if(!currentUser)return 0;
+  var seen=parseInt(localStorage.getItem("ku_notif_seen")||"0");
+  return buildNotifEvents().filter(function(ev){return ev.ts>seen;}).length;
+}
+function markNotifsSeen(){
+  try{localStorage.setItem("ku_notif_seen",Date.now());}catch(e){}
+}
+function showNotifCenter(){
+  var events=buildNotifEvents();
+  markNotifsSeen();
+  var ov=d({css:{position:"fixed",inset:"0",background:"transparent",zIndex:300}});
+  var box=d({css:{position:"absolute",top:"52px",left:"14px",background:"white",borderRadius:"16px",boxShadow:"0 4px 20px rgba(0,0,0,.18)",zIndex:301,width:"280px",maxWidth:"calc(100vw - 28px)",maxHeight:"62vh",overflowY:"auto"}});
+  box.appendChild(d({css:{fontSize:"14px",fontWeight:800,color:"#3D2314",padding:"14px 16px 8px"}},"Notifications"));
+  if(!events.length){
+    box.appendChild(d({css:{fontSize:"13px",color:"#9B7B62",padding:"0 16px 16px"}},"Nothing new yet."));
+  } else {
+    events.slice(0,50).forEach(function(ev){
+      var row=b({css:{display:"flex",alignItems:"center",gap:"10px",width:"100%",padding:"10px 16px",background:"white",border:"none",borderTop:"1px solid #F5EFE8",cursor:"pointer",fontFamily:"inherit",textAlign:"left"}});
+      var ava=d({css:{width:"34px",height:"34px",borderRadius:"50%",background:"#F5DDD1",border:"1.5px solid #E8CDBB",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"15px",flexShrink:0,overflow:"hidden",fontWeight:800,color:"#A85A38"}});
+      if(ev.av&&(ev.av.startsWith("http")||ev.av.startsWith("data:"))){
+        var avaImg=el("img",{css:{width:"100%",height:"100%",objectFit:"cover",display:"block"}});avaImg.src=ev.av;ava.appendChild(avaImg);
+      } else {
+        ava.textContent=(ev.name||"?").charAt(0).toUpperCase();
+      }
+      row.appendChild(ava);
+      var textCol=d({css:{flex:1,minWidth:0}});
+      var line1=ev.type==="comment"
+        ?(ev.name||"Someone")+" commented: “"+(ev.text||"").substring(0,60)+"”"
+        :(ev.name||"Someone")+" reacted "+(ev.em||"")+" to your post";
+      textCol.appendChild(d({css:{fontSize:"13px",fontWeight:700,color:"#3D2314",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},line1));
+      textCol.appendChild(d({css:{fontSize:"11px",color:"#9B7B62",marginTop:"2px"}},timeAgo(ev.ts)));
+      row.appendChild(textCol);
+      row.addEventListener("click",function(evClicked){
+        return function(){
+          ov.remove();
+          var found=findPostById(evClicked.postId);
+          if(found)ST.group=found.groupId;
+          ST.tab="feed";
+          ST.cmtOpen=evClicked.postId;ST.cmtIn="";
+          redraw();
+        };
+      }(ev));
+      box.appendChild(row);
+    });
+  }
+  ov.appendChild(box);
+  ov.addEventListener("click",function(e){if(e.target===ov){ov.remove();redraw();}});
+  document.body.appendChild(ov);
+}
+
 // Calendar events store month/day/year as separate fields (matching the Add
 // Event form) rather than a single Date, and can optionally span multiple
 // days via endMonth/endDay/endYear (a trip, a reunion weekend) - older
@@ -2927,7 +3018,15 @@ function buildApp(){
   var grp=ST.groups.find(function(g){return g.id===ST.group;})||ST.groups[0];
   var wrap=d({id:"app",css:{background:t.bg}});
   var bar=d({css:{background:t.cb,padding:"9px 14px 8px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:"1px solid "+t.ap,flexShrink:0,position:"relative"}});
-  bar.appendChild(d({html:"keep <em>up</em>",css:{fontFamily:"Lora,serif",fontSize:"18px",fontWeight:600,color:t.a,flexShrink:0}}));
+  var logoBtn=b({html:"keep <em>up</em>",css:{fontFamily:"Lora,serif",fontSize:"18px",fontWeight:600,color:t.a,flexShrink:0,background:"none",border:"none",cursor:"pointer",padding:"0",display:"flex",alignItems:"center"}});
+  var notifUC=notifUnreadCount();
+  if(notifUC>0){
+    var notifBadge=d({css:{background:"#C0392B",color:"white",borderRadius:"50px",minWidth:"16px",height:"16px",padding:"0 4px",fontSize:"10px",fontWeight:800,marginLeft:"5px",display:"flex",alignItems:"center",justifyContent:"center",boxSizing:"border-box"}});
+    notifBadge.textContent=notifUC>99?"99+":String(notifUC);
+    logoBtn.appendChild(notifBadge);
+  }
+  logoBtn.addEventListener("click",function(e){e.stopPropagation();showNotifCenter();});
+  bar.appendChild(logoBtn);
   var grpBtn=b({css:{position:"absolute",left:"50%",transform:"translateX(-50%)",display:"flex",alignItems:"center",gap:"6px",padding:"5px 13px",borderRadius:"50px",background:t.ap,border:"1.5px solid "+t.al,fontSize:"13px",fontWeight:800,color:t.ad,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}});
   // Only show an icon badge when the group has a real photo - a generic
   // emoji "chrome" icon next to the group name was explicitly not wanted;
@@ -7036,7 +7135,7 @@ function showPostReactionPicker(postId,touchX,touchY){
       ST.reactions[postId]=newRx;
       ST.allReactions[postId]=(ST.allReactions[postId]||[]).filter(function(x){return x.id!==myId;});
       var myRxAv=(ST.avatar&&!ST.avatar.startsWith("data:"))?ST.avatar:null;
-      if(newRx)ST.allReactions[postId].push({postId:postId,uid:currentUser.uid,em:newRx,name:ST.name||"Someone",av:myRxAv,groupId:grpId,id:myId});
+      if(newRx)ST.allReactions[postId].push({postId:postId,uid:currentUser.uid,em:newRx,name:ST.name||"Someone",av:myRxAv,groupId:grpId,id:myId,createdAt:{toMillis:function(){return Date.now();}}});
       redraw();
       function revert(){
         ST.reactions[postId]=curRx;
@@ -7044,7 +7143,7 @@ function showPostReactionPicker(postId,touchX,touchY){
         redraw();
       }
       if(newRx){
-        db.collection("reactions").doc(myId).set({postId:postId,uid:currentUser.uid,em:newRx,name:ST.name||"Someone",av:myRxAv,groupId:grpId})
+        db.collection("reactions").doc(myId).set({postId:postId,uid:currentUser.uid,em:newRx,name:ST.name||"Someone",av:myRxAv,groupId:grpId,createdAt:firebase.firestore.FieldValue.serverTimestamp()})
           .catch(function(err){console.log("reaction save failed",err);revert();showTopToast("Couldn't save your reaction — check your connection.");});
       } else {
         db.collection("reactions").doc(myId).delete()
