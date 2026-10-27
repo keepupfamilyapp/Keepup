@@ -39,6 +39,8 @@ html,body{height:100%;background:#FAF6F0;font-family:Nunito,sans-serif;overflow:
 @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 @keyframes rx-float{0%{transform:translate(0,0) scale(.7);opacity:0;}12%{opacity:1;transform:translate(1px,-14px) scale(1);}55%{transform:translate(-5px,-78px) scale(1);}100%{transform:translate(4px,-150px) scale(.85);opacity:0;}}
 .rx-bubble{position:absolute;bottom:34px;font-size:19px;opacity:0;animation:rx-float 3.2s ease-in infinite;pointer-events:none;}
+@keyframes rec-pulse{0%,100%{transform:scale(1);}50%{transform:scale(.88);}}
+.rec-btn-active .rec-btn-dot{animation:rec-pulse 1s ease-in-out infinite;border-radius:8px !important;}
 button{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;}
 img{-webkit-touch-callout:none;-webkit-user-select:none;}
 .no-select{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;}
@@ -145,7 +147,7 @@ window.addEventListener("unhandledrejection",function(e){
 // refresh instead of leaving people stuck in a stale session. Bump
 // APP_VERSION by hand on every deploy (any changed string works - a
 // timestamp is easiest to keep unique).
-var APP_VERSION="2026-10-27T07:00:00Z-videostatuscheck2";
+var APP_VERSION="2026-10-27T09:30:00Z-makeamemory";
 function isStandaloneMode(){
   return window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;
 }
@@ -596,6 +598,183 @@ function showFullScreenVideo(url){
       ov.remove();
     }
   });
+}
+
+// In-app "Make a Memory" video capture - a Vine/Snapchat-style hold-to-record
+// button capped at 15 seconds, so people who were hitting upload-size errors
+// on long gallery videos have a fast, controlled way to post one instead.
+// Feeds the recorded clip into the exact same ST.upVideoFile/ST.upStep=2
+// pipeline a gallery video pick uses, so everything downstream (caption,
+// group picker, Cloudflare upload, thumbnail) is unchanged.
+function openVideoCapture(){
+  if(!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia&&window.MediaRecorder)){
+    showTopToast("In-app recording isn't supported on this browser — try picking a video from Gallery instead.");
+    return;
+  }
+  var MAX_MS=15000;
+  var ov=document.createElement("div");
+  ov.style.cssText="position:fixed;inset:0;background:#000;z-index:400;display:flex;align-items:center;justify-content:center;overflow:hidden;";
+  var liveVideo=document.createElement("video");
+  liveVideo.autoplay=true;liveVideo.muted=true;liveVideo.playsInline=true;
+  liveVideo.setAttribute("playsinline","");liveVideo.setAttribute("webkit-playsinline","");
+  liveVideo.style.cssText="width:100%;height:100%;object-fit:cover;";
+  ov.appendChild(liveVideo);
+  document.body.appendChild(ov);
+
+  var stream=null,recorder=null,chunks=[],recording=false,startTime=0,timerInterval=null,capturedThumb=null;
+  var facingMode="user";
+  var closed=false;
+
+  function teardownStream(){
+    if(stream){stream.getTracks().forEach(function(tr){tr.stop();});stream=null;}
+  }
+  function closeCapture(){
+    if(closed)return;closed=true;
+    if(timerInterval){clearInterval(timerInterval);timerInterval=null;}
+    teardownStream();
+    ov.remove();
+  }
+  function startCamera(fm){
+    teardownStream();
+    return navigator.mediaDevices.getUserMedia({video:{facingMode:fm},audio:true}).then(function(s){
+      if(closed){s.getTracks().forEach(function(tr){tr.stop();});return;}
+      stream=s;
+      liveVideo.srcObject=s;
+    }).catch(function(e){
+      showTopToast("Couldn't access the camera: "+((e&&e.message)||"permission denied.")+" ");
+      closeCapture();
+    });
+  }
+  function grabThumb(){
+    try{
+      var canvas=document.createElement("canvas");
+      canvas.width=liveVideo.videoWidth||640;
+      canvas.height=liveVideo.videoHeight||360;
+      canvas.getContext("2d").drawImage(liveVideo,0,0,canvas.width,canvas.height);
+      return canvas.toDataURL("image/jpeg",0.7);
+    }catch(e){return null;}
+  }
+  function setRingProgress(frac){
+    var ring=ov.querySelector("#rec-ring-fg");
+    if(ring){
+      var CIRC=2*Math.PI*34;
+      ring.setAttribute("stroke-dasharray",CIRC);
+      ring.setAttribute("stroke-dashoffset",CIRC*(1-Math.min(frac,1)));
+    }
+    var lbl=ov.querySelector("#rec-time-lbl");
+    if(lbl)lbl.textContent=Math.max(0,Math.ceil((MAX_MS-frac*MAX_MS)/1000))+"s";
+  }
+  function startRecording(){
+    if(!stream||recording)return;
+    chunks=[];
+    var mimeOpts=["video/webm;codecs=vp8,opus","video/webm","video/mp4"];
+    var mimeType="";
+    for(var i=0;i<mimeOpts.length;i++){if(window.MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported(mimeOpts[i])){mimeType=mimeOpts[i];break;}}
+    try{recorder=mimeType?new MediaRecorder(stream,{mimeType:mimeType}):new MediaRecorder(stream);}
+    catch(e){recorder=new MediaRecorder(stream);}
+    recorder.ondataavailable=function(e){if(e.data&&e.data.size>0)chunks.push(e.data);};
+    recorder.onstop=function(){finishRecording();};
+    recorder.start();
+    recording=true;
+    startTime=Date.now();
+    var recBtn=ov.querySelector("#rec-btn");if(recBtn)recBtn.classList.add("rec-btn-active");
+    var flipBtnEl=ov.querySelector("#rec-flip-btn");if(flipBtnEl)flipBtnEl.style.visibility="hidden";
+    setRingProgress(0);
+    timerInterval=setInterval(function(){
+      var elapsed=Date.now()-startTime;
+      setRingProgress(elapsed/MAX_MS);
+      if(elapsed>=MAX_MS)stopRecording();
+    },100);
+  }
+  function stopRecording(){
+    if(!recording)return;
+    recording=false;
+    capturedThumb=grabThumb();
+    if(timerInterval){clearInterval(timerInterval);timerInterval=null;}
+    var recBtn=ov.querySelector("#rec-btn");if(recBtn)recBtn.classList.remove("rec-btn-active");
+    var flipBtnEl=ov.querySelector("#rec-flip-btn");if(flipBtnEl)flipBtnEl.style.visibility="visible";
+    setRingProgress(0);
+    if(recorder&&recorder.state!=="inactive")recorder.stop();
+  }
+  function finishRecording(){
+    if(!chunks.length||closed)return;
+    var elapsedMs=Date.now()-startTime;
+    var blob=new Blob(chunks,{type:(recorder&&recorder.mimeType)||"video/webm"});
+    if(blob.size<8000||elapsedMs<500){
+      showTopToast("Hold the button down to record.");
+      return;
+    }
+    var ext=(recorder&&recorder.mimeType&&recorder.mimeType.indexOf("mp4")!==-1)?"mp4":"webm";
+    var file=new File([blob],"memory-"+Date.now()+"."+ext,{type:blob.type});
+    var thumb=capturedThumb;
+    closeCapture();
+    // Hand off into the exact same step-2 review/caption screen a gallery
+    // video pick lands on.
+    ST.upType="photo";ST.upIsVideo=true;ST.upVideoFile=file;ST.upStep=2;ST.upCap="";ST.upPhotos=[];
+    ST.upImg=thumb||"video-placeholder";ST.upThumb=thumb;
+    ST.upOpen=true;redraw();
+  }
+
+  // Close (X) button
+  var closeBtn=document.createElement("button");
+  closeBtn.style.cssText="position:absolute;top:16px;left:16px;background:rgba(255,255,255,.15);border:none;color:white;font-size:18px;width:36px;height:36px;border-radius:50%;cursor:pointer;z-index:10;display:flex;align-items:center;justify-content:center;";
+  closeBtn.textContent="✕";
+  closeBtn.addEventListener("click",function(){if(recording)stopRecording();closeCapture();});
+  ov.appendChild(closeBtn);
+
+  // Flip camera button
+  var flipBtn=document.createElement("button");
+  flipBtn.id="rec-flip-btn";
+  flipBtn.style.cssText="position:absolute;top:16px;right:16px;background:rgba(255,255,255,.15);border:none;color:white;font-size:18px;width:36px;height:36px;border-radius:50%;cursor:pointer;z-index:10;display:flex;align-items:center;justify-content:center;";
+  flipBtn.textContent="🔄";
+  flipBtn.addEventListener("click",function(){facingMode=facingMode==="user"?"environment":"user";startCamera(facingMode);});
+  ov.appendChild(flipBtn);
+
+  // Hint text
+  var hint=document.createElement("div");
+  hint.style.cssText="position:absolute;top:22px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,.75);font-size:12px;font-weight:700;font-family:Nunito,sans-serif;background:rgba(0,0,0,.35);padding:5px 14px;border-radius:50px;";
+  hint.textContent="Hold to record • 15s max";
+  ov.appendChild(hint);
+
+  // Record button: SVG progress ring + center dot, press-and-hold
+  var recWrap=document.createElement("div");
+  recWrap.style.cssText="position:absolute;bottom:34px;left:50%;transform:translateX(-50%);width:80px;height:80px;";
+  var svgNS="http://www.w3.org/2000/svg";
+  var svg=document.createElementNS(svgNS,"svg");
+  svg.setAttribute("width","80");svg.setAttribute("height","80");
+  svg.style.cssText="position:absolute;inset:0;transform:rotate(-90deg);";
+  var ringBg=document.createElementNS(svgNS,"circle");
+  ringBg.setAttribute("cx","40");ringBg.setAttribute("cy","40");ringBg.setAttribute("r","34");
+  ringBg.setAttribute("fill","none");ringBg.setAttribute("stroke","rgba(255,255,255,.3)");ringBg.setAttribute("stroke-width","4");
+  var ringFg=document.createElementNS(svgNS,"circle");
+  ringFg.id="rec-ring-fg";
+  ringFg.setAttribute("cx","40");ringFg.setAttribute("cy","40");ringFg.setAttribute("r","34");
+  ringFg.setAttribute("fill","none");ringFg.setAttribute("stroke","#E04B4B");ringFg.setAttribute("stroke-width","4");
+  ringFg.setAttribute("stroke-dasharray",2*Math.PI*34);ringFg.setAttribute("stroke-dashoffset",2*Math.PI*34);
+  ringFg.style.transition="stroke-dashoffset .1s linear";
+  svg.appendChild(ringBg);svg.appendChild(ringFg);
+  recWrap.appendChild(svg);
+  var recBtn=document.createElement("button");
+  recBtn.id="rec-btn";
+  recBtn.style.cssText="position:absolute;top:8px;left:8px;width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,.25);border:3px solid white;cursor:pointer;display:flex;align-items:center;justify-content:center;touch-action:none;";
+  var recDot=document.createElement("div");
+  recDot.className="rec-btn-dot";
+  recDot.style.cssText="width:48px;height:48px;border-radius:50%;background:#E04B4B;transition:border-radius .15s ease;";
+  recBtn.appendChild(recDot);
+  recWrap.appendChild(recBtn);
+  var timeLbl=document.createElement("div");
+  timeLbl.id="rec-time-lbl";
+  timeLbl.style.cssText="position:absolute;bottom:-22px;left:50%;transform:translateX(-50%);color:white;font-size:11px;font-weight:700;font-family:Nunito,sans-serif;white-space:nowrap;";
+  recWrap.appendChild(timeLbl);
+  ov.appendChild(recWrap);
+
+  recBtn.addEventListener("pointerdown",function(e){e.preventDefault();startRecording();});
+  recBtn.addEventListener("pointerup",function(){stopRecording();});
+  recBtn.addEventListener("pointercancel",function(){stopRecording();});
+  recBtn.addEventListener("pointerleave",function(){if(recording)stopRecording();});
+  recBtn.addEventListener("contextmenu",function(e){e.preventDefault();});
+
+  startCamera(facingMode);
 }
 
 function showSendToChatPicker(feedItem){
@@ -3065,7 +3244,7 @@ function buildFeed(t,grp){
     var existing=lw.querySelector(".qa-sub");if(existing)existing.remove();
     var sub=makeSubOptions([
       ["\uD83D\uDCFC","Gallery",function(){pickFile("video/*",null,handleVideo);}],
-      ["\uD83C\uDFA5","Live",function(){pickFile("video/*","camcorder",handleVideo);}]
+      ["\u2728","Make a Memory",function(){openVideoCapture();}]
     ]);
     sub.classList.add("qa-sub");
     var liveVideoRow=document.getElementById("qa-video-row");
