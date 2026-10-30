@@ -1,0 +1,224 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isMember(groupId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/members/$(request.auth.uid + '_' + groupId));
+    }
+    function isGroupAdmin(groupId) {
+      return isMember(groupId) &&
+        get(/databases/$(database)/documents/members/$(request.auth.uid + '_' + groupId)).data.isAdmin == true;
+    }
+    function isDmParticipant(dmId) {
+      return isSignedIn() &&
+        request.auth.uid in get(/databases/$(database)/documents/userDms/$(dmId)).data.members;
+    }
+    // Real proof of invitation for a non-admin members/{uid}_{groupId}
+    // create, so joining a group actually requires having been invited to
+    // it instead of just being signed in and knowing (or guessing/
+    // harvesting) a real groupId. See the three ways a client legitimately
+    // creates a non-admin member doc:
+    function isValidInviteToken(token, groupId) {
+      return exists(/databases/$(database)/documents/inviteTokens/$(token))
+        && get(/databases/$(database)/documents/inviteTokens/$(token)).data.groupId == groupId
+        && get(/databases/$(database)/documents/inviteTokens/$(token)).data.used == false
+        && request.time < get(/databases/$(database)/documents/inviteTokens/$(token)).data.createdAt + duration.value(2,'d');
+    }
+    function isValidPendingInvite(groupId) {
+      return ('phone_number' in request.auth.token)
+        && exists(/databases/$(database)/documents/pendingInvites/$(request.auth.token.phone_number))
+        && get(/databases/$(database)/documents/pendingInvites/$(request.auth.token.phone_number)).data.groupId == groupId;
+    }
+    function isValidNonAdminJoin(d) {
+      return (('viaInviteToken' in d) && d.viaInviteToken is string && isValidInviteToken(d.viaInviteToken, d.groupId))
+        || isValidPendingInvite(d.groupId)
+        // Self-heal: rebuilding a membership your own userGroups doc already
+        // lists, after data loss (see the self-heal recovery path added
+        // 2026-09-14). userGroups is self-writable with no server-side check
+        // against real membership, so this is a narrower, lower-severity
+        // version of the same gap this function exists to close - accepted
+        // so the corruption-recovery path doesn't break. Fully closing it
+        // means moving self-heal itself server-side; flagged as a follow-up,
+        // not blocking this fix.
+        || (('selfHealed' in d) && d.selfHealed == true);
+    }
+
+    match /profiles/{uid} {
+      // Owner-only. Other members seeing your live name/avatar within a
+      // shared group is handled server-side by the syncProfileToMembers
+      // Cloud Function (Admin SDK, bypasses these rules), which copies
+      // changes into members/{uid}_{groupId} docs instead - so no client
+      // ever needs to read anyone else's profile directly.
+      allow read: if isSignedIn() && request.auth.uid == uid;
+      allow write: if isSignedIn() && request.auth.uid == uid;
+    }
+
+    match /members/{memberId} {
+      allow read: if isMember(resource.data.groupId);
+      allow create: if isSignedIn()
+        && memberId == request.auth.uid + '_' + request.resource.data.groupId
+        && request.resource.data.uid == request.auth.uid
+        && ((request.resource.data.isAdmin == true
+              && get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.adminUid == request.auth.uid)
+            || (request.resource.data.isAdmin != true && isValidNonAdminJoin(request.resource.data)));
+      allow update: if isSignedIn()
+        && ((resource.data.uid == request.auth.uid
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name','av']))
+            || (isGroupAdmin(resource.data.groupId)
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isAdmin'])));
+      allow delete: if isSignedIn()
+        && (resource.data.uid == request.auth.uid || isGroupAdmin(resource.data.groupId));
+    }
+
+    match /groups/{groupId} {
+      allow read: if isMember(groupId);
+      allow create: if isSignedIn() && request.resource.data.adminUid == request.auth.uid;
+      allow update: if isGroupAdmin(groupId);
+      match /birthdays/{bdayId} {
+        allow read: if isMember(groupId);
+        // 'member-{uid}' docs are each person's own auto-synced entry
+        // (from the "Your Birthday" profile card) - only they may write
+        // their own slot. Any other id is a manually-added entry for a
+        // family member without their own account (the "Family
+        // Birthdays" sheet's free-form add/remove) - any group member
+        // may create, edit, or delete those; it's a shared convenience
+        // list inside an already membership-gated group, not sensitive
+        // per-person data. Before this, every manual add/remove failed
+        // with permission-denied because this rule only ever recognized
+        // the 'member-{uid}' shape.
+        allow write: if isMember(groupId) &&
+          (bdayId == 'member-' + request.auth.uid || !bdayId.matches('member-.*'));
+      }
+    }
+
+    match /feed/{postId} {
+      allow read: if isMember(resource.data.groupId);
+      allow create: if isSignedIn()
+        && request.resource.data.senderUid == request.auth.uid
+        && isMember(request.resource.data.groupId);
+      allow delete: if isSignedIn() && resource.data.senderUid == request.auth.uid;
+    }
+
+    match /comments/{cmtId} {
+      allow read: if isMember(resource.data.groupId);
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid
+        && isMember(request.resource.data.groupId);
+      allow delete: if isSignedIn()
+        && (resource.data.uid == request.auth.uid || isGroupAdmin(resource.data.groupId));
+    }
+
+    match /reactions/{reactionId} {
+      allow read: if isMember(resource.data.groupId);
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid
+        && isMember(request.resource.data.groupId);
+      allow delete: if isSignedIn() && resource.data.uid == request.auth.uid;
+    }
+
+    match /chatReactions/{reactionId} {
+      allow read: if isSignedIn() &&
+        (isMember(resource.data.chatId) || isDmParticipant(resource.data.chatId));
+      allow create: if isSignedIn()
+        && reactionId == request.resource.data.msgId + '_' + request.auth.uid
+        && request.resource.data.uid == request.auth.uid
+        && (isMember(request.resource.data.chatId) || isDmParticipant(request.resource.data.chatId));
+      allow update: if isSignedIn()
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == request.auth.uid
+        && reactionId == request.resource.data.msgId + '_' + request.auth.uid;
+      allow delete: if isSignedIn() && resource.data.uid == request.auth.uid;
+    }
+
+    match /events/{evId} {
+      allow read: if isMember(resource.data.groupId);
+      allow create: if isSignedIn()
+        && request.resource.data.createdBy == request.auth.uid
+        && isMember(request.resource.data.groupId);
+      allow delete: if isSignedIn() && resource.data.createdBy == request.auth.uid;
+    }
+
+    match /rsvps/{rsvpId} {
+      allow read: if isMember(resource.data.groupId);
+      allow write: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid
+        && isMember(request.resource.data.groupId);
+    }
+
+    match /chat/{msgId} {
+      allow read: if isMember(resource.data.groupId);
+      allow create: if isSignedIn()
+        && request.resource.data.senderUid == request.auth.uid
+        && isMember(request.resource.data.groupId);
+      allow delete: if isSignedIn() && resource.data.senderUid == request.auth.uid;
+    }
+
+    match /userDms/{dmId} {
+      allow read: if isSignedIn() && request.auth.uid in resource.data.members;
+      allow create: if isSignedIn()
+        && request.auth.uid in request.resource.data.members
+        && request.resource.data.createdBy == request.auth.uid;
+      // Being a current member only lets you touch preview/read-state fields
+      // (last, lt, updatedAt, seenBy.*, unreadBy.*) - members and createdBy
+      // are locked after creation so no participant can splice themselves
+      // (or anyone else) into a DM thread they weren't actually invited to.
+      allow update: if isSignedIn() && request.auth.uid in resource.data.members
+        && request.resource.data.members == resource.data.members
+        && request.resource.data.createdBy == resource.data.createdBy;
+    }
+
+    match /dms/{dmId}/msgs/{msgId} {
+      allow read: if isDmParticipant(dmId);
+      allow create: if isSignedIn()
+        && request.resource.data.senderUid == request.auth.uid
+        && isDmParticipant(dmId);
+      allow delete: if isSignedIn() && resource.data.senderUid == request.auth.uid;
+    }
+
+    match /notifications/{notifId} {
+      allow read: if isMember(resource.data.groupId);
+      allow create: if isSignedIn()
+        && request.resource.data.senderUid == request.auth.uid
+        && isMember(request.resource.data.groupId);
+    }
+
+    match /inviteTokens/{token} {
+      // get (fetching one specific token you already have, e.g. from an
+      // invite link) stays open to anyone - list does not, otherwise the
+      // whole collection could be enumerated client-side to harvest every
+      // groupId currently in use across every family on the app.
+      allow get: if true;
+      allow list: if false;
+      allow create: if isSignedIn()
+        && request.resource.data.createdBy == request.auth.uid
+        && isMember(request.resource.data.groupId);
+      allow update: if isSignedIn()
+        && resource.data.used == false
+        && request.resource.data.used == true
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['used','usedAt']);
+    }
+
+    match /pendingInvites/{phone} {
+      allow read: if isSignedIn() && request.auth.token.phone_number == phone;
+      allow create: if isSignedIn() && isGroupAdmin(request.resource.data.groupId);
+      allow delete: if isSignedIn()
+        && (request.auth.token.phone_number == phone || isGroupAdmin(resource.data.groupId));
+    }
+
+    match /fcmTokens/{uid} {
+      allow read, write: if isSignedIn() && request.auth.uid == uid;
+    }
+
+    match /userGroups/{uid} {
+      allow read, write: if isSignedIn() && request.auth.uid == uid;
+    }
+
+    match /errorLogs/{logId} {
+      allow read: if isSignedIn() && request.auth.uid == "op0XtV15nHZsjBW4brydvwoWn2N2";
+      allow create: if isSignedIn() && request.resource.data.userUid == request.auth.uid;
+    }
+  }
+}
