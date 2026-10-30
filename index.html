@@ -147,7 +147,7 @@ window.addEventListener("unhandledrejection",function(e){
 // refresh instead of leaving people stuck in a stale session. Bump
 // APP_VERSION by hand on every deploy (any changed string works - a
 // timestamp is easiest to keep unique).
-var APP_VERSION="2026-10-30T21:00:00Z-ownbdaysheet";
+var APP_VERSION="2026-10-30T23:00:00Z-profilephoto-collapsegroups";
 function isStandaloneMode(){
   return window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;
 }
@@ -1740,7 +1740,7 @@ var ST={
   feedRendered:{},feedRenderedThrough:{},allReactions:{},upPhotos:[],mutedGroups:[],muteComments:false,muteDailyReminder:false,
   boarded:false,obStep:0,obName:"",obAvatar:"\uD83D\uDC69",obPhoto:null,
   obGrpName:"",obGrpEmoji:"\u2764\uFE0F",obGrpPhoto:null,joinInvite:false,inviteError:null,fbMembers:{},
-  editingGroup:null,editingBirthdays:false,editingOwnBirthday:false,creatingGroup:false,showGroupSwitcher:false,navExpanded:false,showTutorial:false,tutorialStep:0,replyTo:null,profileWallpaper:null,sessionStart:Date.now(),memoryDay:null,memoryPosts:null,appReady:false,leaveGroupId:null,myPendingInvite:null,invitePhoneBusy:false,
+  editingGroup:null,editingBirthdays:false,editingOwnBirthday:false,expandedGroups:{},creatingGroup:false,showGroupSwitcher:false,navExpanded:false,showTutorial:false,tutorialStep:0,replyTo:null,profileWallpaper:null,sessionStart:Date.now(),memoryDay:null,memoryPosts:null,appReady:false,leaveGroupId:null,myPendingInvite:null,invitePhoneBusy:false,
   tab:"feed",group:"imm",name:"Sean",avatar:"\uD83D\uDC68",feedLoading:false,
   openChat:null,
   chatMsgs:{imm:[]},
@@ -5291,30 +5291,42 @@ function buildProfileBanner(t){
 function buildGroupsCard(){
   var gc=d({css:{background:"#FFF9F2",borderRadius:"18px",overflow:"hidden",boxShadow:"0 2px 12px rgba(0,0,0,.08)",marginBottom:"12px"}});
   gc.appendChild(d({css:{padding:"13px 15px 9px",fontSize:"12px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".5px",borderBottom:"1px solid #F5DDD1"}},"Your Groups"));
+  // Each group starts collapsed to a single summary row (icon, name, member
+  // count) - tapping it expands Edit/Leave and the full member list. With
+  // several groups, showing every member of every group stretched this card
+  // out a lot; collapsed-by-default keeps the overview short.
   ST.groups.forEach(function(g){
     var gt=th(g.id);var mems=ST.mems[g.id]||[];
-    var row=d({css:{display:"flex",alignItems:"center",gap:"10px",padding:"11px 15px",borderBottom:"1px solid #F5DDD1"}});
-    var ic=d({css:{width:"38px",height:"38px",borderRadius:"50%",background:gt.ap,border:"2px solid "+gt.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"19px",flexShrink:0,overflow:"hidden"}});setGroupIcon(ic,g);row.appendChild(ic);
-    var info=d({css:{flex:1}});info.appendChild(d({css:{fontSize:"14px",fontWeight:700,color:"#3D2314"}},g.label));
+    var isOpen=!!ST.expandedGroups[g.id];
     var fbMems=(ST.fbMembers&&ST.fbMembers[g.id])||[];
     var memCount=Math.max(mems.length,fbMems.length);
+    var row=d({css:{display:"flex",alignItems:"center",gap:"10px",padding:"11px 15px",borderBottom:isOpen?"none":"1px solid #F5DDD1",cursor:"pointer"}});
+    row.addEventListener("click",function(){ST.expandedGroups[g.id]=!isOpen;redraw();});
+    var ic=d({css:{width:"38px",height:"38px",borderRadius:"50%",background:gt.ap,border:"2px solid "+gt.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"19px",flexShrink:0,overflow:"hidden"}});setGroupIcon(ic,g);row.appendChild(ic);
+    var info=d({css:{flex:1}});info.appendChild(d({css:{fontSize:"14px",fontWeight:700,color:"#3D2314"}},g.label));
     info.appendChild(d({css:{fontSize:"11px",color:"#9B7B62",marginTop:"1px"}},memCount+" member"+(memCount!==1?"s":"")));
     row.appendChild(info);
+    var chev=d({css:{fontSize:"15px",color:"#9B7B62",transform:isOpen?"rotate(90deg)":"rotate(0deg)",transition:"transform .15s",flexShrink:0}},"›");
+    row.appendChild(chev);
+    gc.appendChild(row);
+    if(!isOpen)return;
+    var detail=d({css:{padding:"0 15px 12px",borderBottom:"1px solid #F5DDD1"}});
+    var actionsRow=d({css:{display:"flex",gap:"6px",marginBottom:fbMems.length?"8px":"0"}});
     if(getGroupAdminStatus(g.id)){
-      var editGrpBtn=b({css:{background:gt.ap,color:gt.ad,fontSize:"11px",fontWeight:700,padding:"3px 10px",borderRadius:"50px",border:"none",cursor:"pointer",fontFamily:"inherit"}},"Edit");
+      var editGrpBtn=b({css:{background:gt.ap,color:gt.ad,fontSize:"11px",fontWeight:700,padding:"4px 11px",borderRadius:"50px",border:"none",cursor:"pointer",fontFamily:"inherit"}},"Edit");
       (function(grpObj){editGrpBtn.addEventListener("click",function(){ST.editingGroup=grpObj.id;redraw();});})(g);
-      row.appendChild(editGrpBtn);
+      actionsRow.appendChild(editGrpBtn);
     } else {
-      row.appendChild(d({css:{background:gt.ap,color:gt.ad,fontSize:"11px",fontWeight:700,padding:"3px 10px",borderRadius:"50px"}},"Member"));
+      actionsRow.appendChild(d({css:{background:gt.ap,color:gt.ad,fontSize:"11px",fontWeight:700,padding:"4px 11px",borderRadius:"50px"}},"Member"));
     }
-    var leaveGrpBtn=b({css:{background:"transparent",color:"#C0392B",fontSize:"11px",fontWeight:700,padding:"3px 10px",borderRadius:"50px",border:"1.5px solid #F0B4AC",cursor:"pointer",fontFamily:"inherit",marginLeft:"6px"}},"Leave");
+    var leaveGrpBtn=b({css:{background:"transparent",color:"#C0392B",fontSize:"11px",fontWeight:700,padding:"4px 11px",borderRadius:"50px",border:"1.5px solid #F0B4AC",cursor:"pointer",fontFamily:"inherit"}},"Leave");
     (function(grpObj){leaveGrpBtn.addEventListener("click",function(){openLeaveGroupFlow(grpObj.id);});})(g);
-    row.appendChild(leaveGrpBtn);
+    actionsRow.appendChild(leaveGrpBtn);
+    detail.appendChild(actionsRow);
     // Show Firebase members with admin remove option
-    var fbMems2=(ST.fbMembers&&ST.fbMembers[g.id])||[];
-    fbMems2.forEach(function(m){
+    fbMems.forEach(function(m){
       var isYou=m.uid===localStorage.getItem("ku_uid");
-      var mrow=d({css:{display:"flex",alignItems:"center",gap:"10px",padding:"9px 15px",borderBottom:"1px solid #F5DDD1"}});
+      var mrow=d({css:{display:"flex",alignItems:"center",gap:"10px",padding:"9px 0",borderTop:"1px solid #F5DDD1"}});
       var mavic=d({css:{width:"30px",height:"30px",borderRadius:"50%",background:gt.ap,border:"1.5px solid "+gt.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"15px",overflow:"hidden",flexShrink:0}});
       renderAvatarGlyph(mavic,m.av,10,"👤");
       makeAvatarTappable(mavic,m.av);
@@ -5336,9 +5348,9 @@ function buildGroupsCard(){
         })(m);
         mrow.appendChild(removeBtn);
       }
-      gc.appendChild(mrow);
+      detail.appendChild(mrow);
     });
-    gc.appendChild(row);
+    gc.appendChild(detail);
   });
   return gc;
 }
@@ -5574,32 +5586,6 @@ function buildNameCard(){
   });
   enp.appendChild(eni);enc.appendChild(enp);
   return enc;
-}
-
-function buildAvatarPickerCard(t){
-  // Used to also have its own "Upload new photo" button and a clickable
-  // preview circle, which quietly set the avatar to a raw, uncropped photo
-  // that never got uploaded to Storage or saved to Firestore - it only ever
-  // looked right on this device, for this session, and reverted on the next
-  // profile load. A broken duplicate of the real, working upload already on
-  // the banner above (crop -> Storage -> Firestore -> synced everywhere).
-  // Simplified down to what this card is actually good for: picking an
-  // emoji avatar, with a pointer to the one real place to set a photo.
-  var apc=d({css:{background:"#FFF9F2",borderRadius:"18px",overflow:"hidden",boxShadow:"0 2px 12px rgba(0,0,0,.08)",marginBottom:"12px"}});
-  apc.appendChild(d({css:{padding:"13px 15px 9px",fontSize:"12px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".5px",borderBottom:"1px solid #F5DDD1"}},"Avatar Emoji"));
-  var apBody=d({css:{padding:"12px 15px"}});
-  apBody.appendChild(d({css:{fontSize:"12px",color:"#9B7B62",marginBottom:"10px",lineHeight:"1.4"}},"Want a real photo instead? Tap your avatar at the top of this page."));
-  var apg=d({css:{display:"flex",flexWrap:"wrap",gap:"8px"}});
-  ["👩","👨","👵","👴","👧","👦","🧒","🧑"].forEach(function(a){
-    var ab=b({css:{width:"42px",height:"42px",borderRadius:"12px",background:ST.avatar===a?t.ap:"#FAF6F0",border:"2px solid "+(ST.avatar===a?t.a:"rgba(107,66,38,.12)"),fontSize:"22px",cursor:"pointer",fontFamily:"inherit"}},a);
-    ab.addEventListener("click",function(){
-      ST.avatar=a;try{localStorage.setItem("ku_av",a);}catch(e){}
-      if(currentUser)db.collection("profiles").doc(currentUser.uid).set({av:a},{merge:true}).catch(function(e){logAppError("profiles.set (avatar - avatar picker emoji)",e);});
-      redraw();
-    });apg.appendChild(ab);
-  });
-  apBody.appendChild(apg);apc.appendChild(apBody);
-  return apc;
 }
 
 function buildBirthdaysCard(t){
@@ -6053,7 +6039,6 @@ function buildProfile(t){
   body.appendChild(buildStatsRow(t));
   body.appendChild(buildInviteCard());
   body.appendChild(buildNameCard());
-  body.appendChild(buildAvatarPickerCard(t));
   body.appendChild(buildBirthdaysCard(t));
   body.appendChild(buildCreateGroupCard(t));
   body.appendChild(buildOwnBirthdayCard(t));
