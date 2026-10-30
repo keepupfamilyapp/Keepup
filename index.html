@@ -147,7 +147,7 @@ window.addEventListener("unhandledrejection",function(e){
 // refresh instead of leaving people stuck in a stale session. Bump
 // APP_VERSION by hand on every deploy (any changed string works - a
 // timestamp is easiest to keep unique).
-var APP_VERSION="2026-10-31T04:00:00Z-customicons-phase1";
+var APP_VERSION="2026-10-31T05:00:00Z-navicon-coinfix";
 function isStandaloneMode(){
   return window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;
 }
@@ -1778,6 +1778,17 @@ function renderGlyphOrEmoji(container,val){
   if(val&&ICON_SVG[val])container.innerHTML=ICON_SVG[val];
   else container.textContent=val;
 }
+// The nav bar's home/profile buttons swap their own background to the
+// current theme's accent color when active (e.g. terracotta #C4714A) -
+// which, now that the house icon is a flat solid shape in that exact same
+// terracotta instead of a multi-tone emoji, made it disappear completely
+// (identical color on identical color). Fix: always back these specific
+// icons with a small white "coin" so the icon's own color never has to
+// match whatever the button behind it is doing. Returns an HTML string for
+// the innerHTML-based nav code, not a DOM node.
+function iconCoin(svgKey,coinPx){
+  return '<span style="width:'+coinPx+'px;height:'+coinPx+'px;border-radius:50%;background:white;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-sizing:border-box;">'+(ICON_SVG[svgKey]||"")+'</span>';
+}
 
 var ST={
   feedRendered:{},feedRenderedThrough:{},allReactions:{},upPhotos:[],mutedGroups:[],muteComments:false,muteDailyReminder:false,
@@ -3170,7 +3181,7 @@ function buildApp(){
   homeBtn.style.position="relative";
   // Show badge on home button only when nav is collapsed
   var showHomeBadge=totalUnread>0&&!ST.navExpanded;
-  homeBtn.innerHTML=ICON_SVG["🏠"]+(showHomeBadge
+  homeBtn.innerHTML=iconCoin("🏠",34)+(showHomeBadge
     ?"<span style='position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;background:#C0392B;border-radius:50px;border:2px solid white;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:white;font-family:inherit;padding:0 4px;box-sizing:border-box;'>"+( totalUnread>99?"99+":String(totalUnread))+"</span>"
     :"");
   homeBtn.addEventListener("click",function(){
@@ -3191,14 +3202,14 @@ function buildApp(){
       // Toggle nav pill without full redraw to avoid flash
       ST.navExpanded=!ST.navExpanded;
       // Update home button badge immediately when nav state changes
-      liveHome.innerHTML=ICON_SVG["🏠"]+((!ST.navExpanded&&totalUnread>0)
+      liveHome.innerHTML=iconCoin("🏠",34)+((!ST.navExpanded&&totalUnread>0)
         ?"<span style='position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;background:#C0392B;border-radius:50px;border:2px solid white;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:white;font-family:inherit;padding:0 4px;box-sizing:border-box;'>"+( totalUnread>99?"99+":String(totalUnread))+"</span>"
         :"");
       var existingPill=liveNav.querySelector(".nav-pill");
       if(ST.navExpanded&&!existingPill){
         var navPill2=d({id:"nav-pill-menu",css:{background:"white",borderRadius:"50px",padding:"5px 6px",display:"flex",gap:"2px",boxShadow:"0 4px 20px rgba(0,0,0,.15)",animation:"fadeUp .2s ease"}});
         navPill2.className="nav-pill";
-        [["chat","&#128172;","Chat"],["calendar","&#128197;","Cal"],["profile",ICON_SVG["👤"],"Me"]].forEach(function(n){
+        [["chat","&#128172;","Chat"],["calendar","&#128197;","Cal"],["profile",iconCoin("👤",26),"Me"]].forEach(function(n){
           var nb=b({css:{display:"flex",flexDirection:"column",alignItems:"center",gap:"2px",padding:"5px 12px",borderRadius:"50px",background:ST.tab===n[0]?t.ap:"transparent",border:"none",cursor:"pointer",fontFamily:"inherit",WebkitUserSelect:"none",userSelect:"none"}});
           nb.appendChild(d({html:n[1],css:{fontSize:"18px"}}));
           nb.appendChild(el("small",{css:{fontSize:"9px",color:ST.tab===n[0]?t.a:"#9B7B62",fontWeight:ST.tab===n[0]?800:600}},n[2]));
@@ -3232,7 +3243,7 @@ function buildApp(){
   navFloat.appendChild(homeBtn);
   if(ST.navExpanded){
     var navPill=d({css:{background:"white",borderRadius:"50px",padding:"5px 6px",display:"flex",gap:"2px",boxShadow:"0 4px 20px rgba(0,0,0,.15)",animation:"fadeUp .2s ease"}});
-    [["chat","&#128172;","Chat"],["calendar","&#128197;","Cal"],["profile",ICON_SVG["👤"],"Me"]].forEach(function(n){
+    [["chat","&#128172;","Chat"],["calendar","&#128197;","Cal"],["profile",iconCoin("👤",26),"Me"]].forEach(function(n){
       var nb=b({css:{display:"flex",flexDirection:"column",alignItems:"center",gap:"2px",padding:"5px 12px",borderRadius:"50px",background:ST.tab===n[0]?t.ap:"transparent",border:"none",cursor:"pointer",fontFamily:"inherit",position:"relative"}});
       nb.appendChild(d({html:n[1],css:{fontSize:"18px"}}));
       nb.appendChild(el("small",{css:{fontSize:"9px",color:ST.tab===n[0]?t.a:"#9B7B62",fontWeight:ST.tab===n[0]?800:600}},n[2]));
