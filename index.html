@@ -147,7 +147,7 @@ window.addEventListener("unhandledrejection",function(e){
 // refresh instead of leaving people stuck in a stale session. Bump
 // APP_VERSION by hand on every deploy (any changed string works - a
 // timestamp is easiest to keep unique).
-var APP_VERSION="2026-10-30T09:00:00Z-chatdates-caledit";
+var APP_VERSION="2026-10-30T14:00:00Z-splashfix";
 function isStandaloneMode(){
   return window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;
 }
@@ -3319,10 +3319,26 @@ function buildFeed(t,grp){
     splashTitle.innerHTML="keep <em>up</em>";
     loading.appendChild(splashTitle);
 
+    // Manual escape hatch - if the 8-second fallback below already fired
+    // once and the splash is STILL showing, something beyond a normal slow
+    // load is wrong (the main known cause - a successful sign-in never
+    // flipping ST.appReady - is fixed above in finishSignin() and its
+    // sibling catch blocks, but this covers whatever's left, known or not).
+    // Give the person a visible, obvious way out instead of an animated
+    // logo with no indication anything's wrong or how to fix it short of
+    // knowing to hard-refresh themselves.
+    if(ST._splashRetryCount>0){
+      loading.appendChild(d({css:{fontSize:"13px",color:"#9B7B62",marginTop:"18px",textAlign:"center",maxWidth:"260px"}},"This is taking longer than usual."));
+      var splashReloadBtn=b({css:{marginTop:"12px",padding:"10px 22px",borderRadius:"50px",background:t.a,border:"none",color:"white",fontSize:"13px",fontWeight:800,cursor:"pointer",fontFamily:"inherit"}},"Reload");
+      splashReloadBtn.addEventListener("click",function(){location.reload();});
+      loading.appendChild(splashReloadBtn);
+    }
+
     // Hard timeout - never stuck more than 8 seconds
     if(!ST._splashTimer){
       ST._splashTimer=setTimeout(function(){
         ST._splashTimer=null;
+        ST._splashRetryCount=(ST._splashRetryCount||0)+1;
         ST.appReady=true;
         ST.feedLoading=false;
         redraw();
@@ -7726,6 +7742,19 @@ auth.onAuthStateChanged(function(user){
           }
           function finishSignin(){
             ST.boarded=true;
+            // This is the main "existing signed-in user, data loaded" success
+            // path - hit on basically every normal app open - but it never
+            // actually flipped the splash screen's own appReady flag. Every
+            // single load was silently depending on buildFeed's 8-second
+            // hard-timeout fallback to force it true instead, and mobile
+            // browsers throttle/suspend setTimeout while a tab or PWA is
+            // backgrounded - so if the app got backgrounded (a notification,
+            // switching apps, the screen locking) during that first 8
+            // seconds, the fallback itself could be delayed indefinitely,
+            // leaving the splash stuck until a manual hard refresh reset
+            // everything. Setting it directly here means a normal sign-in
+            // no longer depends on that timer firing at all.
+            ST.appReady=true;
             localStorage.setItem("ku_ob","1");
             fetchAllFeeds();
             syncOn();
@@ -7786,7 +7815,7 @@ auth.onAuthStateChanged(function(user){
             }).catch(function(e){logAppError("rebuildUserGroups failed",e);console.log("rebuildUserGroups failed",e);finishSignin();});
           }
         }).catch(function(){
-          ST.boarded=true;
+          ST.boarded=true;ST.appReady=true;
           localStorage.setItem("ku_ob","1");
           fetchAllFeeds();
           syncOn();
@@ -7827,6 +7856,7 @@ auth.onAuthStateChanged(function(user){
             },{merge:true}).then(function(){
               console.log("Self-healed profile for",user.uid);
             }).catch(function(e){logAppError("self-heal failed",e);console.log("self-heal failed",e);});
+            ST.appReady=true;
             fetchAllFeeds();syncOn();redraw();
           } else {
             // Genuinely no usable local data anywhere - fall back to onboarding
@@ -7836,6 +7866,7 @@ auth.onAuthStateChanged(function(user){
             redraw();
           }
         }).catch(function(){
+          ST.appReady=true;
           fetchAllFeeds();syncOn();redraw();
         });
       } else {
@@ -7844,7 +7875,13 @@ auth.onAuthStateChanged(function(user){
         redraw();
       }
     }).catch(function(){
-      // Error loading profile - fall back to local state
+      // Error loading profile - fall back to local state. This is the
+      // outermost catch for the very first Firestore read in the whole
+      // sign-in chain (a flaky connection on cold start is a completely
+      // normal way to land here) - same missing-appReady bug as the other
+      // branches above, so fix it here too rather than leaving this path
+      // to rely on the splash's 8-second fallback timer as well.
+      ST.appReady=true;
       checkPendingInvite();
       if(ST.boarded){fetchAllFeeds();syncOn();setTimeout(checkContextualChatReminders,4000);
         // Always init notifications on signin
