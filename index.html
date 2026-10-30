@@ -147,7 +147,7 @@ window.addEventListener("unhandledrejection",function(e){
 // refresh instead of leaving people stuck in a stale session. Bump
 // APP_VERSION by hand on every deploy (any changed string works - a
 // timestamp is easiest to keep unique).
-var APP_VERSION="2026-10-28T10:00:00Z-dmavatarfix";
+var APP_VERSION="2026-10-30T09:00:00Z-chatdates-caledit";
 function isStandaloneMode(){
   return window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;
 }
@@ -1749,6 +1749,7 @@ var ST={
   newDm:false,dmSel:[],dmGrp:"imm",
   addEv:false,calMonth:new Date().getMonth(),calYear:new Date().getFullYear(),calSelDay:null,
   nEv:{title:"",month:"APR",day:"",time:"",loc:"",groupId:"imm",multiDay:false,endMonth:"APR",endDay:"",lat:null,lng:null},
+  editingEvId:null,
   eventDetailId:null,pickingLocation:false,
   compose:false,upOpen:false,upType:"photo",upStep:1,upCap:"",upCi:"",upImg:null,
   cmtOpen:null,cmtIn:"",rxPick:null,reactions:{},rsvp:{},allRsvps:{},
@@ -2159,6 +2160,24 @@ function timeAgo(ts){
   if(diff<86400)return Math.floor(diff/3600)+"h ago";
   if(diff<604800)return Math.floor(diff/86400)+"d ago";
   var d=new Date(ms);return(d.getMonth()+1)+"/"+d.getDate();
+}
+
+// Day-divider label for chat scrollback ("Today"/"Yesterday"/"Oct 15"),
+// same idea as iMessage/WhatsApp date separators - makes it possible to
+// tell at a glance how old a stretch of messages is without reading every
+// timestamp.
+function chatDayLabel(ts){
+  var dt=new Date(ts);
+  var now=new Date();
+  var startOfToday=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  var startOfMsg=new Date(dt.getFullYear(),dt.getMonth(),dt.getDate());
+  var diffDays=Math.round((startOfToday-startOfMsg)/86400000);
+  if(diffDays===0)return"Today";
+  if(diffDays===1)return"Yesterday";
+  var MONTHS3=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  var label=MONTHS3[dt.getMonth()]+" "+dt.getDate();
+  if(dt.getFullYear()!==now.getFullYear())label+=", "+dt.getFullYear();
+  return label;
 }
 
 // Firestore timestamps need .toMillis() before they can be compared/sorted,
@@ -4180,7 +4199,16 @@ function buildChatView(t,grp){
     }
   }
 
+  var _lastDividerDay=null;
   visibleMsgs.forEach(function(msg){
+    var _msgTsForDivider=msg.createdAt&&msg.createdAt.toMillis?msg.createdAt.toMillis():(msg.sentAt||Date.now());
+    var _dayKey=new Date(_msgTsForDivider).toDateString();
+    if(_dayKey!==_lastDividerDay){
+      _lastDividerDay=_dayKey;
+      var divWrap=d({css:{display:"flex",justifyContent:"center",margin:"10px 0 4px"}});
+      divWrap.appendChild(d({css:{background:t.ap,color:t.ad,fontSize:"11px",fontWeight:700,padding:"4px 12px",borderRadius:"50px"}},chatDayLabel(_msgTsForDivider)));
+      list.appendChild(divWrap);
+    }
     var iy=msg.you;
     var msgId=msg.id||("m"+Math.random());
     var rxs=(ST.chatReactions&&ST.chatReactions[msgId])||[];
@@ -4323,6 +4351,18 @@ function buildChatView(t,grp){
         // chat message at all from a laptop/desktop browser.
         el.addEventListener("contextmenu",function(ev){ev.preventDefault();showReactionPicker(mid,el,isYou,ev.clientY,ev.clientX);});
       })(bubbleEl,msgId,iy,msg);
+      // Visible react affordance - long-press/right-click reacting worked
+      // but wasn't discoverable (nothing on screen hints it exists), unlike
+      // the feed's explicit "+" reaction button on posts. Small circular
+      // button just outside the bubble, opposite the avatar side.
+      var addRxBtn=b({css:{width:"22px",height:"22px",borderRadius:"50%",background:t.ap,border:"none",fontSize:"12px",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0,color:t.ad,padding:"0",opacity:".85",alignSelf:"flex-end",marginBottom:"2px"}},"☺");
+      (function(mid,isYou,btn){
+        btn.addEventListener("click",function(e){
+          e.stopPropagation();
+          var rect=btn.getBoundingClientRect();
+          showReactionPicker(mid,btn,isYou,rect.top+rect.height/2,rect.left+rect.width/2);
+        });
+      })(msgId,iy,addRxBtn);
     }
     if(rxs.length){
       var rxMap={};rxs.forEach(function(r){if(!rxMap[r.em])rxMap[r.em]=[];rxMap[r.em].push(r.name);});
@@ -4370,7 +4410,7 @@ function buildChatView(t,grp){
       }
     }
     mb.appendChild(tsRow);
-    row.appendChild(mb);list.appendChild(row);
+    row.appendChild(mb);if(addRxBtn)row.appendChild(addRxBtn);list.appendChild(row);
   });
   wrap.appendChild(list);
   // Reply preview bar
@@ -4681,7 +4721,7 @@ function buildCal(t){
     ph.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"15px",fontWeight:600,color:"#3D2314"}},ST.calSelDay+" "+MLONG[ST.calMonth]));
     var btnRow=d({css:{display:"flex",gap:"6px"}});
     var addDayBtn=b({css:{padding:"6px 13px",borderRadius:"50px",background:t.a,border:"none",color:"white",fontSize:"12px",fontWeight:700,cursor:"pointer",fontFamily:"inherit"}},"+ Event");
-    addDayBtn.addEventListener("click",function(){ST.addEv=true;redraw();});btnRow.appendChild(addDayBtn);
+    addDayBtn.addEventListener("click",function(){ST.editingEvId=null;ST.addEv=true;redraw();});btnRow.appendChild(addDayBtn);
     // Check if there are any feed posts on this day
     var selDate=new Date(ST.calYear,ST.calMonth,ST.calSelDay);
     var selStart=new Date(ST.calYear,ST.calMonth,ST.calSelDay,0,0,0).getTime();
@@ -4727,17 +4767,21 @@ function buildCal(t){
     });
     wrap.appendChild(panel);
   }
+  // Was one block of cards per group - finding "what's next" across more
+  // than one group meant scanning several separate lists. Merged into a
+  // single list sorted soonest-first across every group, with a small
+  // group tag on each card (via buildEvCard) so which group it belongs to
+  // is still clear. Past events (already fully ended) drop off the list -
+  // this is "what's coming up," not a full history.
   var upcoming=d({css:{padding:"4px 14px 0"}});
-  upcoming.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"15px",fontWeight:600,color:"#3D2314",marginBottom:"10px",marginTop:"6px"}},"All Events"));
-  var hasAny=false;
-  ST.groups.forEach(function(g){
-    var gt=th(g.id);var gevs=ST.evs.filter(function(ev){return ev.groupId===g.id;});if(!gevs.length)return;hasAny=true;
-    var gl=d({css:{display:"flex",alignItems:"center",gap:"7px",marginBottom:"8px",marginTop:"4px"}});
-    var gi=d({css:{width:"22px",height:"22px",borderRadius:"50%",background:gt.ap,border:"1.5px solid "+gt.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"12px",overflow:"hidden"}});setGroupIcon(gi,g);gl.appendChild(gi);
-    gl.appendChild(d({css:{fontSize:"12px",fontWeight:800,color:gt.ad,textTransform:"uppercase",letterSpacing:".5px"}},g.label));
-    upcoming.appendChild(gl);gevs.forEach(function(ev){upcoming.appendChild(buildEvCard(ev,gt));});
-  });
-  if(!hasAny)upcoming.appendChild(d({css:{textAlign:"center",padding:"20px",fontSize:"13px",color:"#9B7B62"}},"No events yet. Tap a day to add one!"));
+  upcoming.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"15px",fontWeight:600,color:"#3D2314",marginBottom:"10px",marginTop:"6px"}},"Upcoming"));
+  var today0ForList=new Date();today0ForList=new Date(today0ForList.getFullYear(),today0ForList.getMonth(),today0ForList.getDate());
+  var upcomingEvs=ST.evs.filter(function(ev){return evEndDate(ev)>=today0ForList;}).sort(function(a,b){return evStartDate(a)-evStartDate(b);});
+  if(!upcomingEvs.length){
+    upcoming.appendChild(d({css:{textAlign:"center",padding:"20px",fontSize:"13px",color:"#9B7B62"}},"No upcoming events. Tap a day to add one!"));
+  } else {
+    upcomingEvs.forEach(function(ev){upcoming.appendChild(buildEvCard(ev,th(ev.groupId||"imm")));});
+  }
   wrap.appendChild(upcoming);return wrap;
 }
 
@@ -4752,7 +4796,12 @@ function buildEvCard(ev,gt){
   var dayLabel=(ev.endDay&&ev.endMonth===ev.month&&ev.endDay!==ev.day)?ev.day+"-"+ev.endDay:String(ev.day);
   dt.appendChild(d({css:{fontSize:ev.endDay&&ev.endMonth===ev.month?"14px":"17px",fontWeight:700,lineHeight:"1"}},dayLabel));
   row.appendChild(dt);
-  var info=d({css:{flex:1}});info.appendChild(d({css:{fontSize:"13px",fontWeight:700,color:"#3D2314"}},ev.title));
+  var info=d({css:{flex:1}});
+  // Group tag - needed now that the list below merges every group into one
+  // date-sorted feed instead of a separate block per group, so which group
+  // an event belongs to isn't otherwise visible on the card itself.
+  if(ev.group)info.appendChild(d({css:{fontSize:"9.5px",fontWeight:800,color:gt.ad,textTransform:"uppercase",letterSpacing:".4px",marginBottom:"1px"}},ev.group));
+  info.appendChild(d({css:{fontSize:"13px",fontWeight:700,color:"#3D2314"}},ev.title));
   var sub=(ev.time||"")+(ev.loc?" - "+ev.loc:"");if(sub)info.appendChild(d({css:{fontSize:"11px",color:"#9B7B62",marginTop:"2px"}},sub));
   // ev.going/ev.maybe were fixed counters set once at creation (1/0) and
   // never updated as people actually RSVP'd - always wrong after the first
@@ -4850,11 +4899,26 @@ function buildEventDetail(t){
     });
   }
 
-  // Only the person who created the event can delete it - checked by uid,
-  // not name/avatar (see isOwnPost's fix for why that comparison is unsafe
-  // in a family app where names and avatars collide).
+  // Only the person who created the event can edit or delete it - checked
+  // by uid, not name/avatar (see isOwnPost's fix for why that comparison is
+  // unsafe in a family app where names and avatars collide).
   if(currentUser&&ev.createdBy&&ev.createdBy===currentUser.uid){
-    var delEvBtn=b({css:{width:"100%",padding:"11px",borderRadius:"50px",background:"transparent",border:"1.5px solid #F0B4AC",color:"#C0392B",fontSize:"13px",fontWeight:700,cursor:"pointer",fontFamily:"inherit",marginTop:"16px"}},"Delete Event");
+    var editEvBtn=b({css:{width:"100%",padding:"11px",borderRadius:"50px",background:gt.ap,border:"1.5px solid "+gt.al,color:gt.ad,fontSize:"13px",fontWeight:700,cursor:"pointer",fontFamily:"inherit",marginTop:"16px"}},"Edit Event");
+    editEvBtn.addEventListener("click",function(){
+      ST.nEv={
+        title:ev.title||"",month:ev.month||"APR",day:ev.day?String(ev.day):"",year:ev.year||ST.calYear,
+        time:ev.time||"",loc:ev.loc||"",groupId:ev.groupId||"imm",
+        multiDay:!!(ev.endDay&&ev.endMonth&&(ev.endDay!==ev.day||ev.endMonth!==ev.month)),
+        endMonth:ev.endMonth||ev.month||"APR",endDay:ev.endDay?String(ev.endDay):"",
+        lat:ev.lat||null,lng:ev.lng||null
+      };
+      ST.editingEvId=ev.id;
+      ST.eventDetailId=null;
+      ST.addEv=true;
+      redraw();
+    });
+    sh.appendChild(editEvBtn);
+    var delEvBtn=b({css:{width:"100%",padding:"11px",borderRadius:"50px",background:"transparent",border:"1.5px solid #F0B4AC",color:"#C0392B",fontSize:"13px",fontWeight:700,cursor:"pointer",fontFamily:"inherit",marginTop:"8px"}},"Delete Event");
     delEvBtn.addEventListener("click",function(){
       if(!confirm("Delete \""+ev.title+"\"? This can't be undone."))return;
       delEvBtn.textContent="Deleting...";delEvBtn.disabled=true;delEvBtn.style.opacity=".7";
@@ -5960,9 +6024,10 @@ function buildProfile(t){
 }
 
 function buildAddEvent(t){
-  var ov=d({cls:"overlay"});ov.addEventListener("click",function(){ST.addEv=false;redraw();});
+  var isEditing=!!ST.editingEvId;
+  var ov=d({cls:"overlay"});ov.addEventListener("click",function(){ST.addEv=false;ST.editingEvId=null;redraw();});
   var sh=d({cls:"sheet"});sh.addEventListener("click",function(e){e.stopPropagation();});
-  sh.appendChild(d({cls:"handle"}));sh.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"18px",fontWeight:600,color:"#3D2314",marginBottom:"16px"}},"Add an Event"));
+  sh.appendChild(d({cls:"handle"}));sh.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"18px",fontWeight:600,color:"#3D2314",marginBottom:"16px"}},isEditing?"Edit Event":"Add an Event"));
   function fld(lbl,ph,key){
     var w=d({css:{marginBottom:"12px"}});
     w.appendChild(d({css:{fontSize:"11px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".4px",marginBottom:"5px"}},lbl));
@@ -6034,25 +6099,63 @@ function buildAddEvent(t){
     var gb=b({css:{display:"flex",alignItems:"center",gap:"5px",padding:"7px 12px",borderRadius:"50px",background:sel?gt.ap:"#FAF6F0",border:"2px solid "+(sel?gt.a:"rgba(107,66,38,.12)"),fontSize:"12px",fontWeight:700,color:sel?gt.ad:"#6B4C35",cursor:"pointer",fontFamily:"inherit"}},g.icon+" "+g.label);
     gb.addEventListener("click",function(){ST.nEv.groupId=g.id;ST.nEv.group=g.label;redraw();});gp.appendChild(gb);
   });sh.appendChild(gp);
-  var sub=b({css:{width:"100%",padding:"14px",borderRadius:"50px",background:t.a,border:"none",color:"white",fontSize:"15px",fontWeight:800,cursor:"pointer",fontFamily:"inherit"}},"Add to Calendar");
+  var sub=b({css:{width:"100%",padding:"14px",borderRadius:"50px",background:t.a,border:"none",color:"white",fontSize:"15px",fontWeight:800,cursor:"pointer",fontFamily:"inherit"}},isEditing?"Save Changes":"Add to Calendar");
   sub.addEventListener("click",function(){
     if(!ST.nEv.title.trim()||!ST.nEv.day)return;
     if(!currentUser){alert("Please wait — still signing you in.");return;}
     var gObj=ST.groups.find(function(g){return g.id===ST.nEv.groupId;})||ST.groups[0];
     var savedDay=parseInt(ST.nEv.day)||ST.calSelDay;
     var origLabel=sub.textContent;
-    sub.textContent="Adding...";sub.disabled=true;sub.style.opacity=".7";
-    var ev={month:ST.nEv.month,day:parseInt(ST.nEv.day)||1,year:ST.nEv.year||ST.calYear,title:ST.nEv.title.trim(),group:gObj.label,groupId:gObj.id,going:1,maybe:0,time:ST.nEv.time,loc:ST.nEv.loc,createdBy:currentUser.uid};
+    sub.textContent=isEditing?"Saving...":"Adding...";sub.disabled=true;sub.style.opacity=".7";
+    var ev={month:ST.nEv.month,day:parseInt(ST.nEv.day)||1,year:ST.nEv.year||ST.calYear,title:ST.nEv.title.trim(),group:gObj.label,groupId:gObj.id,time:ST.nEv.time,loc:ST.nEv.loc};
+    if(!isEditing){ev.going=1;ev.maybe=0;ev.createdBy=currentUser.uid;}
     if(ST.nEv.multiDay&&ST.nEv.endDay){
       ev.endMonth=ST.nEv.endMonth;ev.endDay=parseInt(ST.nEv.endDay)||ev.day;ev.endYear=ev.year;
+    } else if(isEditing){
+      // Editing turned multi-day off (or it never had an end date) - clear
+      // any end fields a previous save left behind instead of leaving a
+      // stale end date that Firestore's update() would otherwise just skip.
+      ev.endMonth=firebase.firestore.FieldValue.delete();
+      ev.endDay=firebase.firestore.FieldValue.delete();
+      ev.endYear=firebase.firestore.FieldValue.delete();
     }
     if(ST.nEv.lat&&ST.nEv.lng){ev.lat=ST.nEv.lat;ev.lng=ST.nEv.lng;}
+    else if(isEditing){
+      ev.lat=firebase.firestore.FieldValue.delete();
+      ev.lng=firebase.firestore.FieldValue.delete();
+    }
+    function resetFormAndClose(){
+      ST.nEv={title:"",month:"APR",day:"",time:"",loc:"",groupId:"imm",multiDay:false,endMonth:"APR",endDay:"",lat:null,lng:null};
+      ST.editingEvId=null;ST.addEv=false;ST.calSelDay=savedDay;redraw();
+    }
+    if(isEditing){
+      var editId=ST.editingEvId;
+      db.collection("events").doc(editId).update(ev).then(function(){
+        // Optimistic local patch so the change shows immediately on this
+        // device - the live "events" listener (watchGroupScoped in doSync)
+        // reconciles the authoritative copy for everyone, including this
+        // device, right after.
+        var ei=ST.evs.findIndex(function(x){return x.id===editId;});
+        if(ei>=0){
+          var updated={id:editId,month:ST.nEv.month,day:parseInt(ST.nEv.day)||1,year:ST.nEv.year||ST.calYear,title:ST.nEv.title.trim(),group:gObj.label,groupId:gObj.id,time:ST.nEv.time,loc:ST.nEv.loc,createdBy:ST.evs[ei].createdBy,going:ST.evs[ei].going,maybe:ST.evs[ei].maybe};
+          if(ST.nEv.multiDay&&ST.nEv.endDay){updated.endMonth=ST.nEv.endMonth;updated.endDay=parseInt(ST.nEv.endDay)||updated.day;updated.endYear=updated.year;}
+          if(ST.nEv.lat&&ST.nEv.lng){updated.lat=ST.nEv.lat;updated.lng=ST.nEv.lng;}
+          ST.evs[ei]=updated;
+        }
+        resetFormAndClose();
+      }).catch(function(e){
+        logAppError("event update failed",e);
+        sub.textContent=origLabel;sub.disabled=false;sub.style.opacity="1";
+        showTopToast("Couldn't save those changes — check your connection and try again.");
+      });
+      return;
+    }
     // Write to Firestore instead of only local state - the "events" listener
     // set up in doSync() picks this up in real time and adds it to ST.evs,
     // so it shows up for everyone (including this device on next load)
     // instead of vanishing on refresh.
     postEvent(ev).then(function(){
-      ST.nEv={title:"",month:"APR",day:"",time:"",loc:"",groupId:"imm",multiDay:false,endMonth:"APR",endDay:"",lat:null,lng:null};ST.addEv=false;ST.calSelDay=savedDay;redraw();
+      resetFormAndClose();
     }).catch(function(e){
       logAppError("event save failed",e);
       console.log("event save failed",e);
