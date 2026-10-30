@@ -147,7 +147,7 @@ window.addEventListener("unhandledrejection",function(e){
 // refresh instead of leaving people stuck in a stale session. Bump
 // APP_VERSION by hand on every deploy (any changed string works - a
 // timestamp is easiest to keep unique).
-var APP_VERSION="2026-10-31T02:00:00Z-largegroupfixes";
+var APP_VERSION="2026-10-31T03:00:00Z-feedscrollfix";
 function isStandaloneMode(){
   return window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;
 }
@@ -3397,25 +3397,43 @@ function buildFeed(t,grp){
       if(!ST.feedRenderedThrough)ST.feedRenderedThrough={};
       if(rendered>0)ST.feedRenderedThrough[grp.id]=allItems[rendered-1].id;
       rendering=false;
-      // Add load more sentinel if more items remain
+      // Add load more sentinel if more items remain.
+      // This used to check document.getElementById("feed-sentinel") first
+      // and skip creating one if that id was already live on the page -
+      // but buildFeed() runs on every redraw (any new comment/reaction/post
+      // from anyone in the group triggers one), building a detached tree
+      // before the diffing engine patches it onto the real page. That check
+      // was looking at the OLD live page, saw a sentinel still there, and
+      // skipped adding one to the NEW tree - so the rebuilt version the page
+      // actually got morphed to had no sentinel at all, and the diffing
+      // engine (morphChildren) deletes any old element with no match in the
+      // new tree. The real sentinel, and the scroll-watcher on it, vanished
+      // on the very next redraw after it was created - almost always before
+      // anyone had scrolled far enough to trigger it. "Loads the first
+      // batch, then nothing" is exactly what that produces.
+      // Fixed by always building a sentinel here and marking it
+      // data-nomorph, the same escape hatch this file already uses for any
+      // element carrying live, non-reproducible state (see NOMORPH_TAGSET
+      // above) - it forces the diffing engine to fully replace the old
+      // sentinel with the new one (by id) instead of trying to reuse it, so
+      // there's always exactly one live sentinel with a working watcher on
+      // it, start to finish.
       if(rendered<allItems.length){
-        var sentinel=document.getElementById("feed-sentinel");
-        if(!sentinel){
-          sentinel=document.createElement("div");
-          sentinel.id="feed-sentinel";
-          sentinel.style.height="1px";
-          list.appendChild(sentinel);
-          // Watch sentinel - load more when it enters view
-          if("IntersectionObserver" in window){
-            var obs=new IntersectionObserver(function(entries){
-              if(entries[0].isIntersecting){
-                obs.disconnect();
-                sentinel.remove();
-                renderBatch(true);
-              }
-            },{rootMargin:"200px"});
-            obs.observe(sentinel);
-          }
+        var sentinel=document.createElement("div");
+        sentinel.id="feed-sentinel";
+        sentinel.setAttribute("data-nomorph","1");
+        sentinel.style.height="1px";
+        list.appendChild(sentinel);
+        // Watch sentinel - load more when it enters view
+        if("IntersectionObserver" in window){
+          var obs=new IntersectionObserver(function(entries){
+            if(entries[0].isIntersecting){
+              obs.disconnect();
+              sentinel.remove();
+              renderBatch(true);
+            }
+          },{rootMargin:"200px"});
+          obs.observe(sentinel);
         }
       }
     }
