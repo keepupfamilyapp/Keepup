@@ -147,7 +147,7 @@ window.addEventListener("unhandledrejection",function(e){
 // refresh instead of leaving people stuck in a stale session. Bump
 // APP_VERSION by hand on every deploy (any changed string works - a
 // timestamp is easiest to keep unique).
-var APP_VERSION="2026-10-30T19:00:00Z-profilecleanup";
+var APP_VERSION="2026-10-30T21:00:00Z-ownbdaysheet";
 function isStandaloneMode(){
   return window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;
 }
@@ -1740,7 +1740,7 @@ var ST={
   feedRendered:{},feedRenderedThrough:{},allReactions:{},upPhotos:[],mutedGroups:[],muteComments:false,muteDailyReminder:false,
   boarded:false,obStep:0,obName:"",obAvatar:"\uD83D\uDC69",obPhoto:null,
   obGrpName:"",obGrpEmoji:"\u2764\uFE0F",obGrpPhoto:null,joinInvite:false,inviteError:null,fbMembers:{},
-  editingGroup:null,editingBirthdays:false,creatingGroup:false,showGroupSwitcher:false,navExpanded:false,showTutorial:false,tutorialStep:0,replyTo:null,profileWallpaper:null,sessionStart:Date.now(),memoryDay:null,memoryPosts:null,appReady:false,leaveGroupId:null,myPendingInvite:null,invitePhoneBusy:false,
+  editingGroup:null,editingBirthdays:false,editingOwnBirthday:false,creatingGroup:false,showGroupSwitcher:false,navExpanded:false,showTutorial:false,tutorialStep:0,replyTo:null,profileWallpaper:null,sessionStart:Date.now(),memoryDay:null,memoryPosts:null,appReady:false,leaveGroupId:null,myPendingInvite:null,invitePhoneBusy:false,
   tab:"feed",group:"imm",name:"Sean",avatar:"\uD83D\uDC68",feedLoading:false,
   openChat:null,
   chatMsgs:{imm:[]},
@@ -3211,6 +3211,7 @@ function buildApp(){
 if(ST.editingGroup)wrap.appendChild(buildEditGroup(ST.editingGroup));
   if(ST.creatingGroup)wrap.appendChild(buildCreateGroup());
   if(ST.editingBirthdays)wrap.appendChild(buildEditBirthdays());
+  if(ST.editingOwnBirthday)wrap.appendChild(buildOwnBirthdaySheet(th(ST.group)));
   if(ST.newDm)wrap.appendChild(buildNewDm());
   if(ST.addEv)wrap.appendChild(buildAddEvent(t));
   if(ST.compose)wrap.appendChild(buildCompose(t,grp));
@@ -5643,13 +5644,47 @@ function buildOwnBirthdayCard(t){
   var curBday=currentUser?localStorage.getItem("ku_bday_"+currentUser.uid)||"":"";
   var bdayDisp=d({css:{flex:1,fontSize:"14px",color:curBday?"#3D2314":"#9B7B62"}},curBday?"Your birthday: "+curBday:"Tap to add your birthday");
   var bdayEditBtn=b({css:{padding:"7px 14px",borderRadius:"50px",background:t.a,border:"none",fontSize:"12px",fontWeight:700,color:"white",cursor:"pointer",fontFamily:"inherit"}},curBday?"Edit":"Add");
-  var MNAMES3=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   bdayEditBtn.addEventListener("click",function(){
-    var month=prompt("Birthday month (1-12):");
-    var day=prompt("Birthday day (1-31):");
-    if(!month||!day)return;
-    var m=parseInt(month);var dy=parseInt(day);
-    if(isNaN(m)||m<1||m>12||isNaN(dy)||dy<1||dy>31){alert("Please enter a valid date");return;}
+    ST.editingOwnBirthday=true;redraw();
+  });
+  bdayRow.appendChild(bdayDisp);bdayRow.appendChild(bdayEditBtn);
+  bdayCard.appendChild(bdayRow);
+  return bdayCard;
+}
+
+function buildOwnBirthdaySheet(t){
+  var ov=d({cls:"overlay"});ov.addEventListener("click",function(){ST.editingOwnBirthday=false;redraw();});
+  var sh=d({cls:"sheet"});sh.addEventListener("click",function(e){e.stopPropagation();});
+  sh.appendChild(d({cls:"handle"}));
+  sh.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"18px",fontWeight:600,color:"#3D2314",marginBottom:"4px"}},"Your Birthday 🎂"));
+  sh.appendChild(d({css:{fontSize:"13px",color:"#9B7B62",marginBottom:"16px"}},"Shown on your profile and shared with your groups."));
+
+  var MNAMES3=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  var MONTHS_FULL=["January","February","March","April","May","June","July","August","September","October","November","December"];
+  var curBday=currentUser?localStorage.getItem("ku_bday_"+currentUser.uid)||"":"";
+  var prefillMonth=1,prefillDay="";
+  if(curBday){
+    var bdParts=curBday.split(" ");
+    var mi=MNAMES3.indexOf(bdParts[0]);
+    if(mi>=0)prefillMonth=mi+1;
+    if(bdParts[1])prefillDay=bdParts[1];
+  }
+
+  var dateRow=d({css:{display:"flex",gap:"8px",marginBottom:"16px"}});
+  var monthSel=document.createElement("select");
+  monthSel.style.cssText="flex:1;padding:11px 12px;border-radius:12px;border:1.5px solid #F5DDD1;background:#FAF6F0;font-size:13px;color:#3D2314;outline:none;font-family:inherit;";
+  MONTHS_FULL.forEach(function(m,i){
+    var o=document.createElement("option");o.value=i+1;o.textContent=m;if(i+1===prefillMonth)o.selected=true;monthSel.appendChild(o);
+  });
+  var dayIn=document.createElement("input");dayIn.type="number";dayIn.placeholder="Day";dayIn.min="1";dayIn.max="31";
+  if(prefillDay)dayIn.value=prefillDay;
+  dayIn.style.cssText="width:90px;padding:11px 12px;border-radius:12px;border:1.5px solid #F5DDD1;background:#FAF6F0;font-size:13px;color:#3D2314;outline:none;font-family:inherit;";
+  dateRow.appendChild(monthSel);dateRow.appendChild(dayIn);sh.appendChild(dateRow);
+
+  var saveBtn=b({css:{width:"100%",padding:"13px",borderRadius:"50px",background:t.a,border:"none",color:"white",fontSize:"14px",fontWeight:800,cursor:"pointer",fontFamily:"inherit"}},"Save");
+  saveBtn.addEventListener("click",function(){
+    var m=parseInt(monthSel.value);var dy=parseInt(dayIn.value);
+    if(isNaN(m)||m<1||m>12||isNaN(dy)||dy<1||dy>31){showTopToast("Please enter a valid date.");return;}
     var bdayStr=MNAMES3[m-1]+" "+dy;
     localStorage.setItem("ku_bday_"+(currentUser?currentUser.uid:""),bdayStr);
     if(currentUser){
@@ -5663,11 +5698,11 @@ function buildOwnBirthdayCard(t){
         if(ei>=0)ST.birthdays[ei]=bdayObj;else ST.birthdays.push(bdayObj);
       });
     }
+    ST.editingOwnBirthday=false;
     redraw();
   });
-  bdayRow.appendChild(bdayDisp);bdayRow.appendChild(bdayEditBtn);
-  bdayCard.appendChild(bdayRow);
-  return bdayCard;
+  sh.appendChild(saveBtn);
+  ov.appendChild(sh);return ov;
 }
 
 function buildSimpleToggle(label,sub,stField,fsField){
