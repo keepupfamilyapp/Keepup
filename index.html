@@ -147,7 +147,7 @@ window.addEventListener("unhandledrejection",function(e){
 // refresh instead of leaving people stuck in a stale session. Bump
 // APP_VERSION by hand on every deploy (any changed string works - a
 // timestamp is easiest to keep unique).
-var APP_VERSION="2026-10-31T03:00:00Z-feedscrollfix";
+var APP_VERSION="2026-10-31T04:00:00Z-customicons-phase1";
 function isStandaloneMode(){
   return window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;
 }
@@ -899,7 +899,7 @@ function showSendToChatPicker(feedItem){
   ST.groups.forEach(function(g){
     var t2=th(g.id);
     var row=b({css:{display:"flex",alignItems:"center",gap:"10px",padding:"10px 12px",borderRadius:"12px",background:t2.ap,border:"none",cursor:"pointer",fontFamily:"inherit",textAlign:"left",width:"100%"}});
-    var ic=d({css:{fontSize:"20px"}});ic.textContent=g.icon;row.appendChild(ic);
+    var ic=d({css:{fontSize:"20px"}});renderGlyphOrEmoji(ic,g.icon);row.appendChild(ic);
     var lbl=d({css:{flex:1}});lbl.appendChild(d({css:{fontSize:"14px",fontWeight:700,color:t2.ad}},g.label+" Chat"));
     lbl.appendChild(d({css:{fontSize:"11px",color:t2.al}},((ST.mems[g.id]||[]).length||"")+" members"));
     row.appendChild(lbl);
@@ -927,7 +927,7 @@ function showSendToChatPicker(feedItem){
     if(dmAv&&(dmAv.startsWith("http")||dmAv.startsWith("data:"))){
       ic.style.backgroundImage="url("+dmAv+")";ic.style.backgroundSize="cover";ic.style.backgroundPosition="center";
     } else {
-      ic.textContent=(dmAv&&dmAv.length<=8)?dmAv:"\uD83D\uDC64";
+      renderGlyphOrEmoji(ic,(dmAv&&dmAv.length<=8)?dmAv:"\uD83D\uDC64");
     }
     row.appendChild(ic);
     var lbl=d({css:{flex:1}});lbl.appendChild(d({css:{fontSize:"14px",fontWeight:700,color:"#3D2314"}},dm.members.map(function(m){return m.name;}).join(", ")));
@@ -1738,6 +1738,47 @@ var TH={
 };
 function th(id){return TH[id]||TH.imm;}
 
+// Custom-drawn replacements for the system emoji this app uses as its own
+// iconography (the default "no photo" avatar, and the group-identity
+// picker) - same flat, bold, single-shape weight as the house emoji Sean
+// wanted to keep the look of, but drawn once here instead of relying on
+// whatever emoji font the viewer's phone happens to ship, so it looks
+// identical on every device instead of varying by platform. Keyed by the
+// SAME emoji character that was already being stored everywhere (group
+// docs, localStorage, ST.avatar) - this is a rendering-only change, so no
+// data migration was needed; renderGlyphOrEmoji below falls back to the
+// real emoji character for any value not in this table (a person's own
+// chosen avatar emoji from the family-birthdays picker, say), so nothing
+// renders blank if a value isn't covered yet.
+// Each SVG is sized in "1em" so it fills whatever font-size the calling
+// container already specifies, exactly like the text glyph it replaces -
+// no call site needs its own sizing changed.
+var ICON_SVG={
+  // Default avatar silhouette (replaces the generic "no photo" person emoji)
+  "👤":'<svg viewBox="0 0 24 24" width="1em" height="1em" style="display:block"><circle cx="12" cy="8.3" r="4.3" fill="#9B7B62"/><path d="M4 20.3c0-4.6 3.6-7.6 8-7.6s8 3 8 7.6v.4a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-.4Z" fill="#9B7B62"/></svg>',
+  // Group identity icons
+  "❤️":'<svg viewBox="0 0 24 24" width="1em" height="1em" style="display:block"><path d="M12 20.3c-.3 0-.6-.1-.9-.3C6.6 16.3 3 13.1 3 9.2 3 6.3 5.3 4 8.2 4c1.7 0 3.2.9 3.8 2.2C12.6 4.9 14.1 4 15.8 4 18.7 4 21 6.3 21 9.2c0 3.9-3.6 7.1-8.1 10.8-.3.2-.6.3-.9.3Z" fill="#C4714A"/></svg>',
+  "🌸":'<svg viewBox="0 0 24 24" width="1em" height="1em" style="display:block"><g fill="#D48DBB"><circle cx="12" cy="6.4" r="3.3"/><circle cx="17" cy="9.8" r="3.3"/><circle cx="15.1" cy="15.8" r="3.3"/><circle cx="8.9" cy="15.8" r="3.3"/><circle cx="7" cy="9.8" r="3.3"/></g><circle cx="12" cy="11.4" r="2.3" fill="#B5699A"/></svg>',
+  "🌲":'<svg viewBox="0 0 24 24" width="1em" height="1em" style="display:block"><path d="M12 2.3 19 15H5L12 2.3Z" fill="#4A7C59"/><rect x="10.3" y="15" width="3.4" height="5.6" rx="1" fill="#6B4226"/></svg>',
+  "⭐":'<svg viewBox="0 0 24 24" width="1em" height="1em" style="display:block"><path d="M12 2.3 14.7 8.8 21.6 9.4 16.4 14 18 20.8 12 17.1 6 20.8 7.6 14 2.4 9.4 9.3 8.8 12 2.3Z" fill="#C4922A"/></svg>',
+  "🏠":'<svg viewBox="0 0 24 24" width="1em" height="1em" style="display:block"><path d="M12 2.6 2 11h3v9h5v-6h4v6h5v-9h3L12 2.6Z" fill="#C4714A"/></svg>',
+  "🎉":'<svg viewBox="0 0 24 24" width="1em" height="1em" style="display:block"><path d="M4 20 9 7l9 8-14 5Z" fill="#C4714A"/><circle cx="17.3" cy="5" r="1.3" fill="#C4922A"/><circle cx="20.3" cy="9.3" r="1" fill="#B5699A"/><circle cx="14" cy="3.3" r="1" fill="#4A7C59"/></svg>',
+  "🌻":'<svg viewBox="0 0 24 24" width="1em" height="1em" style="display:block"><g fill="#C4922A"><circle cx="12" cy="5" r="2.6"/><circle cx="17.5" cy="8" r="2.6"/><circle cx="17.5" cy="14.2" r="2.6"/><circle cx="12" cy="17.2" r="2.6"/><circle cx="6.5" cy="14.2" r="2.6"/><circle cx="6.5" cy="8" r="2.6"/></g><circle cx="12" cy="11.1" r="3.4" fill="#6B4226"/></svg>',
+  "🦋":'<svg viewBox="0 0 24 24" width="1em" height="1em" style="display:block"><path d="M11.3 6.5c-.8-2-3-3.5-5-3-2.3.6-3.3 3.2-2.2 5.3.9 1.8 3 2.9 5 2.7-2 .4-3.7 1.8-4.2 3.8-.6 2.3 1 4.5 3.3 4.5 2 0 3.7-1.6 4.1-3.6V6.5Z" fill="#B5699A"/><path d="M12.7 6.5c.8-2 3-3.5 5-3 2.3.6 3.3 3.2 2.2 5.3-.9 1.8-3 2.9-5 2.7 2 .4 3.7 1.8 4.2 3.8.6 2.3-1 4.5-3.3 4.5-2 0-3.7-1.6-4.1-3.6V6.5Z" fill="#D48DBB"/><rect x="11.3" y="5" width="1.4" height="14.3" rx="0.7" fill="#6B4226"/></svg>',
+  "🌊":'<svg viewBox="0 0 24 24" width="1em" height="1em" style="display:block"><path d="M2 12.5c2-2 4-2 6 0s4 2 6 0 4-2 6 0 4 2 6 0" stroke="#C4714A" stroke-width="2.2" fill="none" stroke-linecap="round"/><path d="M2 18c2-2 4-2 6 0s4 2 6 0 4-2 6 0 4 2 6 0" stroke="#E8956D" stroke-width="2.2" fill="none" stroke-linecap="round"/></svg>',
+  "🍂":'<svg viewBox="0 0 24 24" width="1em" height="1em" style="display:block"><path d="M12 3c6 2 8 8 5 13-2.5 4-8 5-11 2-3-3-2-8.5 2-11C9.5 5.5 10.7 4 12 3Z" fill="#C4714A"/><path d="M12 4.5v15" stroke="#6B4226" stroke-width="1" stroke-linecap="round"/></svg>',
+  "🎶":'<svg viewBox="0 0 24 24" width="1em" height="1em" style="display:block"><g fill="#6B4226"><circle cx="6" cy="18" r="2.6"/><circle cx="15" cy="16" r="2.6"/></g><path d="M8.3 18V6.5L17.3 4v11.5" stroke="#6B4226" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  "🌙":'<svg viewBox="0 0 24 24" width="1em" height="1em" style="display:block"><path d="M15.5 3.3a9 9 0 1 0 5 14.7A7.3 7.3 0 0 1 15.5 3.3Z" fill="#6B4226"/><circle cx="19.2" cy="6" r="0.9" fill="#C4922A"/></svg>'
+};
+// Single choke point for rendering any emoji-keyed glyph (avatar fallback,
+// group icon, or a plain chosen emoji) - checks ICON_SVG first, falls back
+// to the literal character so nothing not yet redrawn goes blank.
+function renderGlyphOrEmoji(container,val){
+  container.textContent="";
+  if(val&&ICON_SVG[val])container.innerHTML=ICON_SVG[val];
+  else container.textContent=val;
+}
+
 var ST={
   feedRendered:{},feedRenderedThrough:{},allReactions:{},upPhotos:[],mutedGroups:[],muteComments:false,muteDailyReminder:false,
   boarded:false,obStep:0,obName:"",obAvatar:"\uD83D\uDC69",obPhoto:null,
@@ -1804,7 +1845,7 @@ function setGroupIcon(container,g){
     img.style.cssText="width:100%;height:100%;object-fit:cover;border-radius:50%;";
     container.appendChild(img);
   } else {
-    container.textContent=g?g.icon:"";
+    renderGlyphOrEmoji(container,g?g.icon:"");
   }
 }
 
@@ -1863,9 +1904,9 @@ function renderAvatarGlyph(container,rawVal,threshold,fallback){
     img.style.cssText="width:100%;height:100%;object-fit:cover;border-radius:50%;";
     container.appendChild(img);
   } else if(!val||val.length>threshold||new RegExp("^[A-Za-z0-9_-]{"+threshold+",}$").test(val)){
-    container.textContent=fallback;
+    renderGlyphOrEmoji(container,fallback);
   } else {
-    container.textContent=val;
+    renderGlyphOrEmoji(container,val);
   }
 }
 
@@ -1893,7 +1934,7 @@ function renderAvatarBackground(target,rawVal,threshold,fallback){
     target.style.backgroundSize="cover";
     target.style.backgroundPosition="center";
   } else {
-    target.textContent=(val&&val.length<=threshold)?val:fallback;
+    renderGlyphOrEmoji(target,(val&&val.length<=threshold)?val:fallback);
   }
 }
 
@@ -2850,7 +2891,7 @@ function buildOnboarding(){
       divR2.appendChild(d({css:{flex:1,height:"1px",background:"#F5DDD1"}}));divR2.appendChild(d({css:{fontSize:"12px",color:"#9B7B62",fontWeight:700}},"OR pick an emoji"));divR2.appendChild(d({css:{flex:1,height:"1px",background:"#F5DDD1"}}));body.appendChild(divR2);
       var egrid=d({css:{display:"flex",flexWrap:"wrap",gap:"8px",marginBottom:"16px"}});
       ["\u2764\uFE0F","\uD83C\uDF38","\uD83C\uDF32","\u2B50","\uD83C\uDFE0","\uD83C\uDF89","\uD83C\uDF3B","\uD83E\uDD8B","\uD83C\uDF0A","\uD83C\uDF42","\uD83C\uDFB6","\uD83C\uDF19"].forEach(function(e){
-        var eb=b({css:{width:"44px",height:"44px",borderRadius:"11px",background:ST.obGrpEmoji===e&&!ST.obGrpPhoto?"#F5DDD1":"#FFF9F2",border:"2px solid "+(ST.obGrpEmoji===e&&!ST.obGrpPhoto?"#C4714A":"rgba(107,66,38,.12)"),fontSize:"21px",cursor:"pointer",fontFamily:"inherit"}},e);
+        var eb=b({css:{width:"44px",height:"44px",borderRadius:"11px",background:ST.obGrpEmoji===e&&!ST.obGrpPhoto?"#F5DDD1":"#FFF9F2",border:"2px solid "+(ST.obGrpEmoji===e&&!ST.obGrpPhoto?"#C4714A":"rgba(107,66,38,.12)"),fontSize:"21px",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center"}});renderGlyphOrEmoji(eb,e);
         eb.addEventListener("click",function(){ST.obGrpEmoji=e;ST.obGrpPhoto=null;redraw();});egrid.appendChild(eb);
       });
       body.appendChild(egrid);body.appendChild(d({cls:"ob-spacer"}));
@@ -3074,9 +3115,9 @@ function buildApp(){
   if(avDisplayVal.startsWith("http")||avDisplayVal.startsWith("data:")){
     var avImg=el("img",{css:{width:"100%",height:"100%",objectFit:"cover",display:"block",borderRadius:"50%"}});avImg.src=avDisplayVal;av.appendChild(avImg);
   } else if(avDisplayVal.length>10||/^[A-Za-z0-9_-]{10,}$/.test(avDisplayVal)){
-    av.textContent="\uD83D\uDC64";
+    renderGlyphOrEmoji(av,"\uD83D\uDC64");
   } else {
-    av.textContent=avDisplayVal;
+    renderGlyphOrEmoji(av,avDisplayVal);
   }
   av.addEventListener("click",function(){ST.tab="profile";redraw();});
   var offlineBadge=d({css:{fontSize:"10px",fontWeight:700,color:"#9B7B62",background:"#F5DDD1",padding:"3px 8px",borderRadius:"50px",display:navigator.onLine?"none":"flex",alignItems:"center",gap:"4px"}});
@@ -3092,7 +3133,7 @@ function buildApp(){
     ST.groups.forEach(function(g){
       var gt=th(g.id);var ia=g.id===ST.group;
       var gr=b({css:{display:"flex",alignItems:"center",gap:"10px",width:"100%",padding:"12px 16px",background:ia?gt.ap:"white",border:"none",borderBottom:"1px solid #F5DDD1",fontSize:"14px",fontWeight:ia?800:600,color:ia?gt.ad:"#3D2314",cursor:"pointer",fontFamily:"inherit",textAlign:"left"}});
-      var gi=d({css:{fontSize:"18px"}});gi.textContent=g.icon;gr.appendChild(gi);gr.appendChild(document.createTextNode(g.label));
+      var gi=d({css:{fontSize:"18px"}});renderGlyphOrEmoji(gi,g.icon);gr.appendChild(gi);gr.appendChild(document.createTextNode(g.label));
       var gfuc=feedUnreadCount(g.id);
       if(gfuc>0){var gbdg=d({css:{background:"#C0392B",color:"white",borderRadius:"50px",padding:"1px 7px",fontSize:"10px",fontWeight:800,marginLeft:"6px"}});gbdg.textContent=gfuc>99?"99+":String(gfuc);gr.appendChild(gbdg);}
       if(ia)gr.appendChild(d({css:{marginLeft:"auto",fontSize:"14px",color:gt.a}},"\u2713"));
@@ -3129,7 +3170,7 @@ function buildApp(){
   homeBtn.style.position="relative";
   // Show badge on home button only when nav is collapsed
   var showHomeBadge=totalUnread>0&&!ST.navExpanded;
-  homeBtn.innerHTML="&#127968;"+(showHomeBadge
+  homeBtn.innerHTML=ICON_SVG["🏠"]+(showHomeBadge
     ?"<span style='position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;background:#C0392B;border-radius:50px;border:2px solid white;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:white;font-family:inherit;padding:0 4px;box-sizing:border-box;'>"+( totalUnread>99?"99+":String(totalUnread))+"</span>"
     :"");
   homeBtn.addEventListener("click",function(){
@@ -3150,14 +3191,14 @@ function buildApp(){
       // Toggle nav pill without full redraw to avoid flash
       ST.navExpanded=!ST.navExpanded;
       // Update home button badge immediately when nav state changes
-      liveHome.innerHTML="&#127968;"+((!ST.navExpanded&&totalUnread>0)
+      liveHome.innerHTML=ICON_SVG["🏠"]+((!ST.navExpanded&&totalUnread>0)
         ?"<span style='position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;background:#C0392B;border-radius:50px;border:2px solid white;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:white;font-family:inherit;padding:0 4px;box-sizing:border-box;'>"+( totalUnread>99?"99+":String(totalUnread))+"</span>"
         :"");
       var existingPill=liveNav.querySelector(".nav-pill");
       if(ST.navExpanded&&!existingPill){
         var navPill2=d({id:"nav-pill-menu",css:{background:"white",borderRadius:"50px",padding:"5px 6px",display:"flex",gap:"2px",boxShadow:"0 4px 20px rgba(0,0,0,.15)",animation:"fadeUp .2s ease"}});
         navPill2.className="nav-pill";
-        [["chat","&#128172;","Chat"],["calendar","&#128197;","Cal"],["profile","&#128100;","Me"]].forEach(function(n){
+        [["chat","&#128172;","Chat"],["calendar","&#128197;","Cal"],["profile",ICON_SVG["👤"],"Me"]].forEach(function(n){
           var nb=b({css:{display:"flex",flexDirection:"column",alignItems:"center",gap:"2px",padding:"5px 12px",borderRadius:"50px",background:ST.tab===n[0]?t.ap:"transparent",border:"none",cursor:"pointer",fontFamily:"inherit",WebkitUserSelect:"none",userSelect:"none"}});
           nb.appendChild(d({html:n[1],css:{fontSize:"18px"}}));
           nb.appendChild(el("small",{css:{fontSize:"9px",color:ST.tab===n[0]?t.a:"#9B7B62",fontWeight:ST.tab===n[0]?800:600}},n[2]));
@@ -3191,7 +3232,7 @@ function buildApp(){
   navFloat.appendChild(homeBtn);
   if(ST.navExpanded){
     var navPill=d({css:{background:"white",borderRadius:"50px",padding:"5px 6px",display:"flex",gap:"2px",boxShadow:"0 4px 20px rgba(0,0,0,.15)",animation:"fadeUp .2s ease"}});
-    [["chat","&#128172;","Chat"],["calendar","&#128197;","Cal"],["profile","&#128100;","Me"]].forEach(function(n){
+    [["chat","&#128172;","Chat"],["calendar","&#128197;","Cal"],["profile",ICON_SVG["👤"],"Me"]].forEach(function(n){
       var nb=b({css:{display:"flex",flexDirection:"column",alignItems:"center",gap:"2px",padding:"5px 12px",borderRadius:"50px",background:ST.tab===n[0]?t.ap:"transparent",border:"none",cursor:"pointer",fontFamily:"inherit",position:"relative"}});
       nb.appendChild(d({html:n[1],css:{fontSize:"18px"}}));
       nb.appendChild(el("small",{css:{fontSize:"9px",color:ST.tab===n[0]?t.a:"#9B7B62",fontWeight:ST.tab===n[0]?800:600}},n[2]));
@@ -3350,7 +3391,7 @@ function buildFeed(t,grp){
     list.appendChild(loading);
   } else if(!feedItems.length){
     var empty=d({css:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"50px 24px",textAlign:"center"}});
-    var eicon=d({css:{fontSize:"52px",marginBottom:"14px",animation:"float 3s ease-in-out infinite"}});eicon.textContent=grp.icon;empty.appendChild(eicon);
+    var eicon=d({css:{fontSize:"52px",marginBottom:"14px",animation:"float 3s ease-in-out infinite"}});renderGlyphOrEmoji(eicon,grp.icon);empty.appendChild(eicon);
     empty.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"20px",fontWeight:600,color:"#3D2314",marginBottom:"8px"}},grp.label+" is quiet..."));
     var ep=b({css:{padding:"12px 26px",borderRadius:"50px",background:t.a,border:"none",color:"white",fontSize:"14px",fontWeight:800,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 4px 16px "+t.a+"66"}},"Post Something");
     ep.addEventListener("click",function(){ST.compose=true;redraw();});empty.appendChild(ep);
@@ -4054,9 +4095,9 @@ function buildChatView(t,grp){
   if(chatIcon&&(chatIcon.startsWith("http")||chatIcon.startsWith("data:"))){
     var hdrImg=document.createElement("img");hdrImg.src=chatIcon;hdrImg.style.cssText="width:100%;height:100%;object-fit:cover;";ic.appendChild(hdrImg);makeAvatarTappable(ic,chatIcon);
   } else if(!chatIcon||chatIcon.length>10||/^[A-Za-z0-9_-]{10,}$/.test(chatIcon)){
-    ic.textContent="\uD83D\uDC64";
+    renderGlyphOrEmoji(ic,"\uD83D\uDC64");
   } else {
-    ic.textContent=chatIcon;
+    renderGlyphOrEmoji(ic,chatIcon);
   }
   hdr.appendChild(ic);
   var hi=d({css:{flex:1}});hi.appendChild(d({css:{fontSize:"15px",fontWeight:700,color:"#3D2314"}},chatName));hi.appendChild(d({css:{fontSize:"11px",color:t.al}},chatSub));
@@ -4260,9 +4301,9 @@ function buildChatView(t,grp){
         makeAvatarTappable(ma,msgAv);
       } else if(msgAv.length>10||/^[A-Za-z0-9_-]{10,}$/.test(msgAv)){
         // Looks like a uid - use default
-        ma.textContent="\uD83D\uDC64";
+        renderGlyphOrEmoji(ma,"\uD83D\uDC64");
       } else {
-        ma.textContent=msgAv;
+        renderGlyphOrEmoji(ma,msgAv);
       }
       row.appendChild(ma);
     }
@@ -5752,7 +5793,7 @@ function buildNotificationsCard(){
   ST.groups.forEach(function(g){
     var nRow=d({css:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"9px 0",borderBottom:"1px solid #F5DDD1"}});
     var nLeft=d({css:{display:"flex",alignItems:"center",gap:"8px"}});
-    nLeft.appendChild(d({css:{fontSize:"18px"}},g.icon||"❤️"));
+    var nIcon=d({css:{fontSize:"18px"}});renderGlyphOrEmoji(nIcon,g.icon||"❤️");nLeft.appendChild(nIcon);
     nLeft.appendChild(d({css:{fontSize:"13px",fontWeight:700,color:"#3D2314"}},g.label));
     nRow.appendChild(nLeft);
     var isMuted=ST.mutedGroups.indexOf(g.id)!==-1;
@@ -6152,7 +6193,8 @@ function buildAddEvent(t){
   var gp=d({css:{display:"flex",gap:"6px",flexWrap:"wrap",marginBottom:"16px"}});
   ST.groups.forEach(function(g){
     var gt=th(g.id);var sel=ST.nEv.groupId===g.id;
-    var gb=b({css:{display:"flex",alignItems:"center",gap:"5px",padding:"7px 12px",borderRadius:"50px",background:sel?gt.ap:"#FAF6F0",border:"2px solid "+(sel?gt.a:"rgba(107,66,38,.12)"),fontSize:"12px",fontWeight:700,color:sel?gt.ad:"#6B4C35",cursor:"pointer",fontFamily:"inherit"}},g.icon+" "+g.label);
+    var gbIcon=d({css:{fontSize:"13px",lineHeight:1,display:"flex"}});renderGlyphOrEmoji(gbIcon,g.icon);
+    var gb=b({css:{display:"flex",alignItems:"center",gap:"5px",padding:"7px 12px",borderRadius:"50px",background:sel?gt.ap:"#FAF6F0",border:"2px solid "+(sel?gt.a:"rgba(107,66,38,.12)"),fontSize:"12px",fontWeight:700,color:sel?gt.ad:"#6B4C35",cursor:"pointer",fontFamily:"inherit"}},[gbIcon,g.label]);
     gb.addEventListener("click",function(){ST.nEv.groupId=g.id;ST.nEv.group=g.label;redraw();});gp.appendChild(gb);
   });sh.appendChild(gp);
   var sub=b({css:{width:"100%",padding:"14px",borderRadius:"50px",background:t.a,border:"none",color:"white",fontSize:"15px",fontWeight:800,cursor:"pointer",fontFamily:"inherit"}},isEditing?"Save Changes":"Add to Calendar");
@@ -6297,7 +6339,9 @@ function closePinPicker(keep){
 function buildCompose(t,grp){
   var ov=d({cls:"overlay"});ov.addEventListener("click",function(){ST.compose=false;redraw();});
   var sh=d({cls:"sheet"});sh.addEventListener("click",function(e){e.stopPropagation();});
-  sh.appendChild(d({cls:"handle"}));sh.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"18px",fontWeight:600,color:"#3D2314",marginBottom:"14px"}},"Share with "+grp.icon+" "+grp.label));
+  sh.appendChild(d({cls:"handle"}));
+  var shareTitleIcon=d({css:{fontSize:"18px",lineHeight:1,display:"inline-flex",verticalAlign:"middle",margin:"0 2px"}});renderGlyphOrEmoji(shareTitleIcon,grp.icon);
+  sh.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"18px",fontWeight:600,color:"#3D2314",marginBottom:"14px",display:"flex",alignItems:"center"}},["Share with ",shareTitleIcon," "+grp.label]));
   [["&#128247;","Share a Photo","photo"],["&#128205;","Post a Check-in","checkin"]].forEach(function(opt){
     var row=d({css:{display:"flex",alignItems:"center",gap:"10px",padding:"13px",borderRadius:"14px",background:t.bg,border:"2px solid "+t.ap,cursor:"pointer",marginBottom:"8px"}});
     var ic=d({html:opt[0],css:{fontSize:"22px",width:"42px",height:"42px",borderRadius:"11px",background:"white",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}});row.appendChild(ic);
@@ -6328,9 +6372,9 @@ function buildUpload(t,grp){
     if(stAvVal.startsWith("http")||stAvVal.startsWith("data:")){
       var sAvImg=document.createElement("img");sAvImg.src=stAvVal;sAvImg.style.cssText="width:100%;height:100%;object-fit:cover;";savEl.appendChild(sAvImg);
     } else if(stAvVal.length>10||/^[A-Za-z0-9_-]{10,}$/.test(stAvVal)){
-      savEl.textContent="\uD83D\uDC64"; // uid fallback
+      renderGlyphOrEmoji(savEl,"\uD83D\uDC64"); // uid fallback
     } else {
-      savEl.textContent=stAvVal;
+      renderGlyphOrEmoji(savEl,stAvVal);
     }
     sRow.appendChild(savEl);
     var stArea=el("textarea",{placeholder:"What's on your mind, "+(ST.name||"friend")+"?",css:{flex:1,border:"none",background:"transparent",fontSize:"16px",color:"#3D2314",resize:"none",outline:"none",fontFamily:"inherit",lineHeight:"1.5",minHeight:"100px"}});
@@ -6518,7 +6562,7 @@ function buildComments(t){
     if(cAvIsUrl){
       av.style.backgroundImage="url("+c.av+")";av.style.backgroundSize="cover";av.style.backgroundPosition="center";
     } else {
-      av.textContent=(c.av&&c.av.length<=8)?c.av:"\uD83D\uDC64";
+      renderGlyphOrEmoji(av,(c.av&&c.av.length<=8)?c.av:"\uD83D\uDC64");
     }
     row.appendChild(av);
     var cd=d({css:{flex:1}});var cb2=d({css:{background:t.bg,borderRadius:"5px 13px 13px 13px",padding:"8px 11px",border:"1px solid "+t.ap}});
@@ -6594,7 +6638,7 @@ function buildCreateGroup(){
   var selEmoji=["\u2764\uFE0F"];
   var egrid=d({css:{display:"flex",flexWrap:"wrap",gap:"8px",marginBottom:"16px"}});
   ["\u2764\uFE0F","\uD83C\uDF38","\uD83C\uDF32","\u2B50","\uD83C\uDFE0","\uD83C\uDF89","\uD83C\uDF3B","\uD83E\uDD8B","\uD83C\uDF0A","\uD83C\uDF42","\uD83C\uDFB6","\uD83C\uDF19"].forEach(function(e){
-    var eb=b({css:{width:"44px",height:"44px",borderRadius:"11px",background:selEmoji[0]===e?"#F5DDD1":"#FAF6F0",border:"2px solid "+(selEmoji[0]===e?"#C4714A":"rgba(107,66,38,.12)"),fontSize:"21px",cursor:"pointer",fontFamily:"inherit"}},e);
+    var eb=b({css:{width:"44px",height:"44px",borderRadius:"11px",background:selEmoji[0]===e?"#F5DDD1":"#FAF6F0",border:"2px solid "+(selEmoji[0]===e?"#C4714A":"rgba(107,66,38,.12)"),fontSize:"21px",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center"}});renderGlyphOrEmoji(eb,e);
     eb.addEventListener("click",function(){
       selEmoji[0]=e;
       egrid.querySelectorAll("button").forEach(function(btn){btn.style.background="#FAF6F0";btn.style.borderColor="rgba(107,66,38,.12)";});
@@ -6687,7 +6731,7 @@ function buildEditGroup(gid){
   var gpRow=d({css:{display:"flex",alignItems:"center",gap:"12px",marginBottom:"14px"}});
   var gpCircle=d({css:{width:"56px",height:"56px",borderRadius:"50%",background:gt.ap,border:"2px solid "+gt.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"28px",flexShrink:0,overflow:"hidden",cursor:"pointer"}});
   if(g.photo){var gpPi=document.createElement("img");gpPi.src=g.photo;gpPi.style.cssText="width:100%;height:100%;object-fit:cover;";gpCircle.appendChild(gpPi);}
-  else gpCircle.textContent=g.icon;
+  else renderGlyphOrEmoji(gpCircle,g.icon);
   var gpFi=document.createElement("input");gpFi.type="file";gpFi.accept="image/*";gpFi.style.display="none";
   gpFi.addEventListener("change",function(){
     var f=this.files&&this.files[0];if(!f)return;
@@ -6724,7 +6768,7 @@ function buildEditGroup(gid){
 
   var egrid=d({css:{display:"flex",flexWrap:"wrap",gap:"8px",marginBottom:"16px"}});
   ["\u2764\uFE0F","\uD83C\uDF38","\uD83C\uDF32","\u2B50","\uD83C\uDFE0","\uD83C\uDF89","\uD83C\uDF3B","\uD83E\uDD8B","\uD83C\uDF0A","\uD83C\uDF42","\uD83C\uDFB6","\uD83C\uDF19"].forEach(function(e){
-    var eb=b({css:{width:"44px",height:"44px",borderRadius:"11px",background:g.icon===e&&!g.photo?"#F5DDD1":"#FAF6F0",border:"2px solid "+(g.icon===e&&!g.photo?gt.a:"rgba(107,66,38,.12)"),fontSize:"21px",cursor:"pointer",fontFamily:"inherit"}},e);
+    var eb=b({css:{width:"44px",height:"44px",borderRadius:"11px",background:g.icon===e&&!g.photo?"#F5DDD1":"#FAF6F0",border:"2px solid "+(g.icon===e&&!g.photo?gt.a:"rgba(107,66,38,.12)"),fontSize:"21px",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center"}});renderGlyphOrEmoji(eb,e);
     eb.addEventListener("click",function(){g.icon=e;g.photo=null;redraw();});egrid.appendChild(eb);
   });
   sh.appendChild(egrid);
@@ -6780,7 +6824,7 @@ function buildEditBirthdays(){
     var avV=bk.av||"";
     var avIsUrl=avV&&(avV.startsWith("http")||avV.startsWith("data:"));
     if(avIsUrl){av.style.backgroundImage="url("+avV+")";av.style.backgroundSize="cover";av.style.backgroundPosition="center";}
-    else{av.textContent=(avV&&avV.length<=8)?avV:"\uD83D\uDC64";}
+    else{renderGlyphOrEmoji(av,(avV&&avV.length<=8)?avV:"\uD83D\uDC64");}
     row.appendChild(av);
     var info=d({css:{flex:1}});
     info.appendChild(d({css:{fontSize:"14px",fontWeight:700,color:"#3D2314"}},bk.name));
@@ -6859,7 +6903,8 @@ function buildNewDm(){
   var gp=d({css:{display:"flex",gap:"6px",marginBottom:"12px",overflowX:"auto"}});gp.style.scrollbarWidth="none";
   ST.groups.forEach(function(g){
     var gt=th(g.id);var sel=ST.dmGrp===g.id;
-    var gb=b({css:{flexShrink:0,display:"flex",alignItems:"center",gap:"5px",padding:"6px 11px",borderRadius:"50px",background:sel?gt.ap:"#FAF6F0",border:"2px solid "+(sel?gt.a:"rgba(107,66,38,.12)"),fontSize:"12px",fontWeight:700,color:sel?gt.ad:"#6B4C35",cursor:"pointer",fontFamily:"inherit"}},g.icon+" "+g.label);
+    var gbIcon=d({css:{fontSize:"13px",lineHeight:1,display:"flex"}});renderGlyphOrEmoji(gbIcon,g.icon);
+    var gb=b({css:{flexShrink:0,display:"flex",alignItems:"center",gap:"5px",padding:"6px 11px",borderRadius:"50px",background:sel?gt.ap:"#FAF6F0",border:"2px solid "+(sel?gt.a:"rgba(107,66,38,.12)"),fontSize:"12px",fontWeight:700,color:sel?gt.ad:"#6B4C35",cursor:"pointer",fontFamily:"inherit"}},[gbIcon,g.label]);
     gb.addEventListener("click",function(){ST.dmGrp=g.id;ST.dmSel=[];redraw();});gp.appendChild(gb);
   });sh.appendChild(gp);
   sh.appendChild(d({css:{fontSize:"11px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".4px",marginBottom:"8px"}},"Select people:"));
