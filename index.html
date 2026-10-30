@@ -147,7 +147,7 @@ window.addEventListener("unhandledrejection",function(e){
 // refresh instead of leaving people stuck in a stale session. Bump
 // APP_VERSION by hand on every deploy (any changed string works - a
 // timestamp is easiest to keep unique).
-var APP_VERSION="2026-10-30T23:00:00Z-profilephoto-collapsegroups";
+var APP_VERSION="2026-10-31T00:00:00Z-collapsegroupsfix";
 function isStandaloneMode(){
   return window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;
 }
@@ -5301,7 +5301,12 @@ function buildGroupsCard(){
     var fbMems=(ST.fbMembers&&ST.fbMembers[g.id])||[];
     var memCount=Math.max(mems.length,fbMems.length);
     var row=d({css:{display:"flex",alignItems:"center",gap:"10px",padding:"11px 15px",borderBottom:isOpen?"none":"1px solid #F5DDD1",cursor:"pointer"}});
-    row.addEventListener("click",function(){ST.expandedGroups[g.id]=!isOpen;redraw();});
+    // Reads ST.expandedGroups live at click time rather than closing over
+    // isOpen - this row's DOM node can be reused across redraws (morphNode
+    // keeps the old element and just syncs its attributes), which would
+    // leave this listener permanently bound to whatever isOpen was the
+    // first time the row was built, so it could only ever flip one way.
+    row.addEventListener("click",function(){ST.expandedGroups[g.id]=!ST.expandedGroups[g.id];redraw();});
     var ic=d({css:{width:"38px",height:"38px",borderRadius:"50%",background:gt.ap,border:"2px solid "+gt.al,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"19px",flexShrink:0,overflow:"hidden"}});setGroupIcon(ic,g);row.appendChild(ic);
     var info=d({css:{flex:1}});info.appendChild(d({css:{fontSize:"14px",fontWeight:700,color:"#3D2314"}},g.label));
     info.appendChild(d({css:{fontSize:"11px",color:"#9B7B62",marginTop:"1px"}},memCount+" member"+(memCount!==1?"s":"")));
