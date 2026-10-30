@@ -147,7 +147,7 @@ window.addEventListener("unhandledrejection",function(e){
 // refresh instead of leaving people stuck in a stale session. Bump
 // APP_VERSION by hand on every deploy (any changed string works - a
 // timestamp is easiest to keep unique).
-var APP_VERSION="2026-10-31T00:00:00Z-collapsegroupsfix";
+var APP_VERSION="2026-10-31T02:00:00Z-largegroupfixes";
 function isStandaloneMode(){
   return window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;
 }
@@ -1533,29 +1533,31 @@ function doSync(){
   // Listen to members
   watchGroupScoped("members",myGroupIds,function(snap){
     ST.fbMembers=ST.fbMembers||{};
-    var uidsSeen={};
     // This used to only ADD a member the first time it saw their uid and
     // silently ignore every snapshot after that - meaning a change to an
     // already-known member's doc (promoted/demoted admin, a name/avatar
     // refresh) never reached ST.fbMembers for the rest of the session. Now
     // it updates the entry in place, and also drops anyone no longer present
     // (removed, or left) instead of leaving a stale ghost member around.
-    var presentKeys={};
-    snap.forEach(function(doc){
-      var m=doc.data();
+    // Also switched from snap.forEach (re-scanning every member of every
+    // group this person is in, on every single snapshot) to docChanges() -
+    // same incremental pattern as comments/reactions/rsvps/events below.
+    // With a small family this was unnoticeable; with a large group, one
+    // person's avatar update meant re-walking the WHOLE member list across
+    // ALL of this person's groups just to find that one change.
+    snap.docChanges().forEach(function(change){
+      var m=change.doc.data();
       var gid=m.groupId||"imm";
       if(!ST.fbMembers[gid])ST.fbMembers[gid]=[];
+      if(change.type==="removed"){
+        ST.fbMembers[gid]=ST.fbMembers[gid].filter(function(x){return x.uid!==m.uid;});
+        return;
+      }
       var safeAv=(m.av&&(m.av.startsWith("http")||m.av.startsWith("data:")||m.av.length<=8))?m.av:"\uD83D\uDC64";
       var safeName=(m.name&&m.name.length<40&&!/^[A-Za-z0-9_-]{20,}$/.test(m.name))?m.name:"Family member";
-      var entry=Object.assign({},m,{av:safeAv,name:safeName,_docId:doc.id});
+      var entry=Object.assign({},m,{av:safeAv,name:safeName,_docId:change.doc.id});
       var idx=ST.fbMembers[gid].findIndex(function(x){return x.uid===m.uid;});
       if(idx>=0)ST.fbMembers[gid][idx]=entry;else ST.fbMembers[gid].push(entry);
-      if(m.uid)uidsSeen[m.uid]=true;
-      presentKeys[m.uid+"_"+gid]=true;
-    });
-    myGroupIds.forEach(function(gid){
-      if(!ST.fbMembers[gid])return;
-      ST.fbMembers[gid]=ST.fbMembers[gid].filter(function(x){return presentKeys[x.uid+"_"+gid];});
     });
     // Admin status used to be a one-time snapshot taken at sign-in and
     // cached in localStorage, never re-checked again - a handoff or removal
@@ -5685,7 +5687,11 @@ function buildOwnBirthdaySheet(t){
         var safeAv=ST.avatar&&(ST.avatar.startsWith("http")||ST.avatar.startsWith("data:"))?ST.avatar:(ST.avatar&&ST.avatar.length<=8?ST.avatar:"👤");
         var bdayObj={id:bdayId,name:ST.name,av:safeAv,month:m,day:dy,groupId:g.id,auto:true};
         db.collection("groups").doc(g.id).collection("birthdays").doc(bdayId).set(bdayObj).catch(function(e){logAppError("groups/birthdays.set (add family member birthday)",e);});
-        var ei=ST.birthdays.findIndex(function(bd){return bd.id===bdayId;});
+        // bdayId is the same "member-{uid}" string for every group this
+        // person is in, so matching on id alone would find and overwrite
+        // whichever group's cached entry happened to come first, leaving
+        // the other groups' local copies stale. groupId disambiguates.
+        var ei=ST.birthdays.findIndex(function(bd){return bd.id===bdayId&&bd.groupId===g.id;});
         if(ei>=0)ST.birthdays[ei]=bdayObj;else ST.birthdays.push(bdayObj);
       });
     }
@@ -6820,6 +6826,14 @@ function buildEditBirthdays(){
 
 function buildNewDm(){
   var t=th(ST.group);
+  // Selection used to be keyed by avatar+name instead of uid. Fine for a
+  // handful of people with distinct names, but with a large group two
+  // members sharing a first name (very common - "Mom", two cousins both
+  // named "Sarah", anyone still on the default avatar) collide on the same
+  // key: tapping one visually selects/deselects both, and "Start Chat"
+  // would add whichever of them happened to come first, silently
+  // substituting or including the wrong person.
+  function memKey(m){return m.uid||((m.av||"")+(m.name||""));}
   var ov=d({cls:"overlay"});ov.addEventListener("click",function(){ST.newDm=false;ST.dmSel=[];redraw();});
   var sh=d({cls:"sheet"});sh.addEventListener("click",function(e){e.stopPropagation();});
   sh.appendChild(d({cls:"handle"}));sh.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"18px",fontWeight:600,color:"#3D2314",marginBottom:"6px"}},"New Message"));
@@ -6840,13 +6854,13 @@ var mems=fbMems.length?fbMems.map(function(m){
   return{av:cleanAv,name:cleanName,uid:m.uid};
 }) : localMems;
   mems.forEach(function(mem){
-    var gt=th(ST.dmGrp);var sel=ST.dmSel.includes(mem.av+mem.name);
+    var gt=th(ST.dmGrp);var sel=ST.dmSel.includes(memKey(mem));
     var row=d({css:{display:"flex",alignItems:"center",gap:"10px",padding:"10px 12px",borderRadius:"13px",background:sel?gt.ap:"#FAF6F0",border:"2px solid "+(sel?gt.a:"rgba(107,66,38,.1)"),cursor:"pointer",marginBottom:"6px"}});
     var av=d({css:{width:"36px",height:"36px",borderRadius:"50%",background:sel?gt.al:gt.ap,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"18px",flexShrink:0,overflow:"hidden"}});renderAvatarGlyph(av,mem.av,10,"\uD83D\uDC64");row.appendChild(av);
     row.appendChild(d({css:{flex:1,fontSize:"14px",fontWeight:700,color:"#3D2314"}},mem.name||"Family member"));
     var ck=d({css:{width:"20px",height:"20px",borderRadius:"50%",background:sel?gt.a:"white",border:"2px solid "+(sel?gt.a:"rgba(107,66,38,.2)"),display:"flex",alignItems:"center",justifyContent:"center",fontSize:"11px",color:"white",fontWeight:700}},sel?"v":"");
     row.appendChild(ck);
-    row.addEventListener("click",function(){var key=mem.av+mem.name;if(ST.dmSel.includes(key))ST.dmSel=ST.dmSel.filter(function(x){return x!==key;});else ST.dmSel.push(key);redraw();});sh.appendChild(row);
+    row.addEventListener("click",function(){var key=memKey(mem);if(ST.dmSel.includes(key))ST.dmSel=ST.dmSel.filter(function(x){return x!==key;});else ST.dmSel.push(key);redraw();});sh.appendChild(row);
   });
   var sub=b({css:{width:"100%",padding:"14px",borderRadius:"50px",background:ST.dmSel.length?t.a:"#D4B8A8",border:"none",color:"white",fontSize:"15px",fontWeight:800,cursor:ST.dmSel.length?"pointer":"not-allowed",fontFamily:"inherit",marginTop:"8px"}},ST.dmSel.length?"Start Chat":"Select someone first");
   sub.addEventListener("click",function(){
@@ -6856,10 +6870,10 @@ var mems=fbMems.length?fbMems.map(function(m){
     var selMems;
     if(fbMemsAll.length){
       selMems=fbMemsAll
-        .filter(function(m){return ST.dmSel.includes((m.av||"\u{1F464}")+(m.name||"Member"));})
+        .filter(function(m){return ST.dmSel.includes(memKey(m));})
         .map(function(m){return{av:m.av||"\u{1F464}",name:m.name||"Member",uid:m.uid};});
     } else {
-      selMems=(ST.mems[ST.dmGrp]||[]).filter(function(m){return ST.dmSel.includes(m.av+m.name);});
+      selMems=(ST.mems[ST.dmGrp]||[]).filter(function(m){return ST.dmSel.includes(memKey(m));});
     }
     if(!selMems.length)selMems=[{av:"\uD83D\uDC64",name:"Family member"}];
     // "New Message" always minted a fresh dm-<timestamp> thread, even when a
