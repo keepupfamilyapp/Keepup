@@ -147,7 +147,7 @@ window.addEventListener("unhandledrejection",function(e){
 // refresh instead of leaving people stuck in a stale session. Bump
 // APP_VERSION by hand on every deploy (any changed string works - a
 // timestamp is easiest to keep unique).
-var APP_VERSION="2026-10-31T05:00:00Z-navicon-coinfix";
+var APP_VERSION="2026-11-02T00:00:00Z-multigrouppost";
 function isStandaloneMode(){
   return window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;
 }
@@ -1805,7 +1805,7 @@ var ST={
   nEv:{title:"",month:"APR",day:"",time:"",loc:"",groupId:"imm",multiDay:false,endMonth:"APR",endDay:"",lat:null,lng:null},
   editingEvId:null,
   eventDetailId:null,pickingLocation:false,
-  compose:false,upOpen:false,upType:"photo",upStep:1,upCap:"",upCi:"",upImg:null,
+  compose:false,upOpen:false,upType:"photo",upStep:1,upCap:"",upCi:"",upImg:null,upGroups:null,
   cmtOpen:null,cmtIn:"",rxPick:null,reactions:{},rsvp:{},allRsvps:{},
   comments:{},
   birthdays:[],
@@ -6347,6 +6347,38 @@ function closePinPicker(keep){
   redraw();
 }
 
+// Lets someone posting a photo/check-in/update pick which of their groups
+// it goes out to, instead of it always being locked to whichever group
+// they happened to have open. Reuses ST.upGroups across all three composer
+// steps (status/photo/checkin) so the selection sticks as they type; always
+// keeps at least one group selected so there's never nothing to post to.
+function buildGroupPickerRow(t){
+  if(!ST.groups||ST.groups.length<2)return null; // nothing to choose between with only one group
+  if(!ST.upGroups||!ST.upGroups.length)ST.upGroups=[ST.group&&ST.groups.some(function(g){return g.id===ST.group;})?ST.group:ST.groups[0].id];
+  var wrap=d({css:{marginBottom:"14px"}});
+  wrap.appendChild(d({css:{fontSize:"11px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".4px",marginBottom:"7px"}},"Post to"));
+  var row=d({css:{display:"flex",gap:"8px",overflowX:"auto",paddingBottom:"2px"}});
+  ST.groups.forEach(function(g){
+    var sel=ST.upGroups.indexOf(g.id)!==-1;
+    var chip=d({css:{display:"flex",alignItems:"center",gap:"6px",padding:"7px 13px",borderRadius:"50px",background:sel?t.a:"#F5DDD1",border:"2px solid "+(sel?t.a:"transparent"),cursor:"pointer",flexShrink:0}});
+    var ic=d({css:{fontSize:"14px",lineHeight:1,display:"flex",alignItems:"center"}});renderGlyphOrEmoji(ic,g.icon);
+    chip.appendChild(ic);
+    chip.appendChild(d({css:{fontSize:"12.5px",fontWeight:700,color:sel?"white":"#6B4226",whiteSpace:"nowrap"}},g.label));
+    chip.addEventListener("click",function(){
+      var idx=ST.upGroups.indexOf(g.id);
+      if(idx!==-1){
+        if(ST.upGroups.length>1)ST.upGroups.splice(idx,1); // always leave at least one selected
+      } else {
+        ST.upGroups.push(g.id);
+      }
+      redraw();
+    });
+    row.appendChild(chip);
+  });
+  wrap.appendChild(row);
+  return wrap;
+}
+
 function buildCompose(t,grp){
   var ov=d({cls:"overlay"});ov.addEventListener("click",function(){ST.compose=false;redraw();});
   var sh=d({cls:"sheet"});sh.addEventListener("click",function(e){e.stopPropagation();});
@@ -6357,20 +6389,20 @@ function buildCompose(t,grp){
     var row=d({css:{display:"flex",alignItems:"center",gap:"10px",padding:"13px",borderRadius:"14px",background:t.bg,border:"2px solid "+t.ap,cursor:"pointer",marginBottom:"8px"}});
     var ic=d({html:opt[0],css:{fontSize:"22px",width:"42px",height:"42px",borderRadius:"11px",background:"white",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}});row.appendChild(ic);
     row.appendChild(d({css:{fontSize:"14px",fontWeight:700,color:"#3D2314"}},opt[1]));row.appendChild(d({css:{marginLeft:"auto",fontSize:"18px",color:t.al}},">"));
-    row.addEventListener("click",function(){ST.upType=opt[2];ST.upStep=opt[2]==="photo"?2:3;ST.upCap="";ST.upCi="";ST.upImg=null;ST.upPhotos=[];ST.upIsVideo=false;ST.upVideoFile=null;ST.compose=false;ST.upOpen=true;redraw();});sh.appendChild(row);
+    row.addEventListener("click",function(){ST.upType=opt[2];ST.upStep=opt[2]==="photo"?2:3;ST.upCap="";ST.upCi="";ST.upImg=null;ST.upPhotos=[];ST.upIsVideo=false;ST.upVideoFile=null;ST.upGroups=null;ST.compose=false;ST.upOpen=true;redraw();});sh.appendChild(row);
   });ov.appendChild(sh);return ov;
 }
 
 function buildUpload(t,grp){
   var ov=d({css:{position:"fixed",inset:0,background:"rgba(61,35,20,.5)",zIndex:70,display:"flex",alignItems:"flex-end"}});
-  ov.addEventListener("click",function(){ST.upOpen=false;redraw();});
+  ov.addEventListener("click",function(){ST.upOpen=false;ST.upGroups=null;redraw();});
   var sh=d({css:{width:"100%",background:"#FFF9F2",borderRadius:"24px 24px 0 0",maxHeight:"92vh",display:"flex",flexDirection:"column",overflow:"hidden",animation:"slideUp .25s ease"}});
   sh.addEventListener("click",function(e){e.stopPropagation();});
 
   function upHdr(title,onBack){
     var h=d({css:{padding:"13px 15px",borderBottom:"1px solid #F5DDD1",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}});
     var bb=b({css:{background:"#F5DDD1",border:"none",borderRadius:"50px",padding:"6px 12px",fontSize:"13px",fontWeight:700,color:"#6B4226",cursor:"pointer",fontFamily:"inherit"}},onBack?"Back":"Cancel");
-    bb.addEventListener("click",onBack||function(){ST.upOpen=false;redraw();});
+    bb.addEventListener("click",onBack||function(){ST.upOpen=false;ST.upGroups=null;redraw();});
     h.appendChild(bb);h.appendChild(d({css:{fontSize:"16px",fontWeight:700,color:"#C4714A"}},title));h.appendChild(d({css:{width:"60px"}}));return h;
   }
   // Update post - text + optional location
@@ -6401,6 +6433,8 @@ function buildUpload(t,grp){
     locIn.addEventListener("input",function(){ST.upCi=this.value;});
     locRow.appendChild(locIn);
     sbody.appendChild(locRow);
+    var gpRowStatus=buildGroupPickerRow(t);
+    if(gpRowStatus)sbody.appendChild(gpRowStatus);
     sh.appendChild(sbody);
     var sfoot=d({css:{padding:"12px 15px 28px",borderTop:"1px solid "+t.ap,flexShrink:0}});
     var spost=b({css:{width:"100%",padding:"14px",borderRadius:"50px",background:t.a,border:"none",color:"white",fontSize:"15px",fontWeight:800,cursor:"pointer",fontFamily:"inherit"}},"Share Update");
@@ -6410,13 +6444,16 @@ function buildUpload(t,grp){
       var loc=(ST.upCi||"").trim();
       // Never write base64 avatars to Firestore
   var postAv=ST.avatar&&ST.avatar.startsWith("data:")?"\uD83D\uDC64":(ST.avatar||"\uD83D\uDC64");
-  var postName=ST.name||"You",postGroup=grp.id;
+  var postName=ST.name||"You";
+  var targetGroups=(ST.upGroups&&ST.upGroups.length)?ST.upGroups.slice():[grp.id];
       var statusTxt=loc?txt+" \uD83D\uDCCD "+loc:txt;
-      var item={type:"checkin",av:postAv,name:postName,status:statusTxt,groupId:postGroup,emoji:loc?"\uD83D\uDCCD":"\u270F\uFE0F",createdAt:firebase.firestore.FieldValue.serverTimestamp()};
-      postToFeed(item);
-      if(!ST.feed[postGroup])ST.feed[postGroup]=[];
-      ST.feed[postGroup].unshift({id:"tmp-"+Date.now(),type:"checkin",av:postAv,name:postName,status:statusTxt,groupId:postGroup,emoji:loc?"\uD83D\uDCCD":"\u270F\uFE0F",time:"Just now"});
-      ST.upOpen=false;ST.upCap="";ST.upCi="";
+      targetGroups.forEach(function(postGroup){
+        var item={type:"checkin",av:postAv,name:postName,status:statusTxt,groupId:postGroup,emoji:loc?"\uD83D\uDCCD":"\u270F\uFE0F",createdAt:firebase.firestore.FieldValue.serverTimestamp()};
+        postToFeed(item);
+        if(!ST.feed[postGroup])ST.feed[postGroup]=[];
+        ST.feed[postGroup].unshift({id:"tmp-"+Date.now()+"-"+postGroup,type:"checkin",av:postAv,name:postName,status:statusTxt,groupId:postGroup,emoji:loc?"\uD83D\uDCCD":"\u270F\uFE0F",time:"Just now"});
+      });
+      ST.upOpen=false;ST.upCap="";ST.upCi="";ST.upGroups=null;
       redraw();
     });
     sfoot.appendChild(spost);sh.appendChild(sfoot);
@@ -6425,6 +6462,8 @@ function buildUpload(t,grp){
   if(ST.upStep===2){
     sh.appendChild(upHdr(ST.upIsVideo?"Add Video":"Add Photos",null));
     var body=d({cls:"scr",css:{padding:"14px 15px"}});
+    var gpRow2=buildGroupPickerRow(t);
+    if(gpRow2)body.appendChild(gpRow2);
     if(!ST.upPhotos)ST.upPhotos=[]; // [{dataUrl,file}] - supports multiple photos per post
     var fiPhotos=el("input",{type:"file",accept:"image/*",css:{display:"none"}});
     fiPhotos.multiple=true;
@@ -6544,6 +6583,8 @@ function buildUpload(t,grp){
   if(ST.upStep===3){
     sh.appendChild(upHdr("Check-in",null));
     var body=d({cls:"scr",css:{padding:"14px 15px"}});
+    var gpRow3=buildGroupPickerRow(t);
+    if(gpRow3)body.appendChild(gpRow3);
     var ta=el("textarea",{rows:5,placeholder:"Let your family know how you're doing...",css:{width:"100%",padding:"12px",borderRadius:"13px",border:"2px solid #F5DDD1",background:"#FAF6F0",fontSize:"15px",color:"#3D2314",outline:"none",resize:"none",lineHeight:"1.6",fontFamily:"inherit"}});
     ta.value=ST.upCi;ta.addEventListener("input",function(){ST.upCi=this.value;});body.appendChild(ta);sh.appendChild(body);
     var ft=d({css:{padding:"12px 15px 26px",flexShrink:0}});
@@ -7051,28 +7092,40 @@ function submitPost(){
     return;
   }
 
+  // Post-to-multiple-groups: ST.upGroups holds whichever chips the person
+  // selected in the composer's "Post to" row. Filtered against the real
+  // ST.groups list (a stale/removed group id shouldn't silently eat a
+  // post), falling back to the single current group exactly like before
+  // this existed if nothing valid was selected.
+  var postGroups=(ST.upGroups&&ST.upGroups.length)?ST.upGroups.filter(function(gid){return ST.groups.some(function(g){return g.id===gid;});}):[];
+  if(!postGroups.length)postGroups=[postGroup];
+  function groupLabelFor(gid){
+    var g=ST.groups.find(function(x){return x.id===gid;});
+    return g?g.label:"your group";
+  }
+
   // Close sheet immediately
-  ST.upOpen=false;ST.upStep=1;ST.upCi="";ST.upCap="";
+  ST.upOpen=false;ST.upStep=1;ST.upCi="";ST.upCap="";ST.upGroups=null;
 ST.upImg=null;ST.upPhotos=[];
   redraw();
 
   var p;
-  var postGroupObj=ST.groups.find(function(g){return g.id===postGroup;});
-  var postGroupLabel=postGroupObj?postGroupObj.label:"your group";
   if(postType==="checkin"){
-    p={type:"checkin",av:postAv,wallpaper:postWallpaper,name:postName,time:"Just now",status:postStatus,groupId:postGroup,groupLabel:postGroupLabel};
-    postToFeed(p).then(function(){
-      broadcastNotif(postName+" checked in",postStatus.substring(0,60),postGroup);
-      // Refresh feed after posting
-      db.collection("feed").where("groupId","==",postGroup).get().then(function(snap){
-        ST.feed[postGroup]=[];
-        snap.forEach(function(doc){ST.feed[postGroup].push(Object.assign({},doc.data(),{id:doc.id}));});
-        ST.feed[postGroup].sort(function(a,b){return tsMillis(b.createdAt)-tsMillis(a.createdAt);});
-        redraw();
-      });
-    }).catch(function(e){logAppError("checkin post failed",e);console.log("checkin post failed",e);});
+    postGroups.forEach(function(gid){
+      var pp={type:"checkin",av:postAv,wallpaper:postWallpaper,name:postName,time:"Just now",status:postStatus,groupId:gid,groupLabel:groupLabelFor(gid)};
+      postToFeed(pp).then(function(){
+        broadcastNotif(postName+" checked in",postStatus.substring(0,60),gid);
+        // Refresh feed after posting
+        db.collection("feed").where("groupId","==",gid).get().then(function(snap){
+          ST.feed[gid]=[];
+          snap.forEach(function(doc){ST.feed[gid].push(Object.assign({},doc.data(),{id:doc.id}));});
+          ST.feed[gid].sort(function(a,b){return tsMillis(b.createdAt)-tsMillis(a.createdAt);});
+          redraw();
+        });
+      }).catch(function(e){logAppError("checkin post failed",e);console.log("checkin post failed",e);});
+    });
   } else {
-    p={type:isVid?"video":"photo",isVideo:isVid,av:postAv,wallpaper:postWallpaper,name:postName,time:"Just now",emoji:"\uD83C\uDF3B",imgUrl:null,cap:postCap,groupId:postGroup,groupLabel:postGroupLabel};
+    p={type:isVid?"video":"photo",isVideo:isVid,av:postAv,wallpaper:postWallpaper,name:postName,time:"Just now",emoji:"\uD83C\uDF3B",imgUrl:null,cap:postCap};
     // Must have real Firebase auth uid for Storage
     if(!currentUser){
       var errB=document.createElement("div");
@@ -7153,7 +7206,10 @@ ST.upImg=null;ST.upPhotos=[];
       uploadRef=photoTask.then(function(s){return s.ref.getDownloadURL();});
     }
     // Show uploading indicator in feed - use actual local file as instant preview
-    var tempId="temp-"+Date.now();
+    // One temp id per target group so each group's optimistic placeholder
+    // can be removed independently once the real posts land (or the upload
+    // fails) without touching the others.
+    var tempIds={};postGroups.forEach(function(gid){tempIds[gid]="temp-"+Date.now()+"-"+gid;});
     var localPreviewUrl=isVid&&vidFile?URL.createObjectURL(vidFile):(photosArr.length?photosArr[0].dataUrl:imgData);
     // createdAt here matters more than it looks: watchFeed's listener
     // re-sorts ST.feed[gid] by createdAt on every single snapshot it gets
@@ -7165,19 +7221,21 @@ ST.upImg=null;ST.upPhotos=[];
     // it a live "now" timestamp (same {toMillis} shape a real Firestore
     // Timestamp has, same trick addComment() already uses for its own
     // optimistic entry) keeps it pinned at the top for as long as it exists.
-    var tempPost={id:tempId,type:isVid?"video":"photo",isVideo:isVid,av:postAv,name:postName,time:"Just now",cap:postCap,groupId:postGroup,emoji:isVid?"\uD83C\uDFA5":"\uD83D\uDCF7",uploading:true,localPreviewUrl:localPreviewUrl,extraCount:photosArr.length>1?photosArr.length-1:0,createdAt:{toMillis:function(){return Date.now();}}};
-    if(!ST.feed[postGroup])ST.feed[postGroup]=[];
-    ST.feed[postGroup].unshift(tempPost);
+    postGroups.forEach(function(gid){
+      var tempPost={id:tempIds[gid],type:isVid?"video":"photo",isVideo:isVid,av:postAv,name:postName,time:"Just now",cap:postCap,groupId:gid,emoji:isVid?"\uD83C\uDFA5":"\uD83D\uDCF7",uploading:true,localPreviewUrl:localPreviewUrl,extraCount:photosArr.length>1?photosArr.length-1:0,createdAt:{toMillis:function(){return Date.now();}}};
+      if(!ST.feed[gid])ST.feed[gid]=[];
+      ST.feed[gid].unshift(tempPost);
+    });
     // Make sure tab is on feed and group is correct
     ST.tab="feed";
-    ST.group=postGroup;
+    if(postGroups.indexOf(ST.group)===-1)ST.group=postGroups[0];
     redraw();
 
     Promise.all([uploadRef,thumbUploadPromise]).then(function(results){
       var url=results[0];
       var localThumbUrl=results[1];
-      // Remove temp post
-      ST.feed[postGroup]=ST.feed[postGroup].filter(function(x){return x.id!==tempId;});
+      // Remove temp posts from every target group
+      postGroups.forEach(function(gid){ST.feed[gid]=ST.feed[gid].filter(function(x){return x.id!==tempIds[gid];});});
       if(isVid&&vidFile){try{URL.revokeObjectURL(localPreviewUrl);}catch(e){}}
       p.imgUrl=url;
       if(multiUrls&&multiUrls.length>1)p.imgUrls=multiUrls;
@@ -7186,33 +7244,40 @@ ST.upImg=null;ST.upPhotos=[];
       // encoding - and fall back to Cloudflare's own thumbnail if ours failed.
       if(isVid&&localThumbUrl)p.thumbUrl=localThumbUrl;
       else if(isVid&&cfResultThumb)p.thumbUrl=cfResultThumb; // Cloudflare-hosted thumbnail URL (short), not base64
-      return postToFeed(p);
+      // Media is uploaded once and reused across every selected group - only
+      // the groupId/groupLabel differ between the feed docs this creates.
+      return Promise.all(postGroups.map(function(gid){
+        return postToFeed(Object.assign({},p,{groupId:gid,groupLabel:groupLabelFor(gid)}));
+      }));
     }).then(function(){
-      broadcastNotif(postName+" posted","Shared a "+(isVid?"video":(multiUrls&&multiUrls.length>1?multiUrls.length+" photos":"photo")),postGroup);
+      postGroups.forEach(function(gid){
+        broadcastNotif(postName+" posted","Shared a "+(isVid?"video":(multiUrls&&multiUrls.length>1?multiUrls.length+" photos":"photo")),gid);
+      });
       // Show success toast
       var toast=document.createElement("div");
       toast.style.cssText="position:fixed;top:70px;left:50%;transform:translateX(-50%);background:#3D2314;color:white;padding:12px 20px;border-radius:50px;font-family:Nunito,sans-serif;font-size:14px;font-weight:700;z-index:999;white-space:nowrap;animation:fadeUp .3s ease;";
-      toast.textContent=(isVid?"\uD83C\uDFA5":"\uD83D\uDCF8")+" "+(isVid?"Video":(multiUrls&&multiUrls.length>1?multiUrls.length+" photos":"Photo"))+" posted!";
+      toast.textContent=(isVid?"\uD83C\uDFA5":"\uD83D\uDCF8")+" "+(isVid?"Video":(multiUrls&&multiUrls.length>1?multiUrls.length+" photos":"Photo"))+" posted!"+(postGroups.length>1?" to "+postGroups.length+" groups":"");
       document.body.appendChild(toast);
       setTimeout(function(){toast.remove();},3000);
-      // Refresh feed
-      db.collection("feed").where("groupId","==",postGroup)
-        .orderBy("createdAt","desc").limit(200)
-        .get().then(function(snap){
-        ST.feed[postGroup]=[];
-        snap.forEach(function(doc){ST.feed[postGroup].push(Object.assign({},doc.data(),{id:doc.id}));});
-        ST.tab="feed";ST.group=postGroup;
-        redraw();
-      }).catch(function(){redraw();});
+      // Refresh each target group's feed
+      postGroups.forEach(function(gid){
+        db.collection("feed").where("groupId","==",gid)
+          .orderBy("createdAt","desc").limit(200)
+          .get().then(function(snap){
+          ST.feed[gid]=[];
+          snap.forEach(function(doc){ST.feed[gid].push(Object.assign({},doc.data(),{id:doc.id}));});
+          redraw();
+        }).catch(function(){redraw();});
+      });
     }).catch(function(e){
       logAppError("photo/video post failed",e);
       console.log("photo post failed:",e.message||e);
       if(isVid&&vidFile){try{URL.revokeObjectURL(localPreviewUrl);}catch(e2){}}
-      // Remove temp post only - do NOT post without the image, and do NOT
+      // Remove temp posts only - do NOT post without the image, and do NOT
       // re-fetch the feed here (the live watchFeed listener already keeps
       // ST.feed sorted correctly; an unordered .get() here was causing the
       // feed to appear to jump back to older posts).
-      ST.feed[postGroup]=ST.feed[postGroup].filter(function(x){return x.id!==tempId;});
+      postGroups.forEach(function(gid){ST.feed[gid]=ST.feed[gid].filter(function(x){return x.id!==tempIds[gid];});});
       redraw();
       // Show error, with a Retry button that re-runs the exact same upload
       // from the file already held in memory - no trip back to the gallery
@@ -7772,7 +7837,7 @@ window.addEventListener("popstate",function(){
     return;
   }
   if(ST.cmtOpen){ST.cmtOpen=null;ST.cmtIn="";redraw();history.pushState(null,"",location.href);return;}
-  if(ST.upOpen){ST.upOpen=false;ST.upStep=1;ST.upCap="";ST.upCi="";redraw();history.pushState(null,"",location.href);return;}
+  if(ST.upOpen){ST.upOpen=false;ST.upStep=1;ST.upCap="";ST.upCi="";ST.upGroups=null;redraw();history.pushState(null,"",location.href);return;}
   if(ST.compose){ST.compose=false;redraw();history.pushState(null,"",location.href);return;}
   if(ST.openChat){ST.openChat=null;redraw();history.pushState(null,"",location.href);return;}
   if(ST.tab!=="feed"){ST.tab="feed";redraw();history.pushState(null,"",location.href);return;}
