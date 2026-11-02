@@ -147,7 +147,7 @@ window.addEventListener("unhandledrejection",function(e){
 // refresh instead of leaving people stuck in a stale session. Bump
 // APP_VERSION by hand on every deploy (any changed string works - a
 // timestamp is easiest to keep unique).
-var APP_VERSION="2026-11-02T03:00:00Z-fabmenuicons";
+var APP_VERSION="2026-11-02T04:00:00Z-defaultgroup";
 function isStandaloneMode(){
   return window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;
 }
@@ -1041,7 +1041,7 @@ function handleGroupListenerErr(err,gid){
     var removedGroup=ST.groups.find(function(x){return x.id===gid;});
     ST.groups=ST.groups.filter(function(x){return x.id!==gid;});
     try{localStorage.setItem("ku_groups",JSON.stringify(ST.groups));}catch(e){}
-    if(wasCurrent&&ST.groups.length){ST.group=ST.groups[0].id;}
+    if(wasCurrent&&ST.groups.length){ST.group=pickInitialGroup(ST.groups);}
     // Scrub this group from the authoritative userGroups doc too - otherwise
     // it's still listed there, so the very next sign-in reads it again,
     // tries to sync it, hits the same permission-denied, and this whole
@@ -1826,6 +1826,7 @@ var ST={
   editingEvId:null,
   eventDetailId:null,pickingLocation:false,
   compose:false,upOpen:false,upType:"photo",upStep:1,upCap:"",upCi:"",upImg:null,upGroups:null,
+  defaultGroup:null, // person's chosen "1st choice" group - see pickInitialGroup()
   cmtOpen:null,cmtIn:"",rxPick:null,reactions:{},rsvp:{},allRsvps:{},
   comments:{},
   birthdays:[],
@@ -1903,6 +1904,34 @@ function normalizeGroups(arr){
     if(g.photo)out.photo=g.photo;
     return out;
   });
+}
+
+// Which group the app should land on at every "fresh load" point (sign-in,
+// account restore, repair paths) - the person's chosen "1st choice" group
+// (see setDefaultGroup) if they set one and it's still one of their groups,
+// otherwise the oldest one (array order = join/create order), exactly the
+// old hardcoded behavior. Reads localStorage directly as a fallback so this
+// works even on the very first call of a session, before any Firestore
+// profile read has had a chance to populate ST.defaultGroup.
+function pickInitialGroup(groups){
+  var pref=ST.defaultGroup;
+  if(!pref){try{pref=localStorage.getItem("ku_default_group")||null;}catch(e){}}
+  if(pref&&groups.some(function(g){return g.id===pref;}))return pref;
+  return (groups[0]&&groups[0].id)||null;
+}
+
+// Persists the person's "1st choice" group - updates in-memory state,
+// localStorage (so it's available immediately next launch, before the
+// profile doc round-trips) and the Firestore profile doc (so it follows
+// them to a new device too).
+function setDefaultGroup(gid){
+  ST.defaultGroup=gid;
+  try{localStorage.setItem("ku_default_group",gid);}catch(e){}
+  if(currentUser){
+    db.collection("profiles").doc(currentUser.uid).set({defaultGroup:gid},{merge:true})
+      .catch(function(e){logAppError("profiles.set (defaultGroup)",e);});
+  }
+  redraw();
 }
 
 // ---- Shared helpers used by buildItem/buildProfile (extracted from what
@@ -2751,11 +2780,12 @@ function buildOnboarding(){
                 ST.avatar=isValidAv?p.av:"\uD83D\uDC64";
                 localStorage.setItem("ku_av",ST.avatar);
               }
+              if(p.defaultGroup){ST.defaultGroup=p.defaultGroup;try{localStorage.setItem("ku_default_group",p.defaultGroup);}catch(e){}}
               db.collection("userGroups").doc(result.user.uid).get().then(function(gdoc){
                 var hasGroups=gdoc.exists&&gdoc.data().groups&&gdoc.data().groups.length>0;
                 if(hasGroups){
                   ST.groups=normalizeGroups(gdoc.data().groups);
-                  ST.group=ST.groups[0].id;
+                  ST.group=pickInitialGroup(ST.groups);
                   try{localStorage.setItem("ku_groups",JSON.stringify(ST.groups));}catch(e){}
                   try{localStorage.setItem("ku_grp",JSON.stringify({label:ST.groups[0].label,icon:ST.groups[0].icon}));}catch(e){}
                 }
@@ -5383,6 +5413,12 @@ function buildProfileBanner(t){
 function buildGroupsCard(){
   var gc=d({css:{background:"#FFF9F2",borderRadius:"18px",overflow:"hidden",boxShadow:"0 2px 12px rgba(0,0,0,.08)",marginBottom:"12px"}});
   gc.appendChild(d({css:{padding:"13px 15px 9px",fontSize:"12px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".5px",borderBottom:"1px solid #F5DDD1"}},"Your Groups"));
+  // With more than one group, let them star their "1st choice" - which
+  // group the app opens straight to, instead of always whichever one they
+  // joined/created first (pickInitialGroup/setDefaultGroup).
+  if(ST.groups.length>1){
+    gc.appendChild(d({css:{padding:"8px 15px",fontSize:"11px",color:"#9B7B62",lineHeight:1.4,borderBottom:"1px solid #F5DDD1"}},"Tap the star to choose which group opens first."));
+  }
   // Each group starts collapsed to a single summary row (icon, name, member
   // count) - tapping it expands Edit/Leave and the full member list. With
   // several groups, showing every member of every group stretched this card
@@ -5403,6 +5439,21 @@ function buildGroupsCard(){
     var info=d({css:{flex:1}});info.appendChild(d({css:{fontSize:"14px",fontWeight:700,color:"#3D2314"}},g.label));
     info.appendChild(d({css:{fontSize:"11px",color:"#9B7B62",marginTop:"1px"}},memCount+" member"+(memCount!==1?"s":"")));
     row.appendChild(info);
+    if(ST.groups.length>1){
+      var isDefault=ST.defaultGroup===g.id;
+      var starBtn=b({css:{background:"none",border:"none",padding:"4px",cursor:"pointer",fontSize:"18px",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,color:isDefault?"#C4922A":"#D8C4B0"}});
+      starBtn.innerHTML=isDefault
+        ?'<svg viewBox="0 0 24 24" width="1em" height="1em" style="display:block"><path d="M12 2.3 14.7 8.8 21.6 9.4 16.4 14 18 20.8 12 17.1 6 20.8 7.6 14 2.4 9.4 9.3 8.8 12 2.3Z" fill="currentColor"/></svg>'
+        :'<svg viewBox="0 0 24 24" width="1em" height="1em" style="display:block"><path d="M12 2.3 14.7 8.8 21.6 9.4 16.4 14 18 20.8 12 17.1 6 20.8 7.6 14 2.4 9.4 9.3 8.8 12 2.3Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>';
+      (function(grpObj,btn){
+        btn.addEventListener("click",function(e){
+          e.stopPropagation(); // don't also toggle the row's expand/collapse
+          setDefaultGroup(grpObj.id);
+          showTopToast(grpObj.label+" will open first from now on.");
+        });
+      })(g,starBtn);
+      row.appendChild(starBtn);
+    }
     var chev=d({css:{fontSize:"15px",color:"#9B7B62",transform:isOpen?"rotate(90deg)":"rotate(0deg)",transition:"transform .15s",flexShrink:0}},"›");
     row.appendChild(chev);
     gc.appendChild(row);
@@ -5510,7 +5561,13 @@ function performLeaveGroup(gid,successorUid){
     ST.groups=ST.groups.filter(function(x){return x.id!==gid;});
     delete ST.feed[gid];delete ST.chatMsgs[gid];delete ST.mems[gid];
     if(ST.fbMembers)delete ST.fbMembers[gid];
-    if(ST.group===gid)ST.group=(ST.groups[0]&&ST.groups[0].id)||null;
+    // If the group they just left was their "1st choice" default, that
+    // preference is now pointing at a group they're no longer in - clear it
+    // rather than silently carrying a dead id forward (pickInitialGroup
+    // would just fall back anyway, but an unset preference is honest about
+    // the fact nothing's chosen any more).
+    if(ST.defaultGroup===gid)setDefaultGroup(null);
+    if(ST.group===gid)ST.group=pickInitialGroup(ST.groups);
     try{localStorage.setItem("ku_groups",JSON.stringify(ST.groups));}catch(e){}
     if(ST.groups[0]){try{localStorage.setItem("ku_grp",JSON.stringify({label:ST.groups[0].label,icon:ST.groups[0].icon}));}catch(e){}}
     var remainingGids=ST.groups.map(function(x){return x.id;});
@@ -7636,11 +7693,12 @@ function _restoreAccountThenJoinInvite(p,token){
     ST.avatar=isValidAv?p.av:"👤";
     localStorage.setItem("ku_av",ST.avatar);
   }
+  if(p.defaultGroup){ST.defaultGroup=p.defaultGroup;try{localStorage.setItem("ku_default_group",p.defaultGroup);}catch(e){}}
   db.collection("userGroups").doc(currentUser.uid).get().then(function(gdoc){
     var hasGroups=gdoc.exists&&gdoc.data().groups&&gdoc.data().groups.length>0;
     if(hasGroups){
       ST.groups=normalizeGroups(gdoc.data().groups);
-      ST.group=ST.groups[0].id;
+      ST.group=pickInitialGroup(ST.groups);
       try{localStorage.setItem("ku_groups",JSON.stringify(ST.groups));}catch(e){}
       try{localStorage.setItem("ku_grp",JSON.stringify({label:ST.groups[0].label,icon:ST.groups[0].icon}));}catch(e){}
     }
@@ -7770,6 +7828,8 @@ try{
         if(sg.icon)ST.groups[0].icon=sg.icon;
       }catch(e){}
     }
+    var _savedDefaultGroup=localStorage.getItem("ku_default_group");
+    if(_savedDefaultGroup)ST.defaultGroup=_savedDefaultGroup;
     if(localStorage.getItem("ku_groups")){
       try{
         var savedGroups=JSON.parse(localStorage.getItem("ku_groups"));
@@ -7914,6 +7974,7 @@ auth.onAuthStateChanged(function(user){
         else{ST.avatar="\uD83D\uDC64";localStorage.setItem("ku_av","\uD83D\uDC64");}
       }
         if(m.wallpaper){ST.profileWallpaper=m.wallpaper;}
+        if(m.defaultGroup){ST.defaultGroup=m.defaultGroup;try{localStorage.setItem("ku_default_group",m.defaultGroup);}catch(e){}}
         // Restore boarded status from Firestore as backup
         if(!localStorage.getItem("ku_ob")){
           localStorage.setItem("ku_ob","1");
@@ -7925,7 +7986,7 @@ auth.onAuthStateChanged(function(user){
           if(hasGroups){
             // Replace groups entirely - dont merge with default imm group
             ST.groups=normalizeGroups(gdoc.data().groups);
-            ST.group=ST.groups[0].id;
+            ST.group=pickInitialGroup(ST.groups);
             try{localStorage.setItem("ku_groups",JSON.stringify(ST.groups));}catch(e){}
             try{localStorage.setItem("ku_grp",JSON.stringify({label:ST.groups[0].label,icon:ST.groups[0].icon}));}catch(e){}
           }
@@ -7996,7 +8057,7 @@ auth.onAuthStateChanged(function(user){
                 // normalize here too so a repair from this path can't itself
                 // hand back a group with no name.
                 ST.groups=normalizeGroups(rebuiltGroups);
-                ST.group=ST.groups[0].id;
+                ST.group=pickInitialGroup(ST.groups);
                 try{localStorage.setItem("ku_groups",JSON.stringify(ST.groups));}catch(e){}
                 try{localStorage.setItem("ku_grp",JSON.stringify({label:ST.groups[0].label,icon:ST.groups[0].icon}));}catch(e){}
               }
@@ -8020,7 +8081,7 @@ auth.onAuthStateChanged(function(user){
         // through onboarding again (which would create duplicate/wrong groups).
         db.collection("userGroups").doc(user.uid).get().then(function(gdoc){
           var hasGroups=gdoc.exists&&gdoc.data().groups&&gdoc.data().groups.length>0;
-          if(hasGroups){ST.groups=normalizeGroups(gdoc.data().groups);ST.group=ST.groups[0].id;}
+          if(hasGroups){ST.groups=normalizeGroups(gdoc.data().groups);ST.group=pickInitialGroup(ST.groups);}
           var localName=localStorage.getItem("ku_name");
           if(localName||hasGroups){
             var rebuiltGroup=ST.groups[0]||{id:"imm",label:"Family",icon:"\u2764\uFE0F"};
