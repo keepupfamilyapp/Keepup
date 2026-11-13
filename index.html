@@ -147,7 +147,7 @@ window.addEventListener("unhandledrejection",function(e){
 // refresh instead of leaving people stuck in a stale session. Bump
 // APP_VERSION by hand on every deploy (any changed string works - a
 // timestamp is easiest to keep unique).
-var APP_VERSION="2026-11-05T12:00:00Z-navbarcolor";;;
+var APP_VERSION="2026-11-13T12:00:00Z-bdayfix";;;;
 function isStandaloneMode(){
   return window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;
 }
@@ -3334,11 +3334,13 @@ function injectBirthdays(){
     var bdate=new Date(now.getFullYear(),bk.month-1,bk.day);
     if(bdate<today)bdate=new Date(now.getFullYear()+1,bk.month-1,bk.day);
     var diff=Math.round((bdate-today)/(1000*60*60*24));
-    if(diff>7)return;
+    if(diff!==7&&diff!==0)return;
+    var dismissKey="ku_bdaydismiss_"+bk.id+"_"+bdate.getFullYear()+"_"+(diff===0?"day":"week");
+    if(localStorage.getItem(dismissKey)==="1")return;
     var gid=bk.groupId;
     if(!ST.feed[gid])ST.feed[gid]=[];
     ST.feed[gid]=ST.feed[gid].filter(function(item){return item.bdayId!==bk.id;});
-    ST.feed[gid].unshift({id:"bday-"+bk.id,type:"birthday",bdayId:bk.id,av:bk.av,name:bk.name,groupId:gid,daysAway:diff});
+    ST.feed[gid].unshift({id:"bday-"+bk.id,type:"birthday",bdayId:bk.id,av:bk.av,name:bk.name,groupId:gid,daysAway:diff,dismissKey:dismissKey});
   });
 }
 
@@ -3721,8 +3723,16 @@ function buildFeed(t,grp){
   return wrap;
 }
 
+function dismissBirthdayCard(item){
+  if(item.dismissKey){try{localStorage.setItem(item.dismissKey,"1");}catch(e){}}
+  if(item.groupId&&ST.feed[item.groupId]){
+    ST.feed[item.groupId]=ST.feed[item.groupId].filter(function(f){return f.id!==item.id;});
+  }
+  redraw();
+}
+
 function buildBirthdayCard(item){
-  var card=d({css:{background:"linear-gradient(135deg,#FFF8E8,#FBF0D0)",border:"none",borderBottom:"2px solid #E8C878",padding:"14px 16px",display:"flex",gap:"12px",alignItems:"center"}});
+  var card=d({css:{background:"linear-gradient(135deg,#FFF8E8,#FBF0D0)",border:"none",borderBottom:"2px solid #E8C878",padding:"14px 16px",display:"flex",gap:"12px",alignItems:"center",position:"relative"}});
   var cake=d({css:{fontSize:"40px",flexShrink:0}});cake.textContent="🎂";card.appendChild(cake);
   var bd=d({css:{flex:1}});
   var brow=d({css:{display:"flex",alignItems:"center",gap:"7px",marginBottom:"4px"}});
@@ -3730,11 +3740,14 @@ function buildBirthdayCard(item){
   renderAvatarGlyph(bav,item.av,8,"👤");
   brow.appendChild(bav);
   brow.appendChild(d({css:{fontSize:"14px",fontWeight:800,color:"#7A5A14"}},item.name+"'s Birthday!"));bd.appendChild(brow);
-  var when=item.daysAway===0?"Today! 🎉 Wish them well!":item.daysAway===1?"Tomorrow! Start planning...":"In "+item.daysAway+" days";
+  var when=item.daysAway===0?"Today! 🎉 Wish them well!":"In "+item.daysAway+" days";
   bd.appendChild(d({css:{fontSize:"12px",color:"#9B7B62",marginBottom:"9px"}},when));
   var wb=b({css:{padding:"7px 14px",borderRadius:"50px",background:"#D4922A",border:"none",color:"white",fontSize:"12px",fontWeight:700,cursor:"pointer",fontFamily:"inherit"}},"🎉 Send Wishes");
   wb.addEventListener("click",function(){ST.tab="chat";ST.openChat=item.groupId;redraw();});
   bd.appendChild(wb);card.appendChild(bd);
+  var closeBtn=b({css:{position:"absolute",top:"8px",right:"8px",width:"22px",height:"22px",borderRadius:"50%",background:"rgba(122,90,20,.12)",border:"none",color:"#7A5A14",fontSize:"13px",lineHeight:"22px",padding:"0",cursor:"pointer",fontFamily:"inherit"}},"✕");
+  closeBtn.addEventListener("click",function(e){e.stopPropagation();dismissBirthdayCard(item);});
+  card.appendChild(closeBtn);
   return card;
 }
 
