@@ -5675,9 +5675,7 @@ function buildGroupsCard(){
   return gc;
 }
 
-
-  if(!currentUser)return false;
-  function formatLastActive(ts){
+function formatLastActive(ts){
   if(!ts||!ts.toDate)return null;
   var days=Math.floor((Date.now()-ts.toDate().getTime())/86400000);
   if(days<1)return "Active today";
@@ -5697,6 +5695,11 @@ function stampLastActive(){
   });
 }
 function getGroupAdminStatus(gid){
+  if(!currentUser)return false;
+  var mems=(ST.fbMembers&&ST.fbMembers[gid])||[];
+  var me=mems.find(function(m){return m.uid===currentUser.uid;});
+  return !!(me&&me.isAdmin);
+}
 
 function openLeaveGroupFlow(gid){
   if(!currentUser){alert("Please wait — still signing you in.");return;}
