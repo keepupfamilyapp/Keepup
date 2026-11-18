@@ -147,7 +147,7 @@ window.addEventListener("unhandledrejection",function(e){
 // refresh instead of leaving people stuck in a stale session. Bump
 // APP_VERSION by hand on every deploy (any changed string works - a
 // timestamp is easiest to keep unique).
-var APP_VERSION="2026-11-18T16:00:00Z-signupsheet";
+var APP_VERSION="2026-11-18T18:00:00Z-signupsheet2";
 function isStandaloneMode(){
   return window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;
 }
@@ -1811,6 +1811,7 @@ function iconCoin(svgKey,coinPx){
 }
 
 var ST={
+  evSignups:{},
   feedRendered:{},feedRenderedThrough:{},allReactions:{},upPhotos:[],mutedGroups:[],muteComments:false,muteDailyReminder:false,
   boarded:false,obStep:0,obName:"",obAvatar:"\uD83D\uDC69",obPhoto:null,
   obGrpName:"",obGrpEmoji:"\u2764\uFE0F",obGrpPhoto:null,joinInvite:false,inviteError:null,fbMembers:{},
@@ -4974,6 +4975,42 @@ function buildEvCard(ev,gt){
 // ST.allRsvps, the per-person list the fixed rsvps listener now builds) -
 // not the static going/maybe counters the app used to show, which never
 // updated after an event was created.
+function loadEventSignups(evId){
+  db.collection("events").doc(evId).collection("signups").orderBy("createdAt","asc").get().then(function(snap){
+    ST.evSignups[evId]=snap.docs.map(function(doc){return Object.assign({id:doc.id},doc.data());});
+    redraw();
+  }).catch(function(e){
+    logAppError("loadEventSignups",e);
+    ST.evSignups[evId]=[];
+    redraw();
+  });
+}
+function addSignupItem(evId,itemText){
+  if(!currentUser)return;
+  var ref=db.collection("events").doc(evId).collection("signups").doc();
+  var newItem={item:itemText,claimedBy:null,claimedByName:null,createdBy:currentUser.uid,createdAt:firebase.firestore.FieldValue.serverTimestamp()};
+  ref.set(newItem).then(function(){
+    if(!ST.evSignups[evId])ST.evSignups[evId]=[];
+    ST.evSignups[evId].push(Object.assign({id:ref.id},newItem));
+    redraw();
+  }).catch(function(e){logAppError("addSignupItem",e);showTopToast("Couldn't add that item — check your connection.");});
+}
+function claimSignupItem(evId,itemId,claiming){
+  if(!currentUser)return;
+  var update=claiming?{claimedBy:currentUser.uid,claimedByName:ST.name||"Someone"}:{claimedBy:null,claimedByName:null};
+  db.collection("events").doc(evId).collection("signups").doc(itemId).set(update,{merge:true}).then(function(){
+    var list=ST.evSignups[evId]||[];
+    var it=list.find(function(x){return x.id===itemId;});
+    if(it){it.claimedBy=update.claimedBy;it.claimedByName=update.claimedByName;}
+    redraw();
+  }).catch(function(e){logAppError("claimSignupItem",e);showTopToast("Couldn't update that — check your connection.");});
+}
+function deleteSignupItem(evId,itemId){
+  db.collection("events").doc(evId).collection("signups").doc(itemId).delete().then(function(){
+    if(ST.evSignups[evId])ST.evSignups[evId]=ST.evSignups[evId].filter(function(x){return x.id!==itemId;});
+    redraw();
+  }).catch(function(e){logAppError("deleteSignupItem",e);showTopToast("Couldn't remove that item — check your connection.");});
+}
 function buildEventDetail(t){
   var ev=ST.evs.find(function(e){return e.id===ST.eventDetailId;});
   var ov=d({cls:"overlay"});
@@ -5065,6 +5102,106 @@ function buildEventDetail(t){
       prow.appendChild(d({css:{fontSize:"13px",fontWeight:700,color:"#3D2314"}},r.name||"Someone"));
       sh.appendChild(prow);
     });
+    }
+
+  sh.appendChild(d({css:{fontSize:"11px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".4px",marginTop:"18px",marginBottom:"8px"}},"What to Bring"));
+  var signups=ST.evSignups[ev.id];
+  if(signups===undefined){
+    ST.evSignups[ev.id]=null;
+    loadEventSignups(ev.id);
+    signups=null;
+  }
+  if(signups===null){
+    sh.appendChild(d({css:{fontSize:"13px",color:"#9B7B62"}},"Loading..."));
+  } else {
+    if(!signups.length){
+      sh.appendChild(d({css:{fontSize:"13px",color:"#9B7B62",marginBottom:"8px"}},"Nothing on the list yet."));
+    } else {
+      signups.forEach(function(item){
+        var irow=d({css:{display:"flex",alignItems:"center",gap:"10px",padding:"8px 0",borderTop:"1px solid #F5DDD1"}});
+        var itxt=d({css:{flex:1}});
+        itxt.appendChild(d({css:{fontSize:"13px",fontWeight:700,color:"#3D2314"}},item.item));
+        if(item.claimedByName)itxt.appendChild(d({css:{fontSize:"11.5px",color:gt.a,marginTop:"1px"}},"🙋 "+item.claimedByName));
+        irow.appendChild(itxt);
+        if(!item.claimedBy){
+          var claimBtn=b({css:{padding:"6px 13px",borderRadius:"50px",background:gt.a,border:"none",color:"white",fontSize:"11.5px",fontWeight:700,cursor:"pointer",fontFamily:"inherit",flexShrink:0}},"I'll bring it");
+          claimBtn.addEventListener("click",function(){claimSignupItem(ev.id,item.id,true);});
+          irow.appendChild(claimBtn);
+        } else if(currentUser&&item.claimedBy===currentUser.uid){
+          var unclaimBtn=b({css:{padding:"6px 13px",borderRadius:"50px",background:"transparent",border:"1.5px solid #F5DDD1",color:"#9B7B62",fontSize:"11.5px",fontWeight:700,cursor:"pointer",fontFamily:"inherit",flexShrink:0}},"Cancel");
+          unclaimBtn.addEventListener("click",function(){claimSignupItem(ev.id,item.id,false);});
+          irow.appendChild(unclaimBtn);
+        }
+        if(currentUser&&(item.createdBy===currentUser.uid||getGroupAdminStatus(ev.groupId))){
+          var delItemBtn=b({css:{padding:"6px 9px",borderRadius:"50px",background:"transparent",border:"none",color:"#C0392B",fontSize:"13px",cursor:"pointer",fontFamily:"inherit",flexShrink:0}},"✕");
+          delItemBtn.addEventListener("click",function(){deleteSignupItem(ev.id,item.id);});
+          irow.appendChild(delItemBtn);
+        }
+        sh.appendChild(irow);
+      });
+    }
+    var addItemRow=d({css:{display:"flex",gap:"8px",marginTop:"10px",marginBottom:"18px"}});
+    var addItemIn=document.createElement("input");addItemIn.type="text";addItemIn.placeholder="Add an item...";
+    addItemIn.style.cssText="flex:1;padding:10px 12px;border-radius:12px;border:1.5px solid #F5DDD1;background:#FAF6F0;font-size:13px;color:#3D2314;outline:none;font-family:inherit;";
+    addItemRow.appendChild(addItemIn);
+    var addItemBtn=b({css:{padding:"10px 16px",borderRadius:"50px",background:gt.ap,border:"none",color:gt.ad,fontSize:"12.5px",fontWeight:700,cursor:"pointer",fontFamily:"inherit",flexShrink:0}},"Add");
+    addItemBtn.addEventListener("click",function(){
+      if(!addItemIn.value.trim())return;
+      addSignupItem(ev.id,addItemIn.value.trim());
+      addItemIn.value="";
+    });
+    addItemRow.appendChild(addItemBtn);
+    sh.appendChild(addItemRow);
+    }
+
+  sh.appendChild(d({css:{fontSize:"11px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".4px",marginTop:"18px",marginBottom:"8px"}},"What to Bring"));
+  var signups=ST.evSignups[ev.id];
+  if(signups===undefined){
+    ST.evSignups[ev.id]=null;
+    loadEventSignups(ev.id);
+    signups=null;
+  }
+  if(signups===null){
+    sh.appendChild(d({css:{fontSize:"13px",color:"#9B7B62"}},"Loading..."));
+  } else {
+    if(!signups.length){
+      sh.appendChild(d({css:{fontSize:"13px",color:"#9B7B62",marginBottom:"8px"}},"Nothing on the list yet."));
+    } else {
+      signups.forEach(function(item){
+        var irow=d({css:{display:"flex",alignItems:"center",gap:"10px",padding:"8px 0",borderTop:"1px solid #F5DDD1"}});
+        var itxt=d({css:{flex:1}});
+        itxt.appendChild(d({css:{fontSize:"13px",fontWeight:700,color:"#3D2314"}},item.item));
+        if(item.claimedByName)itxt.appendChild(d({css:{fontSize:"11.5px",color:gt.a,marginTop:"1px"}},"🙋 "+item.claimedByName));
+        irow.appendChild(itxt);
+        if(!item.claimedBy){
+          var claimBtn=b({css:{padding:"6px 13px",borderRadius:"50px",background:gt.a,border:"none",color:"white",fontSize:"11.5px",fontWeight:700,cursor:"pointer",fontFamily:"inherit",flexShrink:0}},"I'll bring it");
+          claimBtn.addEventListener("click",function(){claimSignupItem(ev.id,item.id,true);});
+          irow.appendChild(claimBtn);
+        } else if(currentUser&&item.claimedBy===currentUser.uid){
+          var unclaimBtn=b({css:{padding:"6px 13px",borderRadius:"50px",background:"transparent",border:"1.5px solid #F5DDD1",color:"#9B7B62",fontSize:"11.5px",fontWeight:700,cursor:"pointer",fontFamily:"inherit",flexShrink:0}},"Cancel");
+          unclaimBtn.addEventListener("click",function(){claimSignupItem(ev.id,item.id,false);});
+          irow.appendChild(unclaimBtn);
+        }
+        if(currentUser&&(item.createdBy===currentUser.uid||getGroupAdminStatus(ev.groupId))){
+          var delItemBtn=b({css:{padding:"6px 9px",borderRadius:"50px",background:"transparent",border:"none",color:"#C0392B",fontSize:"13px",cursor:"pointer",fontFamily:"inherit",flexShrink:0}},"✕");
+          delItemBtn.addEventListener("click",function(){deleteSignupItem(ev.id,item.id);});
+          irow.appendChild(delItemBtn);
+        }
+        sh.appendChild(irow);
+      });
+    }
+    var addItemRow=d({css:{display:"flex",gap:"8px",marginTop:"10px",marginBottom:"18px"}});
+    var addItemIn=document.createElement("input");addItemIn.type="text";addItemIn.placeholder="Add an item...";
+    addItemIn.style.cssText="flex:1;padding:10px 12px;border-radius:12px;border:1.5px solid #F5DDD1;background:#FAF6F0;font-size:13px;color:#3D2314;outline:none;font-family:inherit;";
+    addItemRow.appendChild(addItemIn);
+    var addItemBtn=b({css:{padding:"10px 16px",borderRadius:"50px",background:gt.ap,border:"none",color:gt.ad,fontSize:"12.5px",fontWeight:700,cursor:"pointer",fontFamily:"inherit",flexShrink:0}},"Add");
+    addItemBtn.addEventListener("click",function(){
+      if(!addItemIn.value.trim())return;
+      addSignupItem(ev.id,addItemIn.value.trim());
+      addItemIn.value="";
+    });
+    addItemRow.appendChild(addItemBtn);
+    sh.appendChild(addItemRow);
   }
 
   // Only the person who created the event can edit or delete it - checked
