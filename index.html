@@ -147,7 +147,7 @@ window.addEventListener("unhandledrejection",function(e){
 // refresh instead of leaving people stuck in a stale session. Bump
 // APP_VERSION by hand on every deploy (any changed string works - a
 // timestamp is easiest to keep unique).
-var APP_VERSION="2026-11-18T18:00:00Z-signupsheet2";
+var APP_VERSION="2026-11-18T20:00:00Z-yearbook";
 function isStandaloneMode(){
   return window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;
 }
@@ -3314,6 +3314,7 @@ function buildApp(){
   wrap.appendChild(navFloat);
   if(ST.showTutorial)wrap.appendChild(buildTutorial());
 if(ST.editingGroup)wrap.appendChild(buildEditGroup(ST.editingGroup));
+  if(ST.viewingYearbookGroup)wrap.appendChild(buildYearbookSheet());
   if(ST.creatingGroup)wrap.appendChild(buildCreateGroup());
   if(ST.editingBirthdays)wrap.appendChild(buildEditBirthdays());
   if(ST.editingOwnBirthday)wrap.appendChild(buildOwnBirthdaySheet(th(ST.group)));
@@ -5635,7 +5636,12 @@ function buildGroupsCard(){
     }
     var leaveGrpBtn=b({css:{background:"transparent",color:"#C0392B",fontSize:"11px",fontWeight:700,padding:"4px 11px",borderRadius:"50px",border:"1.5px solid #F0B4AC",cursor:"pointer",fontFamily:"inherit"}},"Leave");
     (function(grpObj){leaveGrpBtn.addEventListener("click",function(){openLeaveGroupFlow(grpObj.id);});})(g);
-    actionsRow.appendChild(leaveGrpBtn);
+        actionsRow.appendChild(leaveGrpBtn);
+    (function(grpObj){
+      var ybBtn=b({css:{background:"transparent",color:gt.a,fontSize:"11px",fontWeight:700,padding:"4px 11px",borderRadius:"50px",border:"1.5px solid "+gt.al,cursor:"pointer",fontFamily:"inherit"}},"\uD83D\uDCD6 Yearbook");
+      ybBtn.addEventListener("click",function(){ST.viewingYearbookGroup=grpObj.id;ST.yearbookData=undefined;redraw();});
+      actionsRow.appendChild(ybBtn);
+    })(g);
     detail.appendChild(actionsRow);
     // Show Firebase members with admin remove option
     fbMems.forEach(function(m){
@@ -5693,6 +5699,96 @@ function stampLastActive(){
     db.collection("members").doc(uid+"_"+g.id).set({lastActive:firebase.firestore.FieldValue.serverTimestamp()},{merge:true})
       .catch(function(e){logAppError("members.set (lastActive stamp)",e);});
   });
+}
+function loadYearbookIfNeeded(gid,year){
+  db.collection("groups").doc(gid).collection("yearbooks").doc(String(year)).get({source:"server"}).then(function(doc){
+    ST.yearbookData=doc.exists?doc.data():null;
+    redraw();
+  }).catch(function(e){
+    logAppError("loadYearbook",e);
+    ST.yearbookData=null;
+    redraw();
+  });
+}
+function buildYearbookSheet(){
+  var gid=ST.viewingYearbookGroup;
+  var g=ST.groups.find(function(x){return x.id===gid;});
+  var gt=th(gid);
+  var ov=d({cls:"overlay"});
+  ov.addEventListener("click",function(){ST.viewingYearbookGroup=null;redraw();});
+  var sh=d({cls:"sheet"});
+  sh.addEventListener("click",function(e){e.stopPropagation();});
+  sh.appendChild(d({cls:"handle"}));
+  var year=new Date().getFullYear()-1;
+  if(ST.yearbookData!==undefined&&ST.yearbookData&&ST.yearbookData.year)year=ST.yearbookData.year;
+  sh.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"19px",fontWeight:600,color:"#3D2314",marginBottom:"14px"}},(g?g.label+"'s ":"")+year+" Yearbook \uD83D\uDCD6"));
+
+  if(ST.yearbookData===undefined){
+    loadYearbookIfNeeded(gid,year);
+    sh.appendChild(d({css:{fontSize:"13px",color:"#9B7B62",padding:"20px 0",textAlign:"center"}},"Loading..."));
+    ov.appendChild(sh);return ov;
+  }
+  if(!ST.yearbookData){
+    sh.appendChild(d({css:{fontSize:"13px",color:"#9B7B62",padding:"20px 0",textAlign:"center"}},"Your "+year+" yearbook will show up here once the year wraps up \uD83D\uDCD6"));
+    var closeBtn=b({css:{width:"100%",padding:"12px",borderRadius:"50px",background:"#F5DDD1",border:"none",color:"#6B4226",fontSize:"14px",fontWeight:700,cursor:"pointer",fontFamily:"inherit"}},"Close");
+    closeBtn.addEventListener("click",function(){ST.viewingYearbookGroup=null;redraw();});
+    sh.appendChild(closeBtn);
+    ov.appendChild(sh);return ov;
+  }
+
+  var yb=ST.yearbookData;
+
+  var statsRow=d({css:{display:"flex",gap:"8px",marginBottom:"18px",flexWrap:"wrap"}});
+  function statCard(label,value){
+    var card=d({css:{flex:"1 1 100px",background:gt.ap,borderRadius:"14px",padding:"12px 10px",textAlign:"center"}});
+    card.appendChild(d({css:{fontSize:"20px",fontWeight:800,color:gt.ad}},String(value)));
+    card.appendChild(d({css:{fontSize:"10.5px",color:"#9B7B62",marginTop:"2px",textTransform:"uppercase",letterSpacing:".3px"}},label));
+    return card;
+  }
+  statsRow.appendChild(statCard("Posts",yb.totalPosts||0));
+  statsRow.appendChild(statCard("Photos",yb.totalPhotos||0));
+  statsRow.appendChild(statCard("Videos",yb.totalVideos||0));
+  sh.appendChild(statsRow);
+
+  if(yb.topPoster){
+    sh.appendChild(d({css:{fontSize:"13px",color:"#6B4C35",marginBottom:"6px"}},"\uD83C\uDFC6 Most active: "+yb.topPoster.name+" ("+yb.topPoster.count+" posts)"));
+  }
+  if(yb.topEmoji){
+    sh.appendChild(d({css:{fontSize:"13px",color:"#6B4C35",marginBottom:"18px"}},"Favorite reaction: "+yb.topEmoji.em+" ("+yb.topEmoji.count+"x)"));
+  }
+
+  if(yb.milestoneEvents&&yb.milestoneEvents.length){
+    sh.appendChild(d({css:{fontSize:"11px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".4px",marginBottom:"8px"}},"Milestones"));
+    yb.milestoneEvents.forEach(function(e){
+      sh.appendChild(d({css:{fontSize:"13px",color:"#3D2314",padding:"4px 0"}},"\u2022 "+e.title));
+    });
+  }
+
+  if(yb.photoHighlights&&yb.photoHighlights.length){
+    sh.appendChild(d({css:{fontSize:"11px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".4px",marginTop:"18px",marginBottom:"8px"}},"Highlights"));
+    var grid=d({css:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"6px",marginBottom:"18px"}});
+    yb.photoHighlights.forEach(function(h){
+      var cell=d({css:{aspectRatio:"1",borderRadius:"10px",overflow:"hidden",background:h.imgUrl?("url("+h.imgUrl+") center/cover"):"#F5DDD1"}});
+      grid.appendChild(cell);
+    });
+    sh.appendChild(grid);
+  }
+
+  if(yb.memorablePost){
+    sh.appendChild(d({css:{fontSize:"11px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".4px",marginTop:"4px",marginBottom:"8px"}},"Most Loved Moment"));
+    var mp=d({css:{background:"#FAF6F0",borderRadius:"14px",padding:"12px",marginBottom:"18px"}});
+    if(yb.memorablePost.cap)mp.appendChild(d({css:{fontSize:"13px",color:"#3D2314",marginBottom:"6px"}},"\""+yb.memorablePost.cap+"\" \u2014 "+yb.memorablePost.name));
+    (yb.memorablePost.topComments||[]).forEach(function(c){
+      mp.appendChild(d({css:{fontSize:"12px",color:"#6B4C35",marginTop:"3px"}},c.name+": "+c.text));
+    });
+    sh.appendChild(mp);
+  }
+
+  var closeBtn2=b({css:{width:"100%",padding:"12px",borderRadius:"50px",background:"#F5DDD1",border:"none",color:"#6B4226",fontSize:"14px",fontWeight:700,cursor:"pointer",fontFamily:"inherit"}},"Close");
+  closeBtn2.addEventListener("click",function(){ST.viewingYearbookGroup=null;redraw();});
+  sh.appendChild(closeBtn2);
+
+  ov.appendChild(sh);return ov;
 }
 function getGroupAdminStatus(gid){
   if(!currentUser)return false;
