@@ -5034,6 +5034,22 @@ function buildEventDetail(t){
   var rsvpBtn=b({css:{width:"100%",padding:"12px",borderRadius:"50px",background:going?gt.a:"transparent",border:"2px solid "+gt.a,color:going?"white":gt.a,fontSize:"14px",fontWeight:800,cursor:"pointer",fontFamily:"inherit",marginTop:"18px",marginBottom:"18px"}},going?"✓ You're Going":"I'll Be There");
   rsvpBtn.addEventListener("click",function(){ST.rsvp[ev.id]=!ST.rsvp[ev.id];syncRsvp(ev.id,ST.rsvp[ev.id],ev.groupId);redraw();});
   sh.appendChild(rsvpBtn);
+  if(getGroupAdminStatus(ev.groupId)){
+    var nudgeBtn=b({css:{width:"100%",padding:"10px",borderRadius:"50px",background:"transparent",border:"1.5px solid #F5DDD1",color:"#9B7B62",fontSize:"12px",fontWeight:700,cursor:"pointer",fontFamily:"inherit",marginBottom:"18px"}},"?? Remind everyone who hasn't responded");
+    nudgeBtn.addEventListener("click",function(){
+      nudgeBtn.disabled=true;nudgeBtn.textContent="Sending...";
+      functions.httpsCallable("sendRsvpNudge")({evId:ev.id,groupId:ev.groupId}).then(function(result){
+        var sent=(result.data&&result.data.sent)||0;
+        nudgeBtn.disabled=false;
+        nudgeBtn.textContent=sent>0?("?? Reminded "+sent+" "+(sent===1?"person":"people")):"Everyone's already responded!";
+      }).catch(function(e){
+        logAppError("sendRsvpNudge failed",e);
+        nudgeBtn.disabled=false;nudgeBtn.textContent="?? Remind everyone who hasn't responded";
+        showTopToast("Couldn't send reminders - check your connection.");
+      });
+    });
+    sh.appendChild(nudgeBtn);
+  }
 
   var goingList=(ST.allRsvps[ev.id]||[]).filter(function(r){return r.going;});
   sh.appendChild(d({css:{fontSize:"11px",fontWeight:800,color:"#9B7B62",textTransform:"uppercase",letterSpacing:".4px",marginBottom:"8px"}},goingList.length?goingList.length+" Going":"Who's Going"));
