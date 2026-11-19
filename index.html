@@ -147,7 +147,7 @@ window.addEventListener("unhandledrejection",function(e){
 // refresh instead of leaving people stuck in a stale session. Bump
 // APP_VERSION by hand on every deploy (any changed string works - a
 // timestamp is easiest to keep unique).
-var APP_VERSION="2026-11-18T20:30:00Z-yearbook2";
+var APP_VERSION="2026-11-19T09:00:00Z-feedcache";
 function isStandaloneMode(){
   return window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;
 }
@@ -593,10 +593,10 @@ function fetchAllFeeds(){
   ST.feedLoading=true;
   if(ST.tab==="feed")redraw();
   var gid=ST.group||"imm";
-  db.collection("feed").where("groupId","==",gid)
+    db.collection("feed").where("groupId","==",gid)
     .orderBy("createdAt","desc")
     .limit(200)
-    .get()
+    .get({source:"server"})
     .then(function(snap){
       ST.feed[gid]=[];
       snap.forEach(function(doc){ST.feed[gid].push(Object.assign({},doc.data(),{id:doc.id}));});
@@ -7480,7 +7480,7 @@ ST.upImg=null;ST.upPhotos=[];
       postToFeed(pp).then(function(){
         broadcastNotif(postName+" checked in",postStatus.substring(0,60),gid);
         // Refresh feed after posting
-        db.collection("feed").where("groupId","==",gid).get().then(function(snap){
+                db.collection("feed").where("groupId","==",gid).get({source:"server"}).then(function(snap){
           ST.feed[gid]=[];
           snap.forEach(function(doc){ST.feed[gid].push(Object.assign({},doc.data(),{id:doc.id}));});
           ST.feed[gid].sort(function(a,b){return tsMillis(b.createdAt)-tsMillis(a.createdAt);});
@@ -7625,9 +7625,9 @@ ST.upImg=null;ST.upPhotos=[];
       setTimeout(function(){toast.remove();},3000);
       // Refresh each target group's feed
       postGroups.forEach(function(gid){
-        db.collection("feed").where("groupId","==",gid)
+                db.collection("feed").where("groupId","==",gid)
           .orderBy("createdAt","desc").limit(200)
-          .get().then(function(snap){
+          .get({source:"server"}).then(function(snap){
           ST.feed[gid]=[];
           snap.forEach(function(doc){ST.feed[gid].push(Object.assign({},doc.data(),{id:doc.id}));});
           redraw();
