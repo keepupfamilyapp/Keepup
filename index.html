@@ -147,7 +147,7 @@ window.addEventListener("unhandledrejection",function(e){
 // refresh instead of leaving people stuck in a stale session. Bump
 // APP_VERSION by hand on every deploy (any changed string works - a
 // timestamp is easiest to keep unique).
-var APP_VERSION="2026-11-18T20:00:00Z-yearbook";
+var APP_VERSION="2026-11-18T20:30:00Z-yearbook2";
 function isStandaloneMode(){
   return window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;
 }
@@ -5700,9 +5700,9 @@ function stampLastActive(){
       .catch(function(e){logAppError("members.set (lastActive stamp)",e);});
   });
 }
-function loadYearbookIfNeeded(gid,year){
-  db.collection("groups").doc(gid).collection("yearbooks").doc(String(year)).get({source:"server"}).then(function(doc){
-    ST.yearbookData=doc.exists?doc.data():null;
+function loadYearbookIfNeeded(gid){
+  db.collection("groups").doc(gid).collection("yearbooks").orderBy("year","desc").limit(1).get({source:"server"}).then(function(snap){
+    ST.yearbookData=snap.empty?null:snap.docs[0].data();
     redraw();
   }).catch(function(e){
     logAppError("loadYearbook",e);
@@ -5724,7 +5724,7 @@ function buildYearbookSheet(){
   sh.appendChild(d({css:{fontFamily:"Lora,serif",fontSize:"19px",fontWeight:600,color:"#3D2314",marginBottom:"14px"}},(g?g.label+"'s ":"")+year+" Yearbook \uD83D\uDCD6"));
 
   if(ST.yearbookData===undefined){
-    loadYearbookIfNeeded(gid,year);
+        loadYearbookIfNeeded(gid);
     sh.appendChild(d({css:{fontSize:"13px",color:"#9B7B62",padding:"20px 0",textAlign:"center"}},"Loading..."));
     ov.appendChild(sh);return ov;
   }
