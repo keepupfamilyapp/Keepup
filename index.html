@@ -147,7 +147,7 @@ window.addEventListener("unhandledrejection",function(e){
 // refresh instead of leaving people stuck in a stale session. Bump
 // APP_VERSION by hand on every deploy (any changed string works - a
 // timestamp is easiest to keep unique).
-var APP_VERSION="2026-11-19T10:00:00Z-feedscroll";
+var APP_VERSION="2026-11-19T10:30:00Z-feedscroll2";
 function isStandaloneMode(){
   return window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;
 }
@@ -3489,7 +3489,7 @@ function buildFeed(t,grp){
       targetInitial=Math.min(Math.max(BATCH,ST.feedRendered[grp.id]||0),allItems.length);
     }
 
-        function liveFeedList(){return document.getElementById("feed-list")||list;}
+            function liveFeedList(isLoadMore){return isLoadMore?(document.getElementById("feed-list")||list):list;}
     function renderBatch(isLoadMore){
       if(rendering||rendered>=allItems.length)return;
       rendering=true;
@@ -3498,7 +3498,7 @@ function buildFeed(t,grp){
       for(var i=rendered;i<end;i++){
         frag.appendChild(buildItem(allItems[i],t));
       }
-                 liveFeedList().appendChild(frag);
+                       liveFeedList(isLoadMore).appendChild(frag);
       rendered=end;
       ST.feedRendered[grp.id]=rendered;
       if(!ST.feedRenderedThrough)ST.feedRenderedThrough={};
@@ -3529,9 +3529,9 @@ function buildFeed(t,grp){
         var sentinel=document.createElement("div");
         sentinel.id="feed-sentinel";
         sentinel.setAttribute("data-nomorph","1");
-               sentinel.style.height="1px";
-        liveFeedList().appendChild(sentinel);
-        // Watch sentinel - load more when it enters view 
+                sentinel.style.height="1px";
+        liveFeedList(isLoadMore).appendChild(sentinel);
+        // Watch sentinel - load more when it enters view
         if("IntersectionObserver" in window){
           var obs=new IntersectionObserver(function(entries){
             if(entries[0].isIntersecting){
